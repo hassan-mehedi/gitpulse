@@ -14,6 +14,7 @@ pub async fn blame(
     if ignore_whitespace {
         args.push("-w");
     }
+    args.push("--");
     args.push(file);
     let output = GitRunner::run(repo_path, &args).await?;
     parse_blame(&output)

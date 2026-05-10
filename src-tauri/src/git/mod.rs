@@ -1,11 +1,16 @@
 pub mod blame;
 pub mod branch;
+pub mod cherry_pick;
 pub mod commit;
+pub mod conflict;
 pub mod diff;
 pub mod graph;
 pub mod parser;
 pub mod remote;
 pub mod runner;
+pub mod stash;
 pub mod staging;
 pub mod status;
+pub mod tag;
 pub mod types;
+pub mod worktree;

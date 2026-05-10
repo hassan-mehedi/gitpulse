@@ -128,6 +128,7 @@ pub async fn scan_repo(path: &Path) -> Result<Repository, GitError> {
         upstream: repo_status.upstream,
         ahead: repo_status.ahead,
         behind: repo_status.behind,
+        stash_count: repo_status.stash_count,
         changes: repo_status.changes,
         staged: repo_status.staged,
         has_conflicts: repo_status.has_conflicts,

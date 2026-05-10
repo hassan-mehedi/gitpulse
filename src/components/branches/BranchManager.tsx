@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitBranchPlus, RefreshCcw } from "lucide-react";
 import {
+  gitAddWorktree,
   gitBranches,
   gitCreateBranch,
   gitDeleteBranch,
+  gitListWorktrees,
+  gitPruneWorktrees,
   gitRenameBranch,
+  gitRemoveWorktree,
   gitSwitchBranch
 } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import { useRepo } from "../../hooks/useRepo";
 import { useWorkspaceStore } from "../../stores/workspace";
-import type { BranchInfo } from "../../types/git";
+import type { BranchInfo, WorktreeInfo } from "../../types/git";
 import { BranchList } from "./BranchList";
 
 export function BranchManager() {
@@ -18,8 +22,11 @@ export function BranchManager() {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const runGit = useGit();
   const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [query, setQuery] = useState("");
   const [newBranchName, setNewBranchName] = useState("");
+  const [newWorktreePath, setNewWorktreePath] = useState("");
+  const [newWorktreeBranch, setNewWorktreeBranch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   async function loadBranches() {
@@ -37,8 +44,18 @@ export function BranchManager() {
     }
   }
 
+  async function loadWorktrees() {
+    if (!activeRepo) {
+      setWorktrees([]);
+      return;
+    }
+
+    const nextWorktrees = await runGit(() => gitListWorktrees(activeRepo.path));
+    setWorktrees(nextWorktrees);
+  }
+
   useEffect(() => {
-    void loadBranches();
+    void Promise.all([loadBranches(), loadWorktrees()]).catch(() => {});
   }, [activeRepo?.path]);
 
   const filteredBranches = useMemo(() => {
@@ -59,6 +76,7 @@ export function BranchManager() {
       setNewBranchName("");
       await refreshRepo(activeRepo.path);
       await loadBranches();
+      await loadWorktrees();
     });
   }
 
@@ -71,6 +89,7 @@ export function BranchManager() {
       await gitSwitchBranch(activeRepo.path, branch.name);
       await refreshRepo(activeRepo.path);
       await loadBranches();
+      await loadWorktrees();
     });
   }
 
@@ -88,6 +107,7 @@ export function BranchManager() {
       await gitRenameBranch(activeRepo.path, branch.name, nextName.trim());
       await refreshRepo(activeRepo.path);
       await loadBranches();
+      await loadWorktrees();
     });
   }
 
@@ -100,6 +120,46 @@ export function BranchManager() {
       await gitDeleteBranch(activeRepo.path, branch.name, !branch.isCurrent);
       await refreshRepo(activeRepo.path);
       await loadBranches();
+      await loadWorktrees();
+    });
+  }
+
+  async function handleCreateWorktree() {
+    if (!activeRepo || !newWorktreePath.trim()) {
+      return;
+    }
+
+    await runGit(async () => {
+      await gitAddWorktree(
+        activeRepo.path,
+        newWorktreePath.trim(),
+        newWorktreeBranch.trim() || undefined
+      );
+      setNewWorktreePath("");
+      setNewWorktreeBranch("");
+      await loadWorktrees();
+    });
+  }
+
+  async function handleRemoveWorktree(worktree: WorktreeInfo) {
+    if (!activeRepo || worktree.isMain) {
+      return;
+    }
+
+    await runGit(async () => {
+      await gitRemoveWorktree(activeRepo.path, worktree.path);
+      await loadWorktrees();
+    });
+  }
+
+  async function handlePruneWorktrees() {
+    if (!activeRepo) {
+      return;
+    }
+
+    await runGit(async () => {
+      await gitPruneWorktrees(activeRepo.path);
+      await loadWorktrees();
     });
   }
 
@@ -156,6 +216,65 @@ export function BranchManager() {
                   placeholder="Search branches"
                   value={query}
                 />
+              </div>
+
+              <div className="repo-card__section">
+                <div className="repo-card__section-header">
+                  <span>Worktrees ({worktrees.length})</span>
+                  <button className="panel-button" onClick={() => void handlePruneWorktrees()} type="button">
+                    Prune
+                  </button>
+                </div>
+                <div className="toolbar__actions">
+                  <input
+                    className="text-input"
+                    onChange={(event) => setNewWorktreePath(event.target.value)}
+                    placeholder="/path/to/worktree"
+                    value={newWorktreePath}
+                  />
+                  <input
+                    className="text-input"
+                    onChange={(event) => setNewWorktreeBranch(event.target.value)}
+                    placeholder="Optional branch"
+                    value={newWorktreeBranch}
+                  />
+                  <button className="panel-button" onClick={() => void handleCreateWorktree()} type="button">
+                    Create
+                  </button>
+                </div>
+                <div className="file-list">
+                  {worktrees.length === 0 ? (
+                    <div className="file-row">
+                      <div className="file-row__left">
+                        <span className="file-row__path">No worktrees</span>
+                      </div>
+                    </div>
+                  ) : null}
+                  {worktrees.map((worktree) => (
+                    <div className="file-row" key={worktree.path}>
+                      <div className="file-row__left">
+                        <div>
+                          <div className="file-row__name">{worktree.branch}</div>
+                          <div className="file-row__path">
+                            {worktree.path} • {worktree.sha.slice(0, 7)}
+                          </div>
+                        </div>
+                        {worktree.isMain ? <div className="badge">Main</div> : null}
+                      </div>
+                      <div className="file-row__actions">
+                        {!worktree.isMain ? (
+                          <button
+                            className="panel-button"
+                            onClick={() => void handleRemoveWorktree(worktree)}
+                            type="button"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <BranchList

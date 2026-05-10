@@ -1,12 +1,21 @@
-import { GitBranch, GitCommitHorizontal, GitGraph, Settings2, SplitSquareVertical } from "lucide-react";
+import { Codicon, type CodiconName } from "../shared/Codicon";
+import { useWorkspaceStore } from "../../stores/workspace";
 import type { ActivityView } from "../../types/git";
 
-const items: Array<{ key: ActivityView; label: string; icon: typeof SplitSquareVertical }> = [
-  { key: "source-control", label: "SCM", icon: SplitSquareVertical },
-  { key: "branches", label: "Branches", icon: GitBranch },
-  { key: "graph", label: "Graph", icon: GitGraph },
-  { key: "blame", label: "Blame", icon: GitCommitHorizontal },
-  { key: "settings", label: "Config", icon: Settings2 }
+interface Item {
+  key: ActivityView;
+  icon: CodiconName;
+  label: string;
+  position: "top" | "bottom";
+  badgeFrom?: "scm-changes";
+}
+
+const items: Item[] = [
+  { key: "source-control", icon: "source-control", label: "Source Control", position: "top", badgeFrom: "scm-changes" },
+  { key: "branches", icon: "git-branch", label: "Branches", position: "top" },
+  { key: "graph", icon: "git-commit", label: "Commit Graph", position: "top" },
+  { key: "blame", icon: "history", label: "File History", position: "top" },
+  { key: "settings", icon: "settings-gear", label: "Settings", position: "bottom" }
 ];
 
 interface ActivityBarProps {
@@ -15,24 +24,43 @@ interface ActivityBarProps {
 }
 
 export function ActivityBar({ activeView, onNavigate }: ActivityBarProps) {
+  const repositories = useWorkspaceStore((state) => state.repositories);
+  const totalChanges = repositories.reduce(
+    (sum, repo) => sum + repo.changes.length + repo.staged.length,
+    0
+  );
+
+  function renderItem(item: Item) {
+    const isActive = activeView === item.key;
+    const badgeCount = item.badgeFrom === "scm-changes" ? totalChanges : 0;
+
+    return (
+      <button
+        key={item.key}
+        className={`activity-bar__item${isActive ? " is-active" : ""}`}
+        onClick={() => onNavigate(item.key)}
+        title={item.label}
+        aria-label={item.label}
+        aria-pressed={isActive}
+        type="button"
+      >
+        <Codicon name={item.icon} size={24} />
+        {badgeCount > 0 ? (
+          <span className="activity-bar__badge">
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
+  const top = items.filter((item) => item.position === "top");
+  const bottom = items.filter((item) => item.position === "bottom");
+
   return (
-    <aside className="activity-bar">
-      <div className="activity-bar__stack">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              className={`activity-bar__item ${activeView === item.key ? "is-active" : ""}`}
-              onClick={() => onNavigate(item.key)}
-              type="button"
-            >
-              <Icon size={18} />
-              <span className="activity-bar__label">{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </aside>
+    <nav className="activity-bar" aria-label="Primary">
+      <div className="activity-bar__group">{top.map(renderItem)}</div>
+      <div className="activity-bar__group activity-bar__group--bottom">{bottom.map(renderItem)}</div>
+    </nav>
   );
 }

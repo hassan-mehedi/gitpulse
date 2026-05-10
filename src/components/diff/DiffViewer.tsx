@@ -5,6 +5,8 @@ import { buildPatch, buildPatchFromSelectedLines } from "../../lib/patch";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
+import { FileHistoryPanel } from "../source-control/FileHistoryPanel";
+import { MergeEditor } from "../merge/MergeEditor";
 import { DiffGutter } from "./DiffGutter";
 import { DiffHunk } from "./DiffHunk";
 import { DiffNavigation } from "./DiffNavigation";
@@ -29,6 +31,43 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const runGit = useGit();
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
+  const [surface, setSurface] = useState<"diff" | "history">("diff");
+  const diffState = activeDiff;
+  const changeState = activeChange;
+  const repoState = activeRepo;
+  const activeHunk = diffState?.hunks[activeHunkIndex] ?? null;
+  const selectedActiveLineIndices = selectedLinesByHunk[activeHunkIndex] ?? [];
+  const canStage = Boolean(activeHunk);
+  const canDiscard = Boolean(activeHunk && !staged);
+  const canStageSelection = selectedActiveLineIndices.length > 0;
+
+  useEffect(() => {
+    if (!diffState || !repoState) {
+      return;
+    }
+
+    setSelectedLinesByHunk({});
+  }, [diffState, staged, repoState]);
+
+  useEffect(() => {
+    if (!changeState || !repoState) {
+      return;
+    }
+
+    setSurface("diff");
+  }, [changeState, repoState]);
+
+  const summary = useMemo(() => {
+    if (!diffState) {
+      return [];
+    }
+
+    return diffState.hunks.map((hunk, index) => ({
+      index,
+      additions: hunk.lines.filter((line) => line.lineType === "add").length,
+      deletions: hunk.lines.filter((line) => line.lineType === "remove").length
+    }));
+  }, [diffState]);
 
   if (activeView !== "source-control") {
     return (
@@ -61,23 +100,6 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const diff = activeDiff;
   const change = activeChange;
   const repo = activeRepo;
-  const activeHunk = diff.hunks[activeHunkIndex] ?? null;
-  const selectedActiveLineIndices = selectedLinesByHunk[activeHunkIndex] ?? [];
-  const canStage = Boolean(activeHunk);
-  const canDiscard = Boolean(activeHunk && !staged);
-  const canStageSelection = selectedActiveLineIndices.length > 0;
-
-  useEffect(() => {
-    setSelectedLinesByHunk({});
-  }, [diff.file, staged, repo.path]);
-
-  const summary = useMemo(() => {
-    return diff.hunks.map((hunk, index) => ({
-      index,
-      additions: hunk.lines.filter((line) => line.lineType === "add").length,
-      deletions: hunk.lines.filter((line) => line.lineType === "remove").length
-    }));
-  }, [diff.hunks]);
 
   async function applyHunkAction(action: "stage" | "unstage" | "discard") {
     if (!activeHunk) {
@@ -164,6 +186,36 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     setActiveHunkIndex((activeHunkIndex + 1) % diff.hunks.length);
   }
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (activeView !== "source-control" || !(event.altKey && !event.ctrlKey && !event.metaKey)) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.closest("input, textarea, select, [contenteditable='true']") !== null ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        goToPreviousHunk();
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        goToNextHunk();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeHunkIndex, activeView, diff.hunks.length]);
+
   return (
     <div className="diff-viewer">
       <div className="diff-viewer__header">
@@ -174,79 +226,104 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
           </div>
         </div>
         <div className="diff-viewer__mode-switch">
-          <DiffNavigation
-            activeIndex={activeHunkIndex}
-            total={diff.hunks.length}
-            onPrevious={goToPreviousHunk}
-            onNext={goToNextHunk}
-          />
-          {canStageSelection ? (
-            <div className="badge">
-              <WandSparkles size={14} />
-              {selectedActiveLineIndices.length} selected
-            </div>
-          ) : null}
-          <button
-            className="panel-button"
-            onClick={() => setMode("split")}
-            type="button"
-          >
-            <Columns2 size={15} /> Split
+          <button className="panel-button" onClick={() => setSurface("diff")} type="button">
+            Diff
           </button>
-          <button
-            className="panel-button"
-            onClick={() => setMode("inline")}
-            type="button"
-          >
-            <Rows3 size={15} /> Inline
+          <button className="panel-button" onClick={() => setSurface("history")} type="button">
+            History
           </button>
-        </div>
-      </div>
-
-      <div className="diff-viewer__body">
-        <aside className="diff-viewer__sidebar">
-          <DiffGutter
-            canDiscard={canDiscard}
-            canStage={canStage}
-            canStageSelection={canStageSelection}
-            onDiscard={() => void applyHunkAction("discard")}
-            onSelectionDiscard={() => void applySelectionAction("discard")}
-            onSelectionToggle={() => void applySelectionAction(staged ? "unstage" : "stage")}
-            onStageToggle={() => void applyHunkAction(staged ? "unstage" : "stage")}
-            staged={staged}
-          />
-          <div className="diff-outline">
-            {summary.map((item) => (
+          {surface === "diff" ? (
+            <>
+              <DiffNavigation
+                activeIndex={activeHunkIndex}
+                total={diff.hunks.length}
+                onPrevious={goToPreviousHunk}
+                onNext={goToNextHunk}
+              />
+              {canStageSelection ? (
+                <div className="badge">
+                  <WandSparkles size={14} />
+                  {selectedActiveLineIndices.length} selected
+                </div>
+              ) : null}
               <button
-                key={item.index}
-                className={`diff-outline__item ${item.index === activeHunkIndex ? "is-active" : ""}`}
-                onClick={() => setActiveHunkIndex(item.index)}
+                className="panel-button"
+                onClick={() => setMode("split")}
                 type="button"
               >
-                <span>Hunk {item.index + 1}</span>
-                <span className="diff-outline__meta">
-                  +{item.additions} -{item.deletions}
-                </span>
+                <Columns2 size={15} /> Split
               </button>
-            ))}
-          </div>
-        </aside>
-
-        <div className="diff-viewer__content">
-          {diff.hunks.map((hunk, index) => (
-            <DiffHunk
-              key={`${hunk.header}-${index}`}
-              hunk={hunk}
-              hunkIndex={index}
-              isActive={index === activeHunkIndex}
-              mode={mode}
-              onFocus={() => setActiveHunkIndex(index)}
-              onToggleLine={toggleLineSelection}
-              selectedLineIndices={selectedLinesByHunk[index] ?? []}
-            />
-          ))}
+              <button
+                className="panel-button"
+                onClick={() => setMode("inline")}
+                type="button"
+              >
+                <Rows3 size={15} /> Inline
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
+
+      {surface === "history" ? (
+        <FileHistoryPanel filePath={change.path} repo={repo} />
+      ) : change.status === "U" ? (
+        <MergeEditor filePath={change.path} repoPath={repo.path} />
+      ) : (
+        <div className="diff-viewer__body">
+          <aside className="diff-viewer__sidebar">
+            <DiffGutter
+              canDiscard={canDiscard}
+              canStage={canStage}
+              canStageSelection={canStageSelection}
+              onDiscard={() => void applyHunkAction("discard")}
+              onSelectionDiscard={() => void applySelectionAction("discard")}
+              onSelectionToggle={() => void applySelectionAction(staged ? "unstage" : "stage")}
+              onStageToggle={() => void applyHunkAction(staged ? "unstage" : "stage")}
+              staged={staged}
+            />
+            <div className="diff-outline">
+              {summary.map((item) => (
+                <button
+                  key={item.index}
+                  className={`diff-outline__item ${item.index === activeHunkIndex ? "is-active" : ""}`}
+                  onClick={() => setActiveHunkIndex(item.index)}
+                  type="button"
+                >
+                  <span>Hunk {item.index + 1}</span>
+                  <span className="diff-outline__meta">
+                    +{item.additions} -{item.deletions}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <div className="diff-viewer__content">
+            {diff.hunks.length === 0 ? (
+              <div className="diff-viewer__placeholder">
+                {diff.isBinary
+                  ? "Binary file — no textual diff."
+                  : "No textual changes to display."}
+              </div>
+            ) : (
+              diff.hunks.map((hunk, index) => (
+                <DiffHunk
+                  filePath={change.path}
+                  key={`${hunk.header}-${index}`}
+                  hunk={hunk}
+                  hunkIndex={index}
+                  isActive={index === activeHunkIndex}
+                  mode={mode}
+                  onFocus={() => setActiveHunkIndex(index)}
+                  onToggleLine={toggleLineSelection}
+                  selectedLineIndices={selectedLinesByHunk[index] ?? []}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

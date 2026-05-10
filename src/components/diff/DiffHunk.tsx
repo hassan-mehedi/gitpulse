@@ -2,6 +2,7 @@ import type { DiffHunk as DiffHunkType } from "../../types/git";
 import { DiffLine } from "./DiffLine";
 
 interface DiffHunkProps {
+  filePath: string;
   hunk: DiffHunkType;
   hunkIndex: number;
   isActive: boolean;
@@ -12,6 +13,7 @@ interface DiffHunkProps {
 }
 
 export function DiffHunk({
+  filePath,
   hunk,
   hunkIndex,
   isActive,
@@ -40,6 +42,7 @@ export function DiffHunk({
             <pre className="diff-code">
               {oldLines.map(({ line, index }) => (
                 <DiffLine
+                  filePath={filePath}
                   key={`old-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.oldLineno}
@@ -55,6 +58,7 @@ export function DiffHunk({
             <pre className="diff-code">
               {newLines.map(({ line, index }) => (
                 <DiffLine
+                  filePath={filePath}
                   key={`new-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.newLineno}
@@ -70,6 +74,7 @@ export function DiffHunk({
         <pre className="diff-code">
           {hunk.lines.map((line, index) => (
             <DiffLine
+              filePath={filePath}
               key={`inline-${hunk.header}-${index}`}
               line={line}
               lineNumber={line.newLineno ?? line.oldLineno}

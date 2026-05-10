@@ -16,7 +16,7 @@ export function useFileWatcher() {
     void Promise.all(
       events.map((eventName) =>
         listen<{ repoPath: string }>(eventName, (event) => {
-          void refreshRepo(event.payload.repoPath);
+          void refreshRepo(event.payload.repoPath).catch(() => {});
         })
       )
     ).then((nextDisposers) => {

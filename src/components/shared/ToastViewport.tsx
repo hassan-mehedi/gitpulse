@@ -10,14 +10,17 @@ export function ToastViewport() {
       return;
     }
 
+    // Capture the ID of the oldest toast at effect time. Using items[0].id rather
+    // than items avoids resetting the timer whenever later toasts are added/removed.
+    const oldestId = items[0].id;
     const timer = window.setTimeout(() => {
-      removeNotification(items[0].id);
+      removeNotification(oldestId);
     }, 3600);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [items, removeNotification]);
+  }, [items[0]?.id, removeNotification]);
 
   return (
     <div
@@ -34,12 +37,13 @@ export function ToastViewport() {
       {items.map((item) => (
         <div
           key={item.id}
+          className={`toast toast--${item.tone}`}
           style={{
             minWidth: 280,
             padding: "14px 16px",
             borderRadius: 16,
             border: "1px solid var(--border-subtle)",
-            background: "rgba(10, 17, 24, 0.94)",
+            background: "var(--bg-panel)",
             boxShadow: "var(--shadow-lg)"
           }}
         >

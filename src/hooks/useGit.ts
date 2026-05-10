@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useNotificationStore } from "../stores/notifications";
 import type { GitError } from "../types/git";
+import { createId } from "../lib/ids";
 
 export function useGit() {
   const pushNotification = useNotificationStore((state) => state.pushNotification);
@@ -12,7 +13,7 @@ export function useGit() {
       } catch (error) {
         const gitError = error as GitError;
         pushNotification({
-          id: crypto.randomUUID(),
+          id: createId(),
           tone: "error",
           title: "Git operation failed",
           message: gitError.message ?? gitError.stderr ?? gitError.kind

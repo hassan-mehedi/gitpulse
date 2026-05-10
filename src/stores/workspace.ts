@@ -56,6 +56,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
               upstream: nextStatus.upstream,
               ahead: nextStatus.ahead,
               behind: nextStatus.behind,
+              stashCount: nextStatus.stashCount,
               changes: nextStatus.changes,
               staged: nextStatus.staged,
               hasConflicts: nextStatus.hasConflicts

@@ -2,6 +2,7 @@ use crate::error::GitError;
 use crate::git::types::{
     BlameLine, BranchInfo, CommitDetail, CommitFileStat, CommitInfo, CommitResult, DiffHunk,
     DiffLine, DiffStat, DiffStatEntry, FileChange, FileDiff, ReflogEntry, RemoteInfo, RepoStatus,
+    StashEntry, TagInfo, WorktreeInfo,
 };
 
 pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitError> {
@@ -108,9 +109,10 @@ pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {
             if let Some(hunk) = current_hunk.take() {
                 hunks.push(hunk);
             }
-            let mut parts = rest.split(" b/");
-            old_file = parts.next().map(|value| value.to_string());
-            file = parts.next().unwrap_or_default().to_string();
+            if let Some((old, new)) = rest.rsplit_once(" b/") {
+                old_file = Some(old.to_string());
+                file = new.to_string();
+            }
             continue;
         }
 
@@ -343,6 +345,11 @@ pub fn parse_remotes(output: &str) -> Vec<RemoteInfo> {
 }
 
 pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
+    // git blame --porcelain format: each file line has its own header entry.
+    // First occurrence of a SHA in a commit group has 4 fields (sha orig final count)
+    // plus full metadata, then ONE tab-prefixed content line.
+    // Subsequent lines in the same group have 3 fields (sha orig final), no metadata,
+    // then ONE tab-prefixed content line.
     let mut lines = output.lines().peekable();
     let mut blame_lines = Vec::new();
     let mut author = String::new();
@@ -356,7 +363,8 @@ pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
         }
 
         let header_parts = line.split_whitespace().collect::<Vec<_>>();
-        if header_parts.len() < 4 || header_parts[0].len() < 7 {
+        // A blame header has sha (40 hex chars) + orig_line + final_line [+ count]
+        if header_parts.len() < 3 || header_parts[0].len() != 40 {
             continue;
         }
 
@@ -367,48 +375,47 @@ pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
         let final_line: usize = header_parts[2]
             .parse()
             .map_err(|_| GitError::Parse(format!("invalid blame final line: {line}")))?;
-        let group_size: usize = header_parts[3]
-            .parse()
-            .map_err(|_| GitError::Parse(format!("invalid blame group size: {line}")))?;
 
-        author.clear();
-        author_email.clear();
-        date.clear();
-        summary.clear();
+        // First occurrence of a commit group: 4 fields, full metadata follows.
+        if header_parts.len() >= 4 {
+            author.clear();
+            author_email.clear();
+            date.clear();
+            summary.clear();
 
-        while let Some(next) = lines.peek() {
-            if next.starts_with('\t') {
-                break;
-            }
-
-            let meta = lines.next().unwrap_or_default();
-            if let Some(value) = meta.strip_prefix("author ") {
-                author = value.to_string();
-            } else if let Some(value) = meta.strip_prefix("author-mail ") {
-                author_email = value.trim_matches(['<', '>']).to_string();
-            } else if let Some(value) = meta.strip_prefix("author-time ") {
-                date = value.to_string();
-            } else if let Some(value) = meta.strip_prefix("summary ") {
-                summary = value.to_string();
+            while let Some(next) = lines.peek() {
+                if next.starts_with('\t') {
+                    break;
+                }
+                let meta = lines.next().unwrap_or_default();
+                if let Some(value) = meta.strip_prefix("author ") {
+                    author = value.to_string();
+                } else if let Some(value) = meta.strip_prefix("author-mail ") {
+                    author_email = value.trim_matches(['<', '>']).to_string();
+                } else if let Some(value) = meta.strip_prefix("author-time ") {
+                    date = value.to_string();
+                } else if let Some(value) = meta.strip_prefix("summary ") {
+                    summary = value.to_string();
+                }
             }
         }
+        // Subsequent lines (3-field headers) reuse the metadata already in scope.
 
-        for offset in 0..group_size {
-            let content_line = lines
-                .next()
-                .ok_or_else(|| GitError::Parse("missing blame content line".to_string()))?;
-            let content = content_line.strip_prefix('\t').unwrap_or(content_line).to_string();
-            blame_lines.push(BlameLine {
-                sha: sha.clone(),
-                author: author.clone(),
-                author_email: author_email.clone(),
-                date: date.clone(),
-                line_number: final_line + offset,
-                content,
-                original_line: original_line + offset,
-                summary: summary.clone(),
-            });
-        }
+        // Each header is always followed by exactly one tab-prefixed content line.
+        let content_line = lines
+            .next()
+            .ok_or_else(|| GitError::Parse("missing blame content line".to_string()))?;
+        let content = content_line.strip_prefix('\t').unwrap_or(content_line).to_string();
+        blame_lines.push(BlameLine {
+            sha,
+            author: author.clone(),
+            author_email: author_email.clone(),
+            date: date.clone(),
+            line_number: final_line,
+            content,
+            original_line,
+            summary: summary.clone(),
+        });
     }
 
     Ok(blame_lines)
@@ -434,6 +441,97 @@ pub fn parse_reflog(output: &str) -> Vec<ReflogEntry> {
             })
         })
         .collect()
+}
+
+pub fn parse_stashes(output: &str) -> Vec<StashEntry> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\x1f').collect();
+            if parts.len() != 5 {
+                return None;
+            }
+
+            Some(StashEntry {
+                stash_ref: parts[0].to_string(),
+                sha: parts[1].to_string(),
+                message: parts[2].to_string(),
+                date: parts[3].to_string(),
+                author: parts[4].to_string(),
+            })
+        })
+        .collect()
+}
+
+pub fn parse_tags(output: &str) -> Vec<TagInfo> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\x1f').collect();
+            if parts.len() != 6 {
+                return None;
+            }
+
+            Some(TagInfo {
+                name: parts[0].to_string(),
+                sha: parts[1].to_string(),
+                message: if parts[2].is_empty() {
+                    None
+                } else {
+                    Some(parts[2].to_string())
+                },
+                is_annotated: parts[3] == "tag",
+                tagger: if parts[4].is_empty() {
+                    None
+                } else {
+                    Some(parts[4].to_string())
+                },
+                date: if parts[5].is_empty() {
+                    None
+                } else {
+                    Some(parts[5].to_string())
+                },
+            })
+        })
+        .collect()
+}
+
+pub fn parse_worktrees(output: &str, main_repo_path: &str) -> Vec<WorktreeInfo> {
+    let mut worktrees = Vec::new();
+    let mut path = None;
+    let mut branch = None;
+    let mut sha = None;
+
+    for line in output.lines().chain(std::iter::once("")) {
+        if let Some(value) = line.strip_prefix("worktree ") {
+            path = Some(value.to_string());
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("HEAD ") {
+            sha = Some(value.to_string());
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("branch ") {
+            branch = Some(value.trim_start_matches("refs/heads/").to_string());
+            continue;
+        }
+
+        if line.is_empty() {
+            if let (Some(path), Some(sha)) = (path.take(), sha.take()) {
+                let branch = branch.take().unwrap_or_else(|| "DETACHED".to_string());
+                worktrees.push(WorktreeInfo {
+                    is_main: path == main_repo_path,
+                    path,
+                    branch,
+                    sha,
+                });
+            }
+        }
+    }
+
+    worktrees
 }
 
 fn parse_hunk_header(header: &str) -> Result<(usize, usize, usize, usize), GitError> {

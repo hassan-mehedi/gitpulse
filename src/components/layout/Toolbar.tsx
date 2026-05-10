@@ -1,104 +1,26 @@
-import { Bell, Download, RefreshCcw, RotateCw, Settings2, Upload } from "lucide-react";
-import { RepoSelector } from "./RepoSelector";
+import { Codicon } from "../shared/Codicon";
 import { useRepo } from "../../hooks/useRepo";
-import { useGit } from "../../hooks/useGit";
-import { useWorkspaceStore } from "../../stores/workspace";
-import { gitFetchAll, gitPull, gitPush, gitSync } from "../../lib/git";
-import type { ActivityView } from "../../types/git";
 
 interface ToolbarProps {
-  activeView: ActivityView;
-  onNavigate: (view: ActivityView) => void;
+  /** Reserved for future quickpick integration. Title bar no longer triggers view nav. */
 }
 
-export function Toolbar({ onNavigate }: ToolbarProps) {
+export function Toolbar(_props: ToolbarProps) {
   const { activeRepo } = useRepo();
-  const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
-  const runGit = useGit();
-
-  async function handleFetch() {
-    if (!activeRepo) {
-      return;
-    }
-
-    await runGit(async () => {
-      await gitFetchAll(activeRepo.path);
-      await refreshRepo(activeRepo.path);
-    });
-  }
-
-  async function handlePull() {
-    if (!activeRepo) {
-      return;
-    }
-
-    await runGit(async () => {
-      await gitPull(activeRepo.path);
-      await refreshRepo(activeRepo.path);
-    });
-  }
-
-  async function handlePush() {
-    if (!activeRepo) {
-      return;
-    }
-
-    await runGit(async () => {
-      await gitPush(activeRepo.path);
-      await refreshRepo(activeRepo.path);
-    });
-  }
-
-  async function handleSync() {
-    if (!activeRepo) {
-      return;
-    }
-
-    await runGit(async () => {
-      await gitSync(activeRepo.path);
-      await refreshRepo(activeRepo.path);
-    });
-  }
+  const title = activeRepo ? `${activeRepo.name} — GitPulse` : "GitPulse";
 
   return (
-    <header className="toolbar">
-      <div className="toolbar__brand">
-        <div className="toolbar__brand-mark">GP</div>
-        <div>
-          <div className="toolbar__title">GitPulse</div>
-          <div className="toolbar__subtitle">
-            {activeRepo ? activeRepo.path : "Open a repo or workspace target to begin"}
-          </div>
-        </div>
+    <header className="title-bar">
+      <div className="title-bar__brand">
+        <Codicon name="source-control" size={14} />
+        <span className="title-bar__title">{title}</span>
       </div>
 
-      <div className="toolbar__repo">
-        <RepoSelector />
-      </div>
+      <div className="title-bar__center" aria-hidden />
 
-      <div className="toolbar__actions">
-        <button className="panel-button" disabled={!activeRepo} onClick={() => void handleFetch()} type="button">
-          <RefreshCcw size={16} />
-          Fetch
-        </button>
-        <button className="panel-button" disabled={!activeRepo} onClick={() => void handlePull()} type="button">
-          <Download size={16} />
-          Pull
-        </button>
-        <button className="panel-button" disabled={!activeRepo} onClick={() => void handlePush()} type="button">
-          <Upload size={16} />
-          Push
-        </button>
-        <button className="panel-button" disabled={!activeRepo} onClick={() => void handleSync()} type="button">
-          <RotateCw size={16} />
-          Sync
-        </button>
-        <button className="icon-button" type="button">
-          <Bell size={16} />
-        </button>
-        <button className="icon-button" onClick={() => onNavigate("settings")} type="button">
-          <Settings2 size={16} />
-        </button>
+      <div className="title-bar__window-controls">
+        {/* Tauri's window decoration is OS-native by default;
+            these slots stay empty unless we move to client-side decorations. */}
       </div>
     </header>
   );

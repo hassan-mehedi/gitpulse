@@ -24,6 +24,7 @@ export interface Repository {
   upstream?: string;
   ahead: number;
   behind: number;
+  stashCount: number;
   changes: FileChange[];
   staged: FileChange[];
   hasConflicts: boolean;
@@ -159,10 +160,47 @@ export interface ReflogEntry {
   date: string;
 }
 
+export interface StashEntry {
+  stashRef: string;
+  sha: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
 export interface CommitResult {
   sha: string;
   shortSha: string;
   summary: string;
+}
+
+export interface CherryPickResult {
+  sha: string;
+  shortSha: string;
+  summary: string;
+}
+
+export interface TagInfo {
+  name: string;
+  sha: string;
+  message?: string;
+  isAnnotated: boolean;
+  tagger?: string;
+  date?: string;
+}
+
+export interface WorktreeInfo {
+  path: string;
+  branch: string;
+  sha: string;
+  isMain: boolean;
+}
+
+export interface ConflictContent {
+  base: string;
+  ours: string;
+  theirs: string;
+  raw: string;
 }
 
 export interface UserInfo {

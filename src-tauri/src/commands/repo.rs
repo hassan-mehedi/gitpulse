@@ -66,3 +66,8 @@ pub async fn git_get_user_info(repo_path: String) -> Result<UserInfo, GitError> 
 
     Ok(UserInfo { name, email })
 }
+
+#[tauri::command]
+pub async fn git_version() -> Result<String, GitError> {
+    GitRunner::version().await
+}

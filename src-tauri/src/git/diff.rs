@@ -37,7 +37,7 @@ pub async fn diff_merge_base(
     parse_multi_file_diff(&output)
 }
 
-fn parse_multi_file_diff(output: &str) -> Result<Vec<FileDiff>, GitError> {
+pub fn parse_multi_file_diff(output: &str) -> Result<Vec<FileDiff>, GitError> {
     let file_diffs = output
         .split("diff --git ")
         .filter(|chunk| !chunk.trim().is_empty())

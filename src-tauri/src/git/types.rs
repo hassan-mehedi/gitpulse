@@ -31,6 +31,16 @@ pub struct RepoStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct StashEntry {
+    pub stash_ref: String,
+    pub sha: String,
+    pub message: String,
+    pub date: String,
+    pub author: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiffLine {
     pub line_type: String,
     pub content: String,
@@ -115,6 +125,14 @@ pub struct CommitResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CherryPickResult {
+    pub sha: String,
+    pub short_sha: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchInfo {
     pub name: String,
     pub is_current: bool,
@@ -130,6 +148,35 @@ pub struct RemoteInfo {
     pub name: String,
     pub fetch_url: String,
     pub push_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagInfo {
+    pub name: String,
+    pub sha: String,
+    pub message: Option<String>,
+    pub is_annotated: bool,
+    pub tagger: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInfo {
+    pub path: String,
+    pub branch: String,
+    pub sha: String,
+    pub is_main: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictContent {
+    pub base: String,
+    pub ours: String,
+    pub theirs: String,
+    pub raw: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +229,7 @@ pub struct Repository {
     pub upstream: Option<String>,
     pub ahead: usize,
     pub behind: usize,
+    pub stash_count: usize,
     pub changes: Vec<FileChange>,
     pub staged: Vec<FileChange>,
     pub has_conflicts: bool,

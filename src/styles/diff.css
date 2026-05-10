@@ -34,6 +34,14 @@
   padding: 18px;
 }
 
+.diff-viewer__placeholder {
+  display: grid;
+  place-items: center;
+  padding: 48px 18px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
 .diff-viewer__meta {
   color: var(--text-muted);
   font-size: 0.82rem;
@@ -170,6 +178,25 @@
   word-break: break-word;
 }
 
+.diff-line__content-wrap {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.diff-line__marker {
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.diff-line__content :where(pre, code) {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  font: inherit !important;
+}
+
 .diff-line--context {
   background: transparent;
 }
@@ -189,4 +216,60 @@
 .diff-line.is-selected {
   box-shadow: inset 3px 0 0 var(--accent);
   background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+
+.merge-editor {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.merge-editor__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.merge-editor__references,
+.merge-editor__region-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.merge-editor__region-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.merge-pane {
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--bg-left-panel);
+}
+
+.merge-pane--resolved {
+  min-height: 220px;
+}
+
+.merge-pane__title {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.merge-pane__code {
+  margin: 0;
+  padding: 14px 16px 22px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", "Fira Code", monospace;
+  font-size: 0.84rem;
 }
