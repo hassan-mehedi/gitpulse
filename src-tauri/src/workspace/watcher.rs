@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use ignore::WalkBuilder;
 use notify_debouncer_full::notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebouncedEvent, Debouncer, RecommendedCache};
 use serde::Serialize;
@@ -17,6 +18,23 @@ pub struct RepoEventPayload {
     pub repo_path: String,
 }
 
+/// Directory basenames we never watch regardless of .gitignore.
+/// These are dependency / build artifact directories that explode the inotify
+/// watch count on Linux and bloat notify's path-dedup cache.
+const ALWAYS_IGNORED_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".venv",
+    "venv",
+    ".tox",
+    ".cache",
+    "__pycache__",
+    ".pytest_cache",
+];
+
 pub fn create_watchers<R: Runtime>(
     app_handle: &AppHandle<R>,
     repo_paths: &[String],
@@ -27,6 +45,7 @@ pub fn create_watchers<R: Runtime>(
         let repo_root = PathBuf::from(repo_path);
         let repo_root_for_events = repo_root.clone();
         let app_handle = app_handle.clone();
+
         let mut debouncer = new_debouncer(
             Duration::from_millis(300),
             None,
@@ -40,13 +59,56 @@ pub fn create_watchers<R: Runtime>(
         )
         .map_err(|err| GitError::Io(err.to_string()))?;
 
-        debouncer
-            .watch(&repo_root, RecursiveMode::Recursive)
-            .map_err(|err| GitError::Io(err.to_string()))?;
+        // Walk the repo tree honoring .gitignore + ALWAYS_IGNORED_DIRS, registering a
+        // non-recursive watch on each surviving directory. This bypasses notify's
+        // default recursive watch — which on a self-hosted repo would walk
+        // node_modules/ and target/ and consume tens of thousands of inotify watches.
+        let walker = WalkBuilder::new(&repo_root)
+            .hidden(false) // we want .git/HEAD and .git/refs/remotes/* events
+            .git_ignore(true)
+            .git_exclude(true)
+            .git_global(true)
+            .filter_entry(|entry| !is_always_ignored(entry.path()))
+            .build();
+
+        for entry in walker.flatten() {
+            let path = entry.path();
+            let is_dir = entry
+                .file_type()
+                .map(|file_type| file_type.is_dir())
+                .unwrap_or(false);
+            if !is_dir {
+                continue;
+            }
+
+            // Skip .git/objects and .git/logs (too noisy, filtered downstream anyway)
+            if let Ok(rel) = path.strip_prefix(&repo_root) {
+                let rel_str = rel.to_string_lossy();
+                if rel_str.starts_with(".git/objects")
+                    || rel_str.starts_with(".git/logs")
+                    || rel_str == ".git/objects"
+                    || rel_str == ".git/logs"
+                {
+                    continue;
+                }
+            }
+
+            // Best-effort: a failed watch on a single directory shouldn't abort
+            // the whole watcher (e.g. an inotify limit hit mid-tree).
+            let _ = debouncer.watch(path, RecursiveMode::NonRecursive);
+        }
+
         watchers.push(debouncer);
     }
 
     Ok(watchers)
+}
+
+fn is_always_ignored(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| ALWAYS_IGNORED_DIRS.contains(&name))
+        .unwrap_or(false)
 }
 
 fn emit_repo_event<R: Runtime>(

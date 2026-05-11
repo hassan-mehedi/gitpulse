@@ -6,20 +6,35 @@ import { gitDiscardAll, gitStageAll, gitUnstageAll } from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
 import { StashSection } from "./StashSection";
-import type { Repository } from "../../types/git";
+import type { FileChange, Repository } from "../../types/git";
 
 interface RepoSectionProps {
   repo: Repository;
   viewMode: "tree" | "list";
   showRepoHeader: boolean;
   isFirst: boolean;
+  selectedKey: string | null;
+  onSelect: (repo: Repository, change: FileChange, staged: boolean) => void;
+  onStageToggle: (repo: Repository, change: FileChange, staged: boolean) => void;
+  onDiscard: (repo: Repository, change: FileChange) => void;
+  onContextMenu: (
+    repo: Repository,
+    change: FileChange,
+    staged: boolean,
+    position: { x: number; y: number }
+  ) => void;
 }
 
 export function RepoSection({
   repo,
   viewMode,
   showRepoHeader,
-  isFirst
+  isFirst,
+  selectedKey,
+  onSelect,
+  onStageToggle,
+  onDiscard,
+  onContextMenu
 }: RepoSectionProps) {
   const runGit = useGit();
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
@@ -32,11 +47,11 @@ export function RepoSection({
   const hasChanges = regular.length > 0;
   const hasStashes = repo.stashCount > 0;
 
-  async function withRefresh(operation: () => Promise<void>) {
-    await runGit(async () => {
+  function withRefresh(operation: () => Promise<unknown>) {
+    runGit(async () => {
       await operation();
       await refreshRepo(repo.path);
-    });
+    }).catch(() => {});
   }
 
   return (
@@ -66,6 +81,11 @@ export function RepoSection({
               title="Merge Changes"
               count={conflicted.length}
               viewMode={viewMode}
+              selectedKey={selectedKey}
+              onSelect={onSelect}
+              onStageToggle={onStageToggle}
+              onDiscard={onDiscard}
+              onContextMenu={onContextMenu}
             />
           ) : null}
 
@@ -77,11 +97,16 @@ export function RepoSection({
               title="Staged Changes"
               count={repo.staged.length}
               viewMode={viewMode}
+              selectedKey={selectedKey}
+              onSelect={onSelect}
+              onStageToggle={onStageToggle}
+              onDiscard={onDiscard}
+              onContextMenu={onContextMenu}
               actions={[
                 {
                   icon: "remove",
                   label: "Unstage All Changes",
-                  onClick: () => void withRefresh(() => gitUnstageAll(repo.path))
+                  onClick: () => withRefresh(() => gitUnstageAll(repo.path))
                 }
               ]}
             />
@@ -95,16 +120,21 @@ export function RepoSection({
               title="Changes"
               count={regular.length}
               viewMode={viewMode}
+              selectedKey={selectedKey}
+              onSelect={onSelect}
+              onStageToggle={onStageToggle}
+              onDiscard={onDiscard}
+              onContextMenu={onContextMenu}
               actions={[
                 {
                   icon: "discard",
                   label: "Discard All Changes",
-                  onClick: () => void withRefresh(() => gitDiscardAll(repo.path))
+                  onClick: () => withRefresh(() => gitDiscardAll(repo.path))
                 },
                 {
                   icon: "add",
                   label: "Stage All Changes",
-                  onClick: () => void withRefresh(() => gitStageAll(repo.path))
+                  onClick: () => withRefresh(() => gitStageAll(repo.path))
                 }
               ]}
             />

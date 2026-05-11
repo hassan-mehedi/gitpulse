@@ -5,6 +5,7 @@ import { buildPatch, buildPatchFromSelectedLines } from "../../lib/patch";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
+import { useSettingsStore } from "../../stores/settings";
 import { FileHistoryPanel } from "../source-control/FileHistoryPanel";
 import { MergeEditor } from "../merge/MergeEditor";
 import { DiffGutter } from "./DiffGutter";
@@ -17,18 +18,20 @@ interface DiffViewerProps {
 }
 
 export function DiffViewer({ activeView }: DiffViewerProps) {
-  const {
-    activeChange,
-    activeDiff,
-    mode,
-    setMode,
-    activeRepo,
-    staged,
-    activeHunkIndex,
-    setActiveHunkIndex,
-    refreshActiveDiff
-  } = useDiffStore();
+  // Per-field selectors so Zustand re-renders this component on any of these changing.
+  // The previous `useDiffStore()` (no selector) was deprecated in Zustand v5 and silently
+  // stopped triggering re-renders for subsequent changes in some cases.
+  const activeChange = useDiffStore((state) => state.activeChange);
+  const activeDiff = useDiffStore((state) => state.activeDiff);
+  const activeRepo = useDiffStore((state) => state.activeRepo);
+  const staged = useDiffStore((state) => state.staged);
+  const mode = useDiffStore((state) => state.mode);
+  const activeHunkIndex = useDiffStore((state) => state.activeHunkIndex);
+  const setMode = useDiffStore((state) => state.setMode);
+  const setActiveHunkIndex = useDiffStore((state) => state.setActiveHunkIndex);
+  const refreshActiveDiff = useDiffStore((state) => state.refreshActiveDiff);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const theme = useSettingsStore((state) => state.theme);
   const runGit = useGit();
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
   const [surface, setSurface] = useState<"diff" | "history">("diff");
@@ -68,6 +71,43 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
       deletions: hunk.lines.filter((line) => line.lineType === "remove").length
     }));
   }, [diffState]);
+
+  // Alt+Up / Alt+Down hunk navigation. Declared ABOVE the conditional early returns
+  // so the hook order is stable across renders (Rules of Hooks).
+  const hunkCount = diffState?.hunks.length ?? 0;
+  useEffect(() => {
+    if (activeView !== "source-control" || hunkCount === 0) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!(event.altKey && !event.ctrlKey && !event.metaKey)) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.closest("input, textarea, select, [contenteditable='true']") !== null ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveHunkIndex((activeHunkIndex - 1 + hunkCount) % hunkCount);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveHunkIndex((activeHunkIndex + 1) % hunkCount);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeHunkIndex, activeView, hunkCount, setActiveHunkIndex]);
 
   if (activeView !== "source-control") {
     return (
@@ -186,36 +226,6 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     setActiveHunkIndex((activeHunkIndex + 1) % diff.hunks.length);
   }
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (activeView !== "source-control" || !(event.altKey && !event.ctrlKey && !event.metaKey)) {
-        return;
-      }
-
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.closest("input, textarea, select, [contenteditable='true']") !== null ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        goToPreviousHunk();
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        goToNextHunk();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeHunkIndex, activeView, diff.hunks.length]);
-
   return (
     <div className="diff-viewer">
       <div className="diff-viewer__header">
@@ -315,6 +325,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
                   hunkIndex={index}
                   isActive={index === activeHunkIndex}
                   mode={mode}
+                  theme={theme}
                   onFocus={() => setActiveHunkIndex(index)}
                   onToggleLine={toggleLineSelection}
                   selectedLineIndices={selectedLinesByHunk[index] ?? []}

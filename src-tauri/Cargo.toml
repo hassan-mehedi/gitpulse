@@ -11,6 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+ignore = "0.4"
 notify = "7"
 notify-debouncer-full = "0.4"
 serde = { version = "1", features = ["derive"] }

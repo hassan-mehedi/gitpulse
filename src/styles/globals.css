@@ -452,59 +452,18 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 30px 1fr 22px;
+  grid-template-rows: 1fr 22px;
   height: 100vh;
   overflow: hidden;
 }
 
-/* Title bar (UX-SPEC §1.1): 30px, brand + window controls only */
-.title-bar {
-  display: grid;
-  grid-template-columns: minmax(0, auto) 1fr minmax(0, auto);
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  background: var(--vscode-titleBar-activeBackground);
-  color: var(--vscode-titleBar-activeForeground);
-  border-bottom: 1px solid var(--vscode-titleBar-border);
-  -webkit-app-region: drag;
-  user-select: none;
-}
-
-.title-bar__brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  -webkit-app-region: no-drag;
-}
-
-.title-bar__brand .codicon {
-  color: var(--vscode-icon-foreground);
-  font-size: 14px;
-}
-
-.title-bar__title {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.title-bar__center {
-  height: 22px;
-}
-
-.title-bar__window-controls {
-  display: flex;
-  align-items: center;
-  -webkit-app-region: no-drag;
-}
-
-/* Legacy compatibility shims — TODO: remove once all callers migrate */
-.toolbar { display: none; }
-.toolbar__actions, .toolbar__repo, .toolbar__progress, .toolbar__progress-meta {
+/* No in-app title bar — Tauri's OS-native window decorations are the title bar (UX-SPEC §1.1).
+   Legacy compatibility shims for unmigrated views. */
+.toolbar,
+.toolbar__actions,
+.toolbar__repo,
+.toolbar__progress,
+.toolbar__progress-meta {
   display: none;
 }
 

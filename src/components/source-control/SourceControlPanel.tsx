@@ -1,23 +1,94 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Codicon } from "../shared/Codicon";
+import { ContextMenu } from "../shared/ContextMenu";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { gitFetchAll, gitPull, gitPush, gitSync } from "../../lib/git";
+import { useDiffStore } from "../../stores/diff";
+import {
+  gitDiscardFile,
+  gitFetchAll,
+  gitPull,
+  gitPush,
+  gitStageFile,
+  gitSync,
+  gitUnstageFile
+} from "../../lib/git";
 import { pickRepositoryDirectory, pickWorkspaceFile } from "../../lib/openTarget";
 import { RepoSection } from "./RepoSection";
-import type { ActivityView } from "../../types/git";
+import type { ActivityView, FileChange, Repository } from "../../types/git";
 
 interface SourceControlPanelProps {
   activeView: ActivityView;
+}
+
+interface MenuTarget {
+  repo: Repository;
+  change: FileChange;
+  staged: boolean;
+  position: { x: number; y: number };
 }
 
 export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
   const repositories = useWorkspaceStore((state) => state.repositories);
   const loadTarget = useWorkspaceStore((state) => state.loadTarget);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const openDiff = useWorkspaceStore((state) => state.openDiff);
+  const activeChange = useDiffStore((state) => state.activeChange);
+  const activeStaged = useDiffStore((state) => state.staged);
   const runGit = useGit();
+
   const [viewMode, setViewMode] = useState<"tree" | "list">("list");
+  const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
+
   const activeRepo = repositories[0] ?? null;
+  const selectedKey = activeChange
+    ? `${activeStaged ? "s" : "u"}:${activeChange.path}`
+    : null;
+
+  const handleSelect = useCallback(
+    (repo: Repository, change: FileChange, staged: boolean) => {
+      runGit(async () => {
+        await openDiff(repo, change, staged);
+      }).catch(() => {});
+    },
+    [openDiff, runGit]
+  );
+
+  const handleStageToggle = useCallback(
+    (repo: Repository, change: FileChange, staged: boolean) => {
+      runGit(async () => {
+        if (staged) {
+          await gitUnstageFile(repo.path, change.path);
+        } else {
+          await gitStageFile(repo.path, change.path);
+        }
+        await refreshRepo(repo.path);
+      }).catch(() => {});
+    },
+    [refreshRepo, runGit]
+  );
+
+  const handleDiscard = useCallback(
+    (repo: Repository, change: FileChange) => {
+      runGit(async () => {
+        await gitDiscardFile(repo.path, change.path);
+        await refreshRepo(repo.path);
+      }).catch(() => {});
+    },
+    [refreshRepo, runGit]
+  );
+
+  const handleContextMenu = useCallback(
+    (
+      repo: Repository,
+      change: FileChange,
+      staged: boolean,
+      position: { x: number; y: number }
+    ) => {
+      setMenuTarget({ repo, change, staged, position });
+    },
+    []
+  );
 
   async function handleOpenRepository() {
     const selection = await pickRepositoryDirectory();
@@ -36,7 +107,7 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
     await runGit(async () => {
       await operation(activeRepo.path);
       await refreshRepo(activeRepo.path);
-    });
+    }).catch(() => {});
   }
 
   if (activeView !== "source-control") {
@@ -141,9 +212,41 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
             viewMode={viewMode}
             showRepoHeader={repositories.length > 1}
             isFirst={index === 0}
+            selectedKey={selectedKey}
+            onSelect={handleSelect}
+            onStageToggle={handleStageToggle}
+            onDiscard={handleDiscard}
+            onContextMenu={handleContextMenu}
           />
         ))}
       </div>
+
+      <ContextMenu
+        items={
+          menuTarget
+            ? [
+                {
+                  label: "Open Diff",
+                  onSelect: () =>
+                    handleSelect(menuTarget.repo, menuTarget.change, menuTarget.staged)
+                },
+                {
+                  label: menuTarget.staged ? "Unstage Changes" : "Stage Changes",
+                  onSelect: () =>
+                    handleStageToggle(menuTarget.repo, menuTarget.change, menuTarget.staged)
+                },
+                {
+                  danger: true,
+                  disabled: menuTarget.staged,
+                  label: "Discard Changes",
+                  onSelect: () => handleDiscard(menuTarget.repo, menuTarget.change)
+                }
+              ]
+            : []
+        }
+        position={menuTarget?.position ?? null}
+        onClose={() => setMenuTarget(null)}
+      />
     </>
   );
 }

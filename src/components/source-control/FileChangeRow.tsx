@@ -1,17 +1,23 @@
-import { useState } from "react";
+import { memo } from "react";
 import { Codicon } from "../shared/Codicon";
-import { useGit } from "../../hooks/useGit";
-import { useWorkspaceStore } from "../../stores/workspace";
-import { useDiffStore } from "../../stores/diff";
-import { gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
+import { FileIcon } from "../shared/FileIcon";
 import type { FileChange, Repository } from "../../types/git";
-import { ContextMenu } from "../shared/ContextMenu";
 
 interface FileChangeRowProps {
   repo: Repository;
   change: FileChange;
   staged: boolean;
+  isSelected: boolean;
   indent?: number;
+  onSelect: (repo: Repository, change: FileChange, staged: boolean) => void;
+  onStageToggle: (repo: Repository, change: FileChange, staged: boolean) => void;
+  onDiscard: (repo: Repository, change: FileChange) => void;
+  onContextMenu: (
+    repo: Repository,
+    change: FileChange,
+    staged: boolean,
+    position: { x: number; y: number }
+  ) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -36,137 +42,108 @@ const STATUS_TITLE: Record<string, string> = {
   U: "Conflict"
 };
 
-export function FileChangeRow({ repo, change, staged, indent = 0 }: FileChangeRowProps) {
-  const runGit = useGit();
-  const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
-  const openDiff = useWorkspaceStore((state) => state.openDiff);
-  const activeChange = useDiffStore((state) => state.activeChange);
-  const activeStaged = useDiffStore((state) => state.staged);
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
-
+function FileChangeRowImpl({
+  repo,
+  change,
+  staged,
+  isSelected,
+  indent = 0,
+  onSelect,
+  onStageToggle,
+  onDiscard,
+  onContextMenu
+}: FileChangeRowProps) {
   const segments = change.path.split("/");
   const name = segments.pop() ?? change.path;
   const directory = segments.join("/");
 
-  const isSelected =
-    activeChange?.path === change.path && activeStaged === staged;
-
-  function handleSelect() {
-    void runGit(async () => {
-      await openDiff(repo, change, staged);
-    });
-  }
-
-  function handleStageToggle() {
-    void runGit(async () => {
-      if (staged) {
-        await gitUnstageFile(repo.path, change.path);
-      } else {
-        await gitStageFile(repo.path, change.path);
-      }
-      await refreshRepo(repo.path);
-    });
-  }
-
-  function handleDiscard() {
-    void runGit(async () => {
-      await gitDiscardFile(repo.path, change.path);
-      await refreshRepo(repo.path);
-    });
-  }
-
   return (
-    <>
-      <div
-        className={`scm-row${isSelected ? " is-selected" : ""}`}
-        onClick={handleSelect}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          setMenuPosition({ x: event.clientX, y: event.clientY });
-        }}
-        style={indent > 0 ? { paddingLeft: `${22 + indent * 12}px` } : undefined}
-        role="treeitem"
-      >
-        <Codicon name="file" size={16} className="scm-row__icon" />
-        <span className="scm-row__name" title={change.path}>
-          {name}
+    <div
+      className={`scm-row${isSelected ? " is-selected" : ""}`}
+      onClick={() => onSelect(repo, change, staged)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu(repo, change, staged, { x: event.clientX, y: event.clientY });
+      }}
+      style={indent > 0 ? { paddingLeft: `${22 + indent * 12}px` } : undefined}
+      role="treeitem"
+    >
+      <FileIcon path={change.path} size={16} className="scm-row__icon" />
+      <span className="scm-row__name" title={change.path}>
+        {name}
+      </span>
+      {directory ? (
+        <span className="scm-row__path" title={change.path}>
+          {directory}
         </span>
-        {directory ? (
-          <span className="scm-row__path" title={change.path}>
-            {directory}
-          </span>
-        ) : null}
+      ) : null}
 
-        <span className="scm-row__actions">
-          {staged ? (
+      <span className="scm-row__actions">
+        {staged ? (
+          <button
+            className="scm-row__action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStageToggle(repo, change, staged);
+            }}
+            title="Unstage Changes"
+            aria-label="Unstage Changes"
+            type="button"
+          >
+            <Codicon name="remove" size={14} />
+          </button>
+        ) : (
+          <>
             <button
               className="scm-row__action"
               onClick={(event) => {
                 event.stopPropagation();
-                handleStageToggle();
+                onDiscard(repo, change);
               }}
-              title="Unstage Changes"
-              aria-label="Unstage Changes"
+              title="Discard Changes"
+              aria-label="Discard Changes"
               type="button"
             >
-              <Codicon name="remove" size={14} />
+              <Codicon name="discard" size={14} />
             </button>
-          ) : (
-            <>
-              <button
-                className="scm-row__action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDiscard();
-                }}
-                title="Discard Changes"
-                aria-label="Discard Changes"
-                type="button"
-              >
-                <Codicon name="discard" size={14} />
-              </button>
-              <button
-                className="scm-row__action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleStageToggle();
-                }}
-                title="Stage Changes"
-                aria-label="Stage Changes"
-                type="button"
-              >
-                <Codicon name="add" size={14} />
-              </button>
-            </>
-          )}
-        </span>
+            <button
+              className="scm-row__action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onStageToggle(repo, change, staged);
+              }}
+              title="Stage Changes"
+              aria-label="Stage Changes"
+              type="button"
+            >
+              <Codicon name="add" size={14} />
+            </button>
+          </>
+        )}
+      </span>
 
-        <span
-          className="scm-row__status"
-          style={{ color: STATUS_COLOR[change.status] ?? "var(--vscode-foreground)" }}
-          title={STATUS_TITLE[change.status] ?? change.status}
-        >
-          {change.status}
-        </span>
-      </div>
-
-      <ContextMenu
-        items={[
-          { label: "Open Diff", onSelect: handleSelect },
-          {
-            label: staged ? "Unstage Changes" : "Stage Changes",
-            onSelect: handleStageToggle
-          },
-          {
-            danger: true,
-            disabled: staged,
-            label: "Discard Changes",
-            onSelect: handleDiscard
-          }
-        ]}
-        onClose={() => setMenuPosition(null)}
-        position={menuPosition}
-      />
-    </>
+      <span
+        className="scm-row__status"
+        style={{ color: STATUS_COLOR[change.status] ?? "var(--vscode-foreground)" }}
+        title={STATUS_TITLE[change.status] ?? change.status}
+      >
+        {change.status}
+      </span>
+    </div>
   );
 }
+
+export const FileChangeRow = memo(
+  FileChangeRowImpl,
+  (prev, next) =>
+    prev.change.path === next.change.path &&
+    prev.change.status === next.change.status &&
+    prev.staged === next.staged &&
+    prev.isSelected === next.isSelected &&
+    prev.indent === next.indent &&
+    prev.repo.path === next.repo.path &&
+    prev.onSelect === next.onSelect &&
+    prev.onStageToggle === next.onStageToggle &&
+    prev.onDiscard === next.onDiscard &&
+    prev.onContextMenu === next.onContextMenu
+);

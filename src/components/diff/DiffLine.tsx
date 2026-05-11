@@ -1,4 +1,6 @@
+import { memo } from "react";
 import type { DiffLine as DiffLineType } from "../../types/git";
+import type { ThemeMode } from "../../lib/theme";
 import { HighlightedLineContent } from "./HighlightedLineContent";
 
 interface DiffLineProps {
@@ -7,15 +9,17 @@ interface DiffLineProps {
   lineNumber?: number;
   selected?: boolean;
   selectable?: boolean;
+  theme: ThemeMode;
   onToggle?: () => void;
 }
 
-export function DiffLine({
+function DiffLineImpl({
   filePath,
   line,
   lineNumber,
   selected,
   selectable,
+  theme,
   onToggle
 }: DiffLineProps) {
   const marker = line.content.slice(0, 1);
@@ -30,8 +34,10 @@ export function DiffLine({
       <span className="diff-line__number">{lineNumber ?? ""}</span>
       <span className="diff-line__content-wrap">
         <span className="diff-line__marker">{marker}</span>
-        <HighlightedLineContent content={code} filePath={filePath} />
+        <HighlightedLineContent content={code} filePath={filePath} theme={theme} />
       </span>
     </button>
   );
 }
+
+export const DiffLine = memo(DiffLineImpl);

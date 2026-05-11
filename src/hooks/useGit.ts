@@ -12,11 +12,16 @@ export function useGit() {
         return await operation();
       } catch (error) {
         const gitError = error as GitError;
+        const detail = gitError.message ?? gitError.stderr ?? gitError.kind ?? String(error);
+        // Surface to console so the user can grep for it; the toast is the user-facing path.
+        if (typeof console !== "undefined") {
+          console.error("[git] operation failed:", error);
+        }
         pushNotification({
           id: createId(),
           tone: "error",
           title: "Git operation failed",
-          message: gitError.message ?? gitError.stderr ?? gitError.kind
+          message: detail
         });
         throw gitError;
       }

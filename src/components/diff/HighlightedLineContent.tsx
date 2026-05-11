@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import { escapeHtml, highlightLine } from "../../lib/highlight";
-import { useSettingsStore } from "../../stores/settings";
+import type { ThemeMode } from "../../lib/theme";
 
 interface HighlightedLineContentProps {
   filePath: string;
   content: string;
+  theme: ThemeMode;
 }
 
 export function HighlightedLineContent({
   filePath,
-  content
+  content,
+  theme
 }: HighlightedLineContentProps) {
-  const theme = useSettingsStore((state) => state.theme);
   const [html, setHtml] = useState(() => escapeHtml(content));
 
   useEffect(() => {

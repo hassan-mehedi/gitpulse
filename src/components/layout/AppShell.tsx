@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ActivityBar } from "./ActivityBar";
-import { Toolbar } from "./Toolbar";
 import { StatusBar } from "./StatusBar";
 import { SourceControlPanel } from "../source-control/SourceControlPanel";
 import { DiffViewer } from "../diff/DiffViewer";
@@ -39,6 +38,19 @@ export function AppShell() {
   const [awaitingShortcutChord, setAwaitingShortcutChord] = useState<number | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => {
+        const next = activeRepo ? `${activeRepo.name} — GitPulse` : "GitPulse";
+        return getCurrentWindow().setTitle(next);
+      })
+      .catch(() => {});
+  }, [activeRepo]);
+
+  useEffect(() => {
     if (!awaitingShortcutChord) {
       return;
     }
@@ -53,38 +65,48 @@ export function AppShell() {
   }, [awaitingShortcutChord]);
 
   useEffect(() => {
+    // Resolve "current" active repo / change imperatively from the stores so this
+    // effect doesn't need to re-attach the keydown listener on every status refresh.
+    function getActiveRepo() {
+      const state = useWorkspaceStore.getState();
+      return state.repositories.find((repo) => repo.id === state.activeRepoId) ?? null;
+    }
+
     async function runRepoOperation(operation: "fetch" | "pull" | "push" | "undo") {
-      if (!activeRepo) {
+      const repo = getActiveRepo();
+      if (!repo) {
         return;
       }
 
       await runGit(async () => {
         if (operation === "fetch") {
-          await gitFetchAll(activeRepo.path);
+          await gitFetchAll(repo.path);
         } else if (operation === "pull") {
-          await gitPull(activeRepo.path);
+          await gitPull(repo.path);
         } else if (operation === "push") {
-          await gitPush(activeRepo.path);
+          await gitPush(repo.path);
         } else {
-          await gitUndoLastCommit(activeRepo.path);
+          await gitUndoLastCommit(repo.path);
         }
 
-        await refreshRepo(activeRepo.path);
+        await refreshRepo(repo.path);
       });
     }
 
     async function runStageShortcut(nextStaged: boolean) {
-      if (!activeRepo || !activeChange) {
+      const repo = getActiveRepo();
+      const change = useDiffStore.getState().activeChange;
+      if (!repo || !change) {
         return;
       }
 
       await runGit(async () => {
         if (nextStaged) {
-          await gitStageFile(activeRepo.path, activeChange.path);
+          await gitStageFile(repo.path, change.path);
         } else {
-          await gitUnstageFile(activeRepo.path, activeChange.path);
+          await gitUnstageFile(repo.path, change.path);
         }
-        await refreshRepo(activeRepo.path);
+        await refreshRepo(repo.path);
         await refreshActiveDiff();
       });
     }
@@ -155,19 +177,10 @@ export function AppShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    activeChange,
-    activeRepo,
-    awaitingShortcutChord,
-    refreshActiveDiff,
-    refreshRepo,
-    runGit,
-    staged
-  ]);
+  }, [awaitingShortcutChord, refreshActiveDiff, refreshRepo, runGit]);
 
   return (
     <div className="app-shell">
-      <Toolbar />
       <div className="main-layout">
         <ActivityBar activeView={activeView} onNavigate={setActiveView} />
         <section className="left-panel">

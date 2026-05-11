@@ -1,4 +1,5 @@
 import type { DiffHunk as DiffHunkType } from "../../types/git";
+import type { ThemeMode } from "../../lib/theme";
 import { DiffLine } from "./DiffLine";
 
 interface DiffHunkProps {
@@ -7,6 +8,7 @@ interface DiffHunkProps {
   hunkIndex: number;
   isActive: boolean;
   mode: "split" | "inline";
+  theme: ThemeMode;
   onFocus: () => void;
   selectedLineIndices: number[];
   onToggleLine: (hunkIndex: number, lineIndex: number) => void;
@@ -18,6 +20,7 @@ export function DiffHunk({
   hunkIndex,
   isActive,
   mode,
+  theme,
   onFocus,
   selectedLineIndices,
   onToggleLine
@@ -49,6 +52,7 @@ export function DiffHunk({
                   onToggle={() => onToggleLine(hunkIndex, index)}
                   selectable={line.lineType !== "context"}
                   selected={selected.has(index)}
+                  theme={theme}
                 />
               ))}
             </pre>
@@ -65,6 +69,7 @@ export function DiffHunk({
                   onToggle={() => onToggleLine(hunkIndex, index)}
                   selectable={line.lineType !== "context"}
                   selected={selected.has(index)}
+                  theme={theme}
                 />
               ))}
             </pre>
@@ -81,6 +86,7 @@ export function DiffHunk({
               onToggle={() => onToggleLine(hunkIndex, index)}
               selectable={line.lineType !== "context"}
               selected={selected.has(index)}
+              theme={theme}
             />
           ))}
         </pre>

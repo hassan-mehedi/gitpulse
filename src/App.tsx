@@ -52,6 +52,7 @@ export default function App() {
         });
       });
 
+    let cancelled = false;
     let dispose: (() => void) | undefined;
     void listenGitProgress((payload) => {
       upsertProgress(payload);
@@ -72,11 +73,19 @@ export default function App() {
         title: `${payload.operation} ${payload.status}`,
         message: payload.message
       });
-    }).then((unlisten) => {
-      dispose = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        if (cancelled) {
+          // Effect was torn down before the listener registered — dispose now.
+          unlisten();
+          return;
+        }
+        dispose = unlisten;
+      })
+      .catch(() => {});
 
     return () => {
+      cancelled = true;
       dispose?.();
     };
   }, [pushNotification, removeProgress, setGitVersion, upsertProgress]);
