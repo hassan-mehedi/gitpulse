@@ -9,6 +9,7 @@ import { BranchManager } from "../branches/BranchManager";
 import { SettingsPanel } from "../settings/SettingsPanel";
 import { CommitGraph } from "../graph/CommitGraph";
 import { BlameView } from "../blame/BlameView";
+import { TabStrip } from "../diff/TabStrip";
 import { BranchPickerModal } from "../branches/BranchPickerModal";
 import { ShortcutReferenceModal } from "../shared/ShortcutReferenceModal";
 import { useGit } from "../../hooks/useGit";
@@ -181,24 +182,33 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <div className="main-layout">
+      <div
+        className={`main-layout${
+          activeView === "graph" || activeView === "blame" ? " main-layout--no-sidebar" : ""
+        }`}
+      >
         <ActivityBar activeView={activeView} onNavigate={setActiveView} />
-        <section className="left-panel">
-          {activeView === "branches" ? (
-            <BranchManager />
-          ) : activeView === "settings" ? (
-            <SettingsPanel />
-          ) : (
-            <SourceControlPanel activeView={activeView} />
-          )}
-        </section>
+        {activeView === "graph" || activeView === "blame" ? null : (
+          <section className="left-panel">
+            {activeView === "branches" ? (
+              <BranchManager />
+            ) : activeView === "settings" ? (
+              <SettingsPanel />
+            ) : (
+              <SourceControlPanel activeView={activeView} />
+            )}
+          </section>
+        )}
         <section className="content-panel">
           {activeView === "graph" ? (
             <CommitGraph />
           ) : activeView === "blame" ? (
             <BlameView />
           ) : (
-            <DiffViewer activeView={activeView} />
+            <>
+              <TabStrip />
+              <DiffViewer activeView={activeView} />
+            </>
           )}
         </section>
       </div>

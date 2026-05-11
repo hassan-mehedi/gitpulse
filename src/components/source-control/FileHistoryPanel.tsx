@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitCommitHorizontal } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 import { gitLog, gitShowCommit } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import type { CommitDetail, CommitInfo, Repository } from "../../types/git";
@@ -134,7 +134,7 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
             <div className="empty-state">
               <div className="empty-state__card">
                 <div className="empty-state__title">
-                  <GitCommitHorizontal size={18} /> Select a commit
+                  <Codicon name="git-commit" size={16} /> Select a commit
                 </div>
                 <div className="empty-state__body">
                   Choose any file commit to inspect its metadata and affected files.

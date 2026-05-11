@@ -1,6 +1,27 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
+import { Icon, addCollection } from "@iconify/react";
 import { getIconForFile } from "vscode-icons-js";
 import { Codicon } from "./Codicon";
+
+let collectionLoaded = false;
+let collectionLoading: Promise<void> | null = null;
+
+function ensureCollection(): Promise<void> {
+  if (collectionLoaded) return Promise.resolve();
+  if (collectionLoading) return collectionLoading;
+  collectionLoading = import("@iconify-json/vscode-icons/icons.json")
+    .then((mod) => {
+      addCollection(mod.default ?? (mod as unknown as Parameters<typeof addCollection>[0]));
+      collectionLoaded = true;
+    })
+    .catch(() => {});
+  return collectionLoading;
+}
+
+function svgFilenameToIconName(filename: string | undefined) {
+  if (!filename) return null;
+  return filename.replace(/\.svg$/, "").replace(/_/g, "-");
+}
 
 interface FileIconProps {
   path: string;
@@ -8,36 +29,37 @@ interface FileIconProps {
   className?: string;
 }
 
-// Pinned vscode-icons release. Bump deliberately when upstream ships new glyphs.
-const ICON_BASE =
-  "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@12.13.0/icons";
-
-/**
- * Per-language file icon, source: vscode-icons (extension data via vscode-icons-js +
- * SVG assets via jsdelivr CDN). Falls back to a generic codicon-file glyph if the
- * load fails (offline, CDN blocked, unknown basename).
- *
- * Future work: bundle the SVGs locally for offline support — see TRACKING.md task #104.
- */
 function FileIconImpl({ path, size = 16, className }: FileIconProps) {
-  const [failed, setFailed] = useState(false);
-  const basename = path.split("/").pop() ?? path;
-  const iconName = getIconForFile(basename);
+  const [ready, setReady] = useState(collectionLoaded);
 
-  if (failed || !iconName) {
+  useEffect(() => {
+    if (collectionLoaded) {
+      setReady(true);
+      return;
+    }
+    let cancelled = false;
+    void ensureCollection().then(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const basename = path.split("/").pop() ?? path;
+  const iconName = svgFilenameToIconName(getIconForFile(basename));
+
+  if (!ready || !iconName) {
     return <Codicon name="file" size={size} className={className} />;
   }
 
   return (
-    <img
-      alt=""
-      aria-hidden
-      className={className}
-      height={size}
-      onError={() => setFailed(true)}
-      src={`${ICON_BASE}/${iconName}`}
-      style={{ flex: "0 0 auto", display: "inline-block" }}
+    <Icon
+      icon={`vscode-icons:${iconName}`}
       width={size}
+      height={size}
+      className={className}
+      style={{ flex: "0 0 auto", display: "inline-block" }}
     />
   );
 }

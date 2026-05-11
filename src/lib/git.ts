@@ -392,6 +392,10 @@ export async function gitDiffRefs(
   return gitInvoke("git_diff_refs", { repoPath, from, to });
 }
 
+export async function gitCommitDiff(repoPath: string, sha: string): Promise<FileDiff[]> {
+  return gitInvoke("git_commit_diff", { repoPath, sha });
+}
+
 export async function gitDiffMergeBase(
   repoPath: string,
   ref1: string,

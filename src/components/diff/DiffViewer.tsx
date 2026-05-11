@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Columns2, Rows3, WandSparkles } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 import { gitDiscardLines, gitStageLines, gitUnstageLines } from "../../lib/git";
 import { buildPatch, buildPatchFromSelectedLines } from "../../lib/patch";
 import { useGit } from "../../hooks/useGit";
@@ -35,6 +35,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const runGit = useGit();
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
   const [surface, setSurface] = useState<"diff" | "history">("diff");
+  const [showOutline, setShowOutline] = useState(true);
   const diffState = activeDiff;
   const changeState = activeChange;
   const repoState = activeRepo;
@@ -110,31 +111,11 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   }, [activeHunkIndex, activeView, hunkCount, setActiveHunkIndex]);
 
   if (activeView !== "source-control") {
-    return (
-      <div className="empty-state">
-        <div className="empty-state__card">
-          <div className="empty-state__title">Ready for {activeView}</div>
-          <div className="empty-state__body">
-            The main content area is live. Additional panels can take over this region without
-            touching the shell structure.
-          </div>
-        </div>
-      </div>
-    );
+    return <WelcomeHints />;
   }
 
   if (!activeDiff || !activeChange || !activeRepo) {
-    return (
-      <div className="empty-state">
-        <div className="empty-state__card">
-          <div className="empty-state__title">Select a file to inspect changes</div>
-          <div className="empty-state__body">
-            The first implementation slice includes status, staging, commit actions, and a minimal
-            diff surface driven by backend git output.
-          </div>
-        </div>
-      </div>
-    );
+    return <WelcomeHints />;
   }
 
   const diff = activeDiff;
@@ -226,49 +207,98 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     setActiveHunkIndex((activeHunkIndex + 1) % diff.hunks.length);
   }
 
+  const segments = change.path.split("/");
+  const fileName = segments.pop() ?? change.path;
+  const fileDir = segments.join("/");
+
   return (
     <div className="diff-viewer">
       <div className="diff-viewer__header">
-        <div>
-          <div>{change.path}</div>
-          <div className="diff-viewer__meta">
-            {repo.name} • {staged ? "staged" : "working tree"}
-          </div>
+        <div className="diff-viewer__title">
+          <span className="diff-viewer__filename">{fileName}</span>
+          {fileDir ? <span className="diff-viewer__dir">{fileDir}</span> : null}
+          <span className="diff-viewer__meta">
+            {staged ? "staged" : "working tree"}
+          </span>
+          {canStageSelection ? (
+            <span className="diff-viewer__selection-count">
+              {selectedActiveLineIndices.length} selected
+            </span>
+          ) : null}
         </div>
-        <div className="diff-viewer__mode-switch">
-          <button className="panel-button" onClick={() => setSurface("diff")} type="button">
-            Diff
+        <div className="diff-viewer__toolbar">
+          <button
+            className={`diff-viewer__tab${surface === "diff" ? " is-active" : ""}`}
+            onClick={() => setSurface("diff")}
+            title="Diff"
+            type="button"
+          >
+            <Codicon name="diff-single" size={14} />
           </button>
-          <button className="panel-button" onClick={() => setSurface("history")} type="button">
-            History
+          <button
+            className={`diff-viewer__tab${surface === "history" ? " is-active" : ""}`}
+            onClick={() => setSurface("history")}
+            title="History"
+            type="button"
+          >
+            <Codicon name="history" size={14} />
           </button>
           {surface === "diff" ? (
             <>
-              <DiffNavigation
-                activeIndex={activeHunkIndex}
-                total={diff.hunks.length}
-                onPrevious={goToPreviousHunk}
-                onNext={goToNextHunk}
-              />
-              {canStageSelection ? (
-                <div className="badge">
-                  <WandSparkles size={14} />
-                  {selectedActiveLineIndices.length} selected
-                </div>
-              ) : null}
+              <span className="diff-viewer__divider" />
               <button
-                className="panel-button"
-                onClick={() => setMode("split")}
+                className="view-action"
+                onClick={goToPreviousHunk}
+                title="Previous Change (Alt+Up)"
+                aria-label="Previous Change"
+                disabled={diff.hunks.length === 0}
                 type="button"
               >
-                <Columns2 size={15} /> Split
+                <Codicon name="arrow-up" size={16} />
               </button>
               <button
-                className="panel-button"
-                onClick={() => setMode("inline")}
+                className="view-action"
+                onClick={goToNextHunk}
+                title="Next Change (Alt+Down)"
+                aria-label="Next Change"
+                disabled={diff.hunks.length === 0}
                 type="button"
               >
-                <Rows3 size={15} /> Inline
+                <Codicon name="arrow-down" size={16} />
+              </button>
+              <span className="diff-viewer__hunk-counter">
+                {diff.hunks.length === 0
+                  ? "0 hunks"
+                  : `${activeHunkIndex + 1} / ${diff.hunks.length}`}
+              </span>
+              <span className="diff-viewer__divider" />
+              <button
+                className={`view-action${mode === "split" ? " is-active" : ""}`}
+                onClick={() => setMode("split")}
+                title="Side-by-side"
+                aria-label="Side-by-side"
+                type="button"
+              >
+                <Codicon name="split-horizontal" size={16} />
+              </button>
+              <button
+                className={`view-action${mode === "inline" ? " is-active" : ""}`}
+                onClick={() => setMode("inline")}
+                title="Inline"
+                aria-label="Inline"
+                type="button"
+              >
+                <Codicon name="list-flat" size={16} />
+              </button>
+              <span className="diff-viewer__divider" />
+              <button
+                className={`view-action${showOutline ? " is-active" : ""}`}
+                onClick={() => setShowOutline((value) => !value)}
+                title={showOutline ? "Hide Hunk Outline" : "Show Hunk Outline"}
+                aria-label="Toggle Hunk Outline"
+                type="button"
+              >
+                <Codicon name="list-tree" size={16} />
               </button>
             </>
           ) : null}
@@ -280,8 +310,10 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
       ) : change.status === "U" ? (
         <MergeEditor filePath={change.path} repoPath={repo.path} />
       ) : (
-        <div className="diff-viewer__body">
-          <aside className="diff-viewer__sidebar">
+        <div
+          className={`diff-viewer__body${showOutline ? "" : " diff-viewer__body--no-outline"}`}
+        >
+          {showOutline ? <aside className="diff-viewer__sidebar">
             <DiffGutter
               canDiscard={canDiscard}
               canStage={canStage}
@@ -307,7 +339,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
                 </button>
               ))}
             </div>
-          </aside>
+          </aside> : null}
 
           <div className="diff-viewer__content">
             {diff.hunks.length === 0 ? (
@@ -335,6 +367,43 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * VS Code-style welcome surface: faint keybinding hints centered in the editor
+ * area, no card framing.
+ */
+function WelcomeHints() {
+  return (
+    <div className="welcome-hints">
+      <div className="welcome-hints__row">
+        <span>Show Source Control</span>
+        <kbd>Ctrl</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>Shift</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>G</kbd>
+      </div>
+      <div className="welcome-hints__row">
+        <span>Switch Branch</span>
+        <kbd>Ctrl</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>Shift</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>B</kbd>
+      </div>
+      <div className="welcome-hints__row">
+        <span>Show All Shortcuts</span>
+        <kbd>Ctrl</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>K</kbd>
+        <span className="welcome-hints__plus">,</span>
+        <kbd>Ctrl</kbd>
+        <span className="welcome-hints__plus">+</span>
+        <kbd>S</kbd>
+      </div>
     </div>
   );
 }

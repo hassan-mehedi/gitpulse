@@ -35,6 +35,8 @@ export type CodiconName =
   | "repo-pull"
   | "repo-push"
   | "repo-fetch"
+  | "repo-forked"
+  | "references"
   | "folder-opened"
   | "folder"
   | "archive"

@@ -263,13 +263,32 @@ pub fn parse_show_commit(output: &str) -> Result<CommitDetail, GitError> {
     let header = lines
         .next()
         .ok_or_else(|| GitError::Parse("git show returned no commit header".to_string()))?;
-    let body = lines
-        .by_ref()
-        .take_while(|line| !line.starts_with("---"))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string();
+
+    // `git show --stat --format=...` lays out as:
+    //   <formatted header line>
+    //   <commit message body lines, possibly multi-line>
+    //   <blank line>
+    //    <path> | <N> <+/->...
+    //    ...
+    //    N files changed, X insertions(+), Y deletions(-)
+    // There is no `---` separator. A stat line starts with whitespace and contains
+    // " | <digits>"; the summary line contains "file changed" or "files changed".
+    let mut body_lines: Vec<&str> = Vec::new();
+    let mut stat_lines: Vec<&str> = Vec::new();
+    let mut in_stat = false;
+    for line in lines {
+        if !in_stat {
+            if is_stat_line(line) || is_stat_summary(line) {
+                in_stat = true;
+                stat_lines.push(line);
+            } else {
+                body_lines.push(line);
+            }
+        } else {
+            stat_lines.push(line);
+        }
+    }
+    let body = body_lines.join("\n").trim().to_string();
 
     let info = parse_log(header)
         .into_iter()
@@ -277,10 +296,17 @@ pub fn parse_show_commit(output: &str) -> Result<CommitDetail, GitError> {
         .ok_or_else(|| GitError::Parse("unable to parse commit header".to_string()))?;
 
     let mut files = Vec::new();
-    for line in lines {
+    for line in stat_lines {
+        if is_stat_summary(line) {
+            continue;
+        }
         if let Some((file, graph)) = line.split_once('|') {
+            let file = file.trim();
+            if file.is_empty() {
+                continue;
+            }
             files.push(CommitFileStat {
-                file: file.trim().to_string(),
+                file: file.to_string(),
                 additions: graph.chars().filter(|c| *c == '+').count(),
                 deletions: graph.chars().filter(|c| *c == '-').count(),
                 status: "M".to_string(),
@@ -289,6 +315,25 @@ pub fn parse_show_commit(output: &str) -> Result<CommitDetail, GitError> {
     }
 
     Ok(CommitDetail { info, body, files })
+}
+
+fn is_stat_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed == line {
+        // No leading whitespace — stat lines from `git show --stat` are indented.
+        return false;
+    }
+    if let Some((_, rest)) = trimmed.split_once('|') {
+        let rest = rest.trim_start();
+        rest.chars().next().is_some_and(|c| c.is_ascii_digit())
+    } else {
+        false
+    }
+}
+
+fn is_stat_summary(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.contains("file changed") || trimmed.contains("files changed")
 }
 
 pub fn parse_branches(output: &str) -> Vec<BranchInfo> {
@@ -345,17 +390,28 @@ pub fn parse_remotes(output: &str) -> Vec<RemoteInfo> {
 }
 
 pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
-    // git blame --porcelain format: each file line has its own header entry.
-    // First occurrence of a SHA in a commit group has 4 fields (sha orig final count)
-    // plus full metadata, then ONE tab-prefixed content line.
-    // Subsequent lines in the same group have 3 fields (sha orig final), no metadata,
-    // then ONE tab-prefixed content line.
+    // git blame --porcelain format:
+    //   <sha> <orig_line> <final_line> [<count>]
+    //   [metadata lines (only on FIRST occurrence of <sha> in this output)]
+    //   \t<content>
+    // For subsequent lines in the same consecutive group: 3-field header, no metadata.
+    // For a re-occurrence of a SHA that's already been described: 4-field header
+    // (with count=1) but NO metadata — git assumes the reader has it cached.
+    // Therefore we MUST cache metadata per SHA across the whole output and only
+    // overwrite the working copy when metadata actually follows.
+    use std::collections::HashMap;
+
+    #[derive(Default, Clone)]
+    struct CommitMeta {
+        author: String,
+        author_email: String,
+        date: String,
+        summary: String,
+    }
+
     let mut lines = output.lines().peekable();
     let mut blame_lines = Vec::new();
-    let mut author = String::new();
-    let mut author_email = String::new();
-    let mut date = String::new();
-    let mut summary = String::new();
+    let mut cache: HashMap<String, CommitMeta> = HashMap::new();
 
     while let Some(line) = lines.next() {
         if line.is_empty() {
@@ -363,7 +419,6 @@ pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
         }
 
         let header_parts = line.split_whitespace().collect::<Vec<_>>();
-        // A blame header has sha (40 hex chars) + orig_line + final_line [+ count]
         if header_parts.len() < 3 || header_parts[0].len() != 40 {
             continue;
         }
@@ -376,45 +431,46 @@ pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
             .parse()
             .map_err(|_| GitError::Parse(format!("invalid blame final line: {line}")))?;
 
-        // First occurrence of a commit group: 4 fields, full metadata follows.
-        if header_parts.len() >= 4 {
-            author.clear();
-            author_email.clear();
-            date.clear();
-            summary.clear();
-
-            while let Some(next) = lines.peek() {
-                if next.starts_with('\t') {
-                    break;
-                }
-                let meta = lines.next().unwrap_or_default();
-                if let Some(value) = meta.strip_prefix("author ") {
-                    author = value.to_string();
-                } else if let Some(value) = meta.strip_prefix("author-mail ") {
-                    author_email = value.trim_matches(['<', '>']).to_string();
-                } else if let Some(value) = meta.strip_prefix("author-time ") {
-                    date = value.to_string();
-                } else if let Some(value) = meta.strip_prefix("summary ") {
-                    summary = value.to_string();
-                }
+        // Read any metadata lines that follow this header (until we hit the
+        // tab-prefixed content line). Stays empty for headers without metadata.
+        let mut found_meta = CommitMeta::default();
+        let mut got_any = false;
+        while let Some(next) = lines.peek() {
+            if next.starts_with('\t') {
+                break;
+            }
+            let meta = lines.next().unwrap_or_default();
+            got_any = true;
+            if let Some(value) = meta.strip_prefix("author ") {
+                found_meta.author = value.to_string();
+            } else if let Some(value) = meta.strip_prefix("author-mail ") {
+                found_meta.author_email = value.trim_matches(['<', '>']).to_string();
+            } else if let Some(value) = meta.strip_prefix("author-time ") {
+                found_meta.date = value.to_string();
+            } else if let Some(value) = meta.strip_prefix("summary ") {
+                found_meta.summary = value.to_string();
             }
         }
-        // Subsequent lines (3-field headers) reuse the metadata already in scope.
+        if got_any {
+            cache.insert(sha.clone(), found_meta);
+        }
 
-        // Each header is always followed by exactly one tab-prefixed content line.
+        // Each header is followed by exactly one tab-prefixed content line.
         let content_line = lines
             .next()
             .ok_or_else(|| GitError::Parse("missing blame content line".to_string()))?;
         let content = content_line.strip_prefix('\t').unwrap_or(content_line).to_string();
+
+        let meta = cache.get(&sha).cloned().unwrap_or_default();
         blame_lines.push(BlameLine {
             sha,
-            author: author.clone(),
-            author_email: author_email.clone(),
-            date: date.clone(),
+            author: meta.author,
+            author_email: meta.author_email,
+            date: meta.date,
             line_number: final_line,
             content,
             original_line,
-            summary: summary.clone(),
+            summary: meta.summary,
         });
     }
 

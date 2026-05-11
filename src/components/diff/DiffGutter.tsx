@@ -1,4 +1,4 @@
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 
 interface DiffGutterProps {
   staged: boolean;
@@ -24,26 +24,26 @@ export function DiffGutter({
   return (
     <div className="diff-gutter">
       {canStage ? (
-        <button className="panel-button" onClick={onStageToggle} type="button">
-          {staged ? <Minus size={14} /> : <Plus size={14} />}
+        <button className="vscode-button" onClick={onStageToggle} type="button">
+          <Codicon name={staged ? "remove" : "add"} size={14} />
           {staged ? "Unstage Hunk" : "Stage Hunk"}
         </button>
       ) : null}
       {canStageSelection ? (
-        <button className="panel-button" onClick={onSelectionToggle} type="button">
-          {staged ? <Minus size={14} /> : <Plus size={14} />}
+        <button className="vscode-button" onClick={onSelectionToggle} type="button">
+          <Codicon name={staged ? "remove" : "add"} size={14} />
           {staged ? "Unstage Selection" : "Stage Selection"}
         </button>
       ) : null}
       {canDiscard ? (
-        <button className="panel-button" onClick={onDiscard} type="button">
-          <RotateCcw size={14} />
+        <button className="vscode-button" onClick={onDiscard} type="button">
+          <Codicon name="discard" size={14} />
           Discard Hunk
         </button>
       ) : null}
       {canStageSelection && !staged ? (
-        <button className="panel-button" onClick={onSelectionDiscard} type="button">
-          <RotateCcw size={14} />
+        <button className="vscode-button" onClick={onSelectionDiscard} type="button">
+          <Codicon name="discard" size={14} />
           Discard Selection
         </button>
       ) : null}

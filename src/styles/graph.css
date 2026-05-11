@@ -7,18 +7,60 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  background: var(--vscode-editor-background);
+}
+
+/* Graph toolbar (UX-SPEC §3.3) — 35px, flat, filter + reload */
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 35px;
+  padding: 0 8px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  flex: 0 0 auto;
+}
+
+.graph-toolbar__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  height: 22px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+}
+
+.graph-toolbar__filter .codicon {
+  color: var(--vscode-descriptionForeground);
+}
+
+.graph-toolbar__input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
 }
 
 .graph-view__body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(280px, 0.5fr) minmax(360px, 1fr);
   min-height: 0;
   flex: 1;
 }
 
 .graph-list {
   overflow: auto;
-  padding: 18px;
+  padding: 0;
 }
 
 .graph-list__canvas {
@@ -29,82 +71,246 @@
 .graph-list__row-wrap {
   position: absolute;
   left: 0;
-  width: 100%;
-  padding-bottom: 10px;
+  right: 0;
 }
 
+/* Compact 32 px single-line commit row (matches VS Code's history graph) */
 .graph-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 18px;
-  border: 1px solid transparent;
-  background: rgba(11, 18, 26, 0.82);
+  height: 32px;
+  padding: 0 12px 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-foreground);
   text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.graph-row.is-active,
 .graph-row:hover {
-  border-color: rgba(102, 217, 239, 0.22);
-  background: rgba(102, 217, 239, 0.08);
+  background: var(--vscode-list-hoverBackground);
+}
+
+.graph-row.is-active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
 }
 
 .graph-row__lane {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .graph-row__svg {
-  overflow: visible;
+  display: block;
 }
 
 .graph-row__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
 .graph-row__title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.graph-row__message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.graph-row__head,
+.graph-row__ref,
+.graph-row__tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.graph-row__head {
+  background: var(--vscode-focusBorder);
+  color: var(--vscode-button-foreground);
+  font-weight: 600;
+}
+
+.graph-row__ref {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.graph-row__tag {
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-foreground);
 }
 
 .graph-row__meta {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 0.82rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.graph-row__sha {
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+}
+
+.graph-row.is-active .graph-row__meta {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .graph-detail {
-  overflow: auto;
-  padding: 18px;
-  border-left: 1px solid var(--border-subtle);
-  background: var(--bg-left-panel);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px;
+  border-left: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-sideBar-background);
+  font-size: 13px;
+  min-width: 0;
 }
 
 .graph-detail__header {
-  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.graph-detail__header > div:first-child {
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.graph-detail__header .file-row__path {
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
 }
 
 .graph-detail__meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 10px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
+  gap: 2px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
 }
 
 .graph-detail__body {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
   white-space: pre-wrap;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-file-row);
-  margin-top: 16px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--vscode-foreground);
+  max-width: 100%;
+}
+
+.graph-detail__header > div:first-child {
+  font-weight: 500;
+  color: var(--vscode-foreground);
+  word-break: break-word;
+}
+
+.graph-detail__files .scm-row {
+  height: auto;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.graph-detail__files .scm-row__name {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.graph-detail__files .scm-row__path {
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 11px;
+}
+
+.graph-detail__files {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-detail__files-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vscode-sideBarSectionHeader-foreground);
+  padding: 0 0 4px;
+}
+
+.graph-detail__files .scm-row {
+  cursor: pointer;
+}
+
+.graph-detail__diff {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vscode-editorGroup-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.graph-detail__diff-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-radius: 2px;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.graph-detail__diff-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-detail__diff .diff-hunk {
+  border: 1px solid var(--vscode-editorGroup-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.graph-detail__empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
 }

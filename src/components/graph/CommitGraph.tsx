@@ -1,26 +1,78 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { GitCommitHorizontal } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
+import { FileIcon } from "../shared/FileIcon";
 import { useRepo } from "../../hooks/useRepo";
 import { useGit } from "../../hooks/useGit";
+import { useSettingsStore } from "../../stores/settings";
 import { useGraphStore } from "../../stores/graph";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { gitCherryPick, gitCreateBranch, gitCreateTag, gitSwitchBranch } from "../../lib/git";
+import {
+  gitCherryPick,
+  gitCommitDiff,
+  gitCreateBranch,
+  gitCreateTag,
+  gitSwitchBranch
+} from "../../lib/git";
 import { GraphToolbar } from "./GraphToolbar";
-import type { GraphNode } from "../../types/git";
+import { DiffHunk } from "../diff/DiffHunk";
+import type { FileDiff, GraphNode } from "../../types/git";
 import { ContextMenu } from "../shared/ContextMenu";
 
-const lanePalette = ["#66d9ef", "#5edb95", "#f2c572", "#ff7b72", "#8aa7ff", "#ff9dd6"];
+// VS Code-style branch lane palette (matches gitGraph extension defaults).
+const lanePalette = [
+  "#0078d4", // blue
+  "#16825d", // green
+  "#bf8803", // amber
+  "#cd6e3e", // orange
+  "#a371f7", // purple
+  "#e96a83", // pink
+  "#3093d6", // teal
+  "#737373"  // grey
+];
 
 export function CommitGraph() {
   const { activeRepo } = useRepo();
   const runGit = useGit();
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const theme = useSettingsStore((state) => state.theme);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
+  const [commitFileDiffs, setCommitFileDiffs] = useState<FileDiff[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const { nodes, selectedCommitSha, selectedCommitDetail, isLoading, loadGraph, selectCommit } =
     useGraphStore();
+
+  // Fetch full diff payload for the currently selected commit so we can show
+  // file-level changes inline. Resets when the selection changes.
+  useEffect(() => {
+    if (!activeRepo || !selectedCommitSha) {
+      setCommitFileDiffs([]);
+      setSelectedFile(null);
+      return;
+    }
+    let cancelled = false;
+    void gitCommitDiff(activeRepo.path, selectedCommitSha)
+      .then((diffs) => {
+        if (cancelled) return;
+        setCommitFileDiffs(diffs);
+        setSelectedFile(diffs[0]?.file ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCommitFileDiffs([]);
+        setSelectedFile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo?.path, selectedCommitSha]);
+
+  const activeFileDiff = useMemo(
+    () => commitFileDiffs.find((diff) => diff.file === selectedFile) ?? null,
+    [commitFileDiffs, selectedFile]
+  );
 
   useEffect(() => {
     if (!activeRepo) {
@@ -45,12 +97,13 @@ export function CommitGraph() {
     () => visibleLaneCount(visibleNodes),
     [visibleNodes]
   );
+  const ROW_HEIGHT = 32;
+  const LANE_WIDTH = 16;
   const rowVirtualizer = useVirtualizer({
     count: visibleNodes.length,
-    estimateSize: () => 78,
+    estimateSize: () => ROW_HEIGHT,
     getScrollElement: () => scrollRef.current,
-    measureElement: (element) => element?.getBoundingClientRect().height ?? 78,
-    overscan: 10
+    overscan: 12
   });
 
   useEffect(() => {
@@ -153,17 +206,13 @@ export function CommitGraph() {
       <div className="graph-view__body">
         <section className="graph-list" ref={scrollRef}>
           {isLoading ? (
-            <div className="file-row">
-              <div className="file-row__left">
-                <span className="file-row__path">Loading history…</span>
-              </div>
+            <div className="scm-row scm-row--placeholder">
+              <span className="scm-row__path">Loading history…</span>
             </div>
           ) : null}
           {!isLoading && visibleNodes.length === 0 ? (
-            <div className="file-row">
-              <div className="file-row__left">
-                <span className="file-row__path">No matching commits</span>
-              </div>
+            <div className="scm-row scm-row--placeholder">
+              <span className="scm-row__path">No matching commits</span>
             </div>
           ) : null}
           <div
@@ -176,13 +225,24 @@ export function CommitGraph() {
                 return null;
               }
 
+              const isHead = node.refs.some(
+                (ref) => ref.startsWith("HEAD") || ref === "HEAD"
+              );
+              const branchRefs = node.refs.filter((ref) => !ref.startsWith("tag: "));
+              const tagRefs = node.refs.filter((ref) => ref.startsWith("tag: "));
+              const laneColor = lanePalette[node.lane % lanePalette.length];
+              const svgWidth = (maxLane + 1) * LANE_WIDTH;
+              const centerY = ROW_HEIGHT / 2;
+
               return (
                 <div
                   className="graph-list__row-wrap"
                   data-index={item.index}
                   key={node.sha}
-                  ref={rowVirtualizer.measureElement}
-                  style={{ transform: `translateY(${item.start}px)` }}
+                  style={{
+                    transform: `translateY(${item.start}px)`,
+                    height: `${ROW_HEIGHT}px`
+                  }}
                 >
                   <button
                     className={`graph-row ${node.sha === selectedCommitSha ? "is-active" : ""}`}
@@ -193,60 +253,85 @@ export function CommitGraph() {
                     }}
                     type="button"
                   >
-                    <div className="graph-row__lane">
+                    <div className="graph-row__lane" style={{ width: `${svgWidth}px` }}>
                       <svg
                         className="graph-row__svg"
-                        height="56"
-                        viewBox={`0 0 ${(maxLane + 1) * 18} 56`}
-                        width={(maxLane + 1) * 18}
+                        height={ROW_HEIGHT}
+                        viewBox={`0 0 ${svgWidth} ${ROW_HEIGHT}`}
+                        width={svgWidth}
                       >
                         {Array.from({ length: maxLane + 1 }).map((_, lane) => (
                           <line
                             key={`${node.sha}-lane-${lane}`}
-                            stroke="rgba(139, 161, 182, 0.18)"
-                            strokeWidth="1"
-                            x1={lane * 18 + 9}
-                            x2={lane * 18 + 9}
-                            y1="0"
-                            y2="56"
+                            stroke={
+                              lane === node.lane
+                                ? laneColor
+                                : "var(--vscode-editorGroup-border)"
+                            }
+                            strokeOpacity={lane === node.lane ? 0.6 : 0.45}
+                            strokeWidth="1.5"
+                            x1={lane * LANE_WIDTH + LANE_WIDTH / 2}
+                            x2={lane * LANE_WIDTH + LANE_WIDTH / 2}
+                            y1={0}
+                            y2={ROW_HEIGHT}
                           />
                         ))}
                         {node.connections.map((connection, index) => {
-                          const fromX = connection.fromLane * 18 + 9;
-                          const toX = connection.toLane * 18 + 9;
+                          const fromX = connection.fromLane * LANE_WIDTH + LANE_WIDTH / 2;
+                          const toX = connection.toLane * LANE_WIDTH + LANE_WIDTH / 2;
                           const stroke = lanePalette[connection.fromLane % lanePalette.length];
+                          // Connection from this commit (centerY) toward the parent
+                          // at the bottom of the row. Curves laterally if lanes differ.
+                          const d =
+                            fromX === toX
+                              ? `M ${fromX} ${centerY} L ${fromX} ${ROW_HEIGHT}`
+                              : `M ${fromX} ${centerY} C ${fromX} ${ROW_HEIGHT - 4}, ${toX} ${centerY + 4}, ${toX} ${ROW_HEIGHT}`;
                           return (
                             <path
-                              d={`M ${fromX} 10 L ${fromX} 28 ${toX === fromX ? "" : `L ${toX} 46`}`}
+                              d={d}
                               fill="none"
                               key={`${node.sha}-edge-${index}`}
                               stroke={stroke}
                               strokeLinecap="round"
-                              strokeWidth="2.5"
+                              strokeWidth="2"
                             />
                           );
                         })}
                         <circle
-                          cx={node.lane * 18 + 9}
-                          cy="10"
-                          fill={lanePalette[node.lane % lanePalette.length]}
-                          r="6"
+                          cx={node.lane * LANE_WIDTH + LANE_WIDTH / 2}
+                          cy={centerY}
+                          fill={laneColor}
+                          r="4.5"
+                          stroke="var(--vscode-editor-background)"
+                          strokeWidth="2"
                         />
                       </svg>
                     </div>
                     <div className="graph-row__content">
                       <div className="graph-row__title">
-                        <span>{node.message}</span>
-                        <span className="file-row__path">{node.shortSha}</span>
-                      </div>
-                      <div className="graph-row__meta">
-                        <span>{node.author}</span>
-                        <span>{node.date}</span>
-                        {node.refs.map((ref) => (
-                          <span className="badge" key={`${node.sha}-${ref}`}>
-                            {ref}
+                        <span className="graph-row__message">{node.message}</span>
+                        {isHead ? <span className="graph-row__head">HEAD</span> : null}
+                        {branchRefs.map((ref) => (
+                          <span
+                            className="graph-row__ref"
+                            key={`${node.sha}-ref-${ref}`}
+                          >
+                            {ref.replace(/^HEAD -> /, "")}
                           </span>
                         ))}
+                        {tagRefs.map((ref) => (
+                          <span
+                            className="graph-row__tag"
+                            key={`${node.sha}-tag-${ref}`}
+                          >
+                            {ref.replace(/^tag: /, "")}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="graph-row__meta">
+                        <span className="graph-row__sha">{node.shortSha}</span>
+                        <span>{node.author}</span>
+                        <span>{node.date}</span>
                       </div>
                     </div>
                   </button>
@@ -271,37 +356,69 @@ export function CommitGraph() {
               {selectedCommitDetail.body ? (
                 <pre className="graph-detail__body">{selectedCommitDetail.body}</pre>
               ) : null}
-              <div className="repo-card__section">
-                <div className="repo-card__section-header">
-                  <span>Changed Files</span>
+              <div className="graph-detail__files">
+                <div className="graph-detail__files-title">
+                  Changed Files ({selectedCommitDetail.files.length})
                 </div>
-                <div className="file-list">
-                  {selectedCommitDetail.files.map((file) => (
-                    <div className="file-row" key={`${selectedCommitDetail.sha}-${file.file}`}>
-                      <div className="file-row__left">
-                        <div className="badge">{file.status}</div>
-                        <div>
-                          <div className="file-row__name">{file.file}</div>
-                          <div className="file-row__path">
-                            +{file.additions} -{file.deletions}
-                          </div>
-                        </div>
-                      </div>
+                {selectedCommitDetail.files.map((file) => {
+                  const isActive = selectedFile === file.file;
+                  return (
+                    <div
+                      className={`scm-row${isActive ? " is-selected" : ""}`}
+                      key={`${selectedCommitDetail.sha}-${file.file}`}
+                      onClick={() => setSelectedFile(file.file)}
+                      role="treeitem"
+                    >
+                      <FileIcon path={file.file} size={16} className="scm-row__icon" />
+                      <span className="scm-row__name" title={file.file}>
+                        {file.file.split("/").pop()}
+                      </span>
+                      <span className="scm-row__path" title={file.file}>
+                        +{file.additions} -{file.deletions}
+                      </span>
+                      <span className="scm-row__status">{file.status}</span>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
+
+              {activeFileDiff ? (
+                <div className="graph-detail__diff">
+                  <div className="graph-detail__diff-title" title={activeFileDiff.file}>
+                    <FileIcon path={activeFileDiff.file} size={14} />
+                    <span>{activeFileDiff.file}</span>
+                  </div>
+                  {activeFileDiff.isBinary ? (
+                    <div className="diff-viewer__placeholder">
+                      Binary file — no textual diff.
+                    </div>
+                  ) : activeFileDiff.hunks.length === 0 ? (
+                    <div className="diff-viewer__placeholder">
+                      No textual changes to display.
+                    </div>
+                  ) : (
+                    activeFileDiff.hunks.map((hunk, index) => (
+                      <DiffHunk
+                        filePath={activeFileDiff.file}
+                        hunk={hunk}
+                        hunkIndex={index}
+                        isActive={false}
+                        key={`${activeFileDiff.file}-${hunk.header}-${index}`}
+                        mode="inline"
+                        onFocus={() => {}}
+                        onToggleLine={() => {}}
+                        selectedLineIndices={[]}
+                        theme={theme}
+                      />
+                    ))
+                  )}
+                </div>
+              ) : null}
             </>
           ) : (
-            <div className="empty-state">
-              <div className="empty-state__card">
-                <div className="empty-state__title">
-                  <GitCommitHorizontal size={18} /> Select a commit
-                </div>
-                <div className="empty-state__body">
-                  Click any graph row to load commit details and changed files.
-                </div>
-              </div>
+            <div className="graph-detail__empty">
+              <Codicon name="git-commit" size={16} />
+              <span>Select a commit</span>
             </div>
           )}
         </aside>

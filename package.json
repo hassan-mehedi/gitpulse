@@ -10,12 +10,13 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@iconify-json/vscode-icons": "^1.2.49",
+    "@iconify/react": "^6.0.2",
     "@tanstack/react-virtual": "^3.10.8",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.0.0",
     "@vscode/codicons": "^0.0.45",
-    "lucide-react": "^0.400.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "shiki": "^1.9.1",

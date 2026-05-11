@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitCommitHorizontal } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 import { gitBlame, gitShowCommit } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import { useDiffStore } from "../../stores/diff";
 import { useRepo } from "../../hooks/useRepo";
 import type { BlameLine, CommitDetail } from "../../types/git";
 import { BlameAnnotation } from "./BlameAnnotation";
+
+function isUncommittedSha(sha: string) {
+  return /^0+$/.test(sha);
+}
 
 export function BlameView() {
   const { activeRepo } = useRepo();
@@ -36,7 +40,7 @@ export function BlameView() {
       const firstLine = nextLines[0];
       setSelectedSha(firstLine?.sha ?? null);
       setSelectedLineNumber(firstLine?.lineNumber ?? null);
-      if (firstLine) {
+      if (firstLine && !isUncommittedSha(firstLine.sha)) {
         const detail = await gitShowCommit(activeRepo.path, firstLine.sha);
         if (cancelled) return;
         setSelectedCommit(detail);
@@ -61,13 +65,20 @@ export function BlameView() {
 
     setSelectedSha(line.sha);
     setSelectedLineNumber(line.lineNumber);
+    // The all-zero SHA is git's marker for uncommitted changes; `git show 0000…`
+    // returns "fatal: bad object". Render a placeholder instead.
+    if (isUncommittedSha(line.sha)) {
+      setSelectedCommit(null);
+      return;
+    }
     await runGit(async () => {
       const detail = await gitShowCommit(activeRepo.path, line.sha);
       setSelectedCommit(detail);
-    });
+    }).catch(() => {});
   }
 
   const groupedCount = useMemo(() => new Set(blameLines.map((line) => line.sha)).size, [blameLines]);
+  const selectedIsUncommitted = selectedSha ? isUncommittedSha(selectedSha) : false;
 
   if (!activeRepo || !activeChange) {
     return (
@@ -82,36 +93,40 @@ export function BlameView() {
     );
   }
 
+  const fileSegments = activeChange.path.split("/");
+  const fileName = fileSegments.pop() ?? activeChange.path;
+  const fileDir = fileSegments.join("/");
+
   return (
-    <div className="graph-view">
+    <div className="diff-viewer">
       <div className="diff-viewer__header">
-        <div>
-          <div>Blame</div>
-          <div className="diff-viewer__meta">
-            {activeChange.path} • {groupedCount} commits
-          </div>
+        <div className="diff-viewer__title">
+          <span className="diff-viewer__filename">{fileName}</span>
+          {fileDir ? <span className="diff-viewer__dir">{fileDir}</span> : null}
+          <span className="diff-viewer__meta">{groupedCount} commits</span>
         </div>
-        <label className="settings-row" style={{ minWidth: 220 }}>
-          <span>Ignore whitespace</span>
-          <input
-            checked={ignoreWhitespace}
-            onChange={(event) => setIgnoreWhitespace(event.target.checked)}
-            type="checkbox"
-          />
-        </label>
+        <div className="diff-viewer__toolbar">
+          <button
+            className={`view-action${ignoreWhitespace ? " is-active" : ""}`}
+            onClick={() => setIgnoreWhitespace((v) => !v)}
+            title="Ignore Whitespace"
+            type="button"
+          >
+            <Codicon name="filter" size={16} />
+          </button>
+        </div>
       </div>
 
-      <div className="graph-view__body">
-        <section className="graph-list">
+      <div className="blame-view">
+        <section className="blame-view__list">
           {isLoading ? (
-            <div className="file-row">
-              <div className="file-row__left">
-                <span className="file-row__path">Loading blame…</span>
-              </div>
+            <div className="scm-row scm-row--placeholder">
+              <span className="scm-row__path">Loading blame…</span>
             </div>
           ) : null}
-          {blameLines.map((line) => (
+          {blameLines.map((line, index) => (
             <BlameAnnotation
+              isGrouped={index > 0 && blameLines[index - 1]!.sha === line.sha}
               isSelected={line.sha === selectedSha && line.lineNumber === selectedLineNumber}
               key={`${line.sha}-${line.lineNumber}`}
               line={line}
@@ -120,32 +135,31 @@ export function BlameView() {
           ))}
         </section>
 
-        <aside className="graph-detail">
+        <aside className="blame-view__detail">
           {selectedCommit ? (
             <>
-              <div className="graph-detail__header">
-                <div>{selectedCommit.message}</div>
-                <div className="file-row__path">{selectedCommit.sha}</div>
+              <div className="blame-view__detail-header">
+                <div className="blame-view__detail-message">{selectedCommit.message}</div>
+                <div className="blame-view__detail-sha">{selectedCommit.sha}</div>
               </div>
-              <div className="graph-detail__meta">
+              <div className="blame-view__detail-meta">
                 <span>{selectedCommit.author}</span>
                 <span>{selectedCommit.authorEmail}</span>
                 <span>{selectedCommit.date}</span>
               </div>
               {selectedCommit.body ? (
-                <pre className="graph-detail__body">{selectedCommit.body}</pre>
+                <pre className="blame-view__detail-body">{selectedCommit.body}</pre>
               ) : null}
             </>
+          ) : selectedIsUncommitted ? (
+            <div className="blame-view__empty">
+              <Codicon name="circle-slash" size={16} />
+              <span>Uncommitted change</span>
+            </div>
           ) : (
-            <div className="empty-state">
-              <div className="empty-state__card">
-                <div className="empty-state__title">
-                  <GitCommitHorizontal size={18} /> Select a blamed line
-                </div>
-                <div className="empty-state__body">
-                  Click any blame annotation to inspect the associated commit.
-                </div>
-              </div>
+            <div className="blame-view__empty">
+              <Codicon name="git-commit" size={16} />
+              <span>Select a blamed line</span>
             </div>
           )}
         </aside>

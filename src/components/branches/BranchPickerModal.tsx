@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitBranchPlus } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 import { gitBranches, gitCreateBranch, gitSwitchBranch } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import { useRepo } from "../../hooks/useRepo";
@@ -96,7 +96,7 @@ export function BranchPickerModal({
               value={query}
             />
             <button className="panel-button" onClick={() => setCreateMode((value) => !value)} type="button">
-              <GitBranchPlus size={14} />
+              <Codicon name="plus" size={14} />
               {createMode ? "Hide Create" : "Create Branch"}
             </button>
           </div>

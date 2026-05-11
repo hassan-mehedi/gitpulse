@@ -663,6 +663,12 @@ button:disabled {
   overflow: hidden;
 }
 
+/* For full-bleed views (graph / blame) we drop the SCM sidebar so the editor
+   surface uses the entire window width. */
+.main-layout--no-sidebar {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
 /* Activity bar (UX-SPEC §1.2): 48px wide, codicon-only, 2px active left border */
 .activity-bar {
   display: flex;
@@ -957,6 +963,48 @@ button:disabled {
   font-size: 13px;
 }
 
+/* Branches view filter input */
+.branches-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.branches-filter .codicon {
+  color: var(--vscode-descriptionForeground);
+  font-size: 14px;
+}
+
+.branches-filter__input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 13px;
+}
+
+.branches-filter__input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.scm-row--placeholder {
+  color: var(--vscode-descriptionForeground);
+  cursor: default;
+}
+
+.scm-row--placeholder:hover {
+  background: transparent;
+}
+
 /* SCM file row (UX-SPEC §3.1): 22px, hover-only actions, status letter on right */
 .scm-row {
   display: flex;
@@ -1192,45 +1240,152 @@ button:disabled {
   animation: progress-indeterminate 1.1s ease-in-out infinite;
 }
 
+/* Settings view (UX-SPEC §3.5) */
+.settings-panel {
+  padding: 8px 0;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-section__title {
+  padding: 8px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vscode-sideBarSectionHeader-foreground);
+}
+
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 8px 16px;
+}
+
+.settings-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-row__name {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.settings-row__hint {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.settings-row__control {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.settings-control {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-settings-dropdownBorder, var(--vscode-input-border));
+  border-radius: 2px;
+  background: var(--vscode-settings-dropdownBackground, var(--vscode-input-background));
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 13px;
+}
+
+.settings-control--narrow {
+  width: 100px;
+}
+
+.settings-control:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.settings-readonly {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
 }
 
 .settings-row input[type="checkbox"] {
   width: 18px;
   height: 18px;
+  accent-color: var(--vscode-focusBorder);
+}
+
+/* Toasts (UX-SPEC §5.4) */
+.toast-viewport {
+  position: fixed;
+  right: 16px;
+  bottom: 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 280px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: var(--vscode-notification-background);
+  color: var(--vscode-notification-foreground);
+  border: 1px solid var(--vscode-notification-border);
+  box-shadow: var(--vscode-shadow-menu);
+  font-size: 13px;
+  pointer-events: auto;
 }
 
 .toast--info {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+  border-left: 3px solid var(--vscode-focusBorder);
 }
 
 .toast--error {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
+  border-left: 3px solid var(--vscode-errorForeground);
 }
 
+.toast__title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.toast__message {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+/* Modal (UX-SPEC §5.1): flat, 4px radius, modal shadow */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 90;
   display: grid;
-  place-items: center;
-  padding: 32px;
-  background: rgba(3, 8, 13, 0.48);
-  backdrop-filter: blur(8px);
+  place-items: start center;
+  padding: 80px 32px 32px;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .modal-card {
-  width: min(760px, 100%);
+  width: min(720px, 100%);
   max-height: min(82vh, 920px);
-  overflow: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 28px;
-  background: linear-gradient(180deg, var(--bg-card-start), var(--bg-card-end));
-  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-quickInput-background);
+  color: var(--vscode-quickInput-foreground);
+  box-shadow: var(--vscode-shadow-modal);
 }
 
 .modal-card__header {
@@ -1238,48 +1393,68 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-widget-border);
 }
 
 .modal-card__title {
-  font-size: 1.05rem;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .modal-card__body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
 }
 
+/* Context menu (UX-SPEC §5.3) */
 .context-menu {
   position: fixed;
   z-index: 95;
   display: flex;
   min-width: 196px;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-lg);
+  padding: 4px 0;
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 4px;
+  background: var(--vscode-menu-background);
+  color: var(--vscode-menu-foreground);
+  box-shadow: var(--vscode-shadow-menu);
 }
 
 .context-menu__item {
-  padding: 10px 12px;
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
   text-align: left;
+  cursor: pointer;
 }
 
 .context-menu__item:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
+.context-menu__item:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .context-menu__item.is-danger {
-  color: var(--danger);
+  color: var(--vscode-errorForeground);
+}
+
+.context-menu__item.is-danger:hover:not(:disabled) {
+  color: var(--vscode-menu-selectionForeground);
 }
 
 .shortcut-list {
@@ -1313,28 +1488,43 @@ button:disabled {
   height: 100%;
 }
 
+/* Empty states (UX-SPEC §4.5): flat centered text, no card framing.
+   Matches VS Code's editor "no folder open" / "no file selected" surface. */
 .empty-state {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 24px;
+  text-align: center;
+  background: var(--vscode-editor-background);
 }
 
 .empty-state__card {
-  max-width: 480px;
-  padding: 28px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 28px;
-  background: var(--bg-empty-card);
-  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 420px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .empty-state__title {
-  font-size: 1.35rem;
-  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--vscode-descriptionForeground);
+  margin: 0;
 }
 
 .empty-state__body {
-  color: var(--text-muted);
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.75;
+  line-height: 1.5;
 }
 
 /* Status bar (UX-SPEC §1.3): 22px tall, flat, left/right clusters */

@@ -1,3 +1,5 @@
+import { Codicon } from "../shared/Codicon";
+
 interface GraphToolbarProps {
   query: string;
   onQueryChange: (value: string) => void;
@@ -6,22 +8,24 @@ interface GraphToolbarProps {
 
 export function GraphToolbar({ query, onQueryChange, onReload }: GraphToolbarProps) {
   return (
-    <div className="diff-viewer__header">
-      <div>
-        <div>Commit Graph</div>
-        <div className="diff-viewer__meta">Topo-ordered history across all refs</div>
-      </div>
-      <div className="toolbar__actions">
+    <div className="graph-toolbar">
+      <div className="graph-toolbar__filter">
+        <Codicon name="search" size={14} />
         <input
-          className="text-input"
+          className="graph-toolbar__input"
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search commits"
+          placeholder="Search commits, authors, refs"
           value={query}
         />
-        <button className="panel-button" onClick={onReload} type="button">
-          Reload
-        </button>
       </div>
+      <button
+        className="view-action"
+        onClick={onReload}
+        title="Reload"
+        type="button"
+      >
+        <Codicon name="refresh" size={16} />
+      </button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Codicon } from "../shared/Codicon";
 
 interface DiffNavigationProps {
   activeIndex: number;
@@ -15,14 +15,14 @@ export function DiffNavigation({
 }: DiffNavigationProps) {
   return (
     <div className="diff-navigation">
-      <button className="icon-button" disabled={total === 0} onClick={onPrevious} type="button">
-        <ChevronUp size={14} />
+      <button className="view-action" disabled={total === 0} onClick={onPrevious} title="Previous Hunk" type="button">
+        <Codicon name="chevron-up" size={14} />
       </button>
-      <div className="badge">
+      <span className="diff-viewer__hunk-counter">
         Hunk {Math.min(activeIndex + 1, Math.max(total, 1))}/{total}
-      </div>
-      <button className="icon-button" disabled={total === 0} onClick={onNext} type="button">
-        <ChevronDown size={14} />
+      </span>
+      <button className="view-action" disabled={total === 0} onClick={onNext} title="Next Hunk" type="button">
+        <Codicon name="chevron-down" size={14} />
       </button>
     </div>
   );

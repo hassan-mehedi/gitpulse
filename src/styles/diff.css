@@ -2,56 +2,469 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex: 1;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
 }
 
+/* Tab strip (UX-SPEC §4.1) — 35px, flat, codicon tabs above the diff content */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  height: 35px;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  scrollbar-width: thin;
+}
+
+.tab-strip::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  min-width: 60px;
+  max-width: 240px;
+  height: 35px;
+  background: var(--vscode-tab-inactiveBackground);
+  color: var(--vscode-tab-inactiveForeground);
+  border-right: 1px solid var(--vscode-tab-border);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.tab:hover {
+  background: var(--vscode-tab-hoverBackground);
+}
+
+.tab.is-active {
+  background: var(--vscode-tab-activeBackground);
+  color: var(--vscode-tab-activeForeground);
+}
+
+.tab.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--vscode-tab-activeBorderTop);
+}
+
+.tab.is-preview .tab__name {
+  font-style: italic;
+}
+
+.tab__icon {
+  flex: 0 0 auto;
+}
+
+.tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+  flex: 0 0 auto;
+}
+
+.tab:hover .tab__close,
+.tab.is-active .tab__close,
+.tab:focus-within .tab__close {
+  opacity: 0.8;
+}
+
+.tab__close:hover {
+  opacity: 1;
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* Editor area tab/title strip (UX-SPEC §4.1 / §4.2) — 35px, flat, codicon toolbar */
 .diff-viewer__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 20px 22px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 12px;
+  height: 35px;
+  padding: 0 8px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  flex: 0 0 auto;
+}
+
+.diff-viewer__title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.diff-viewer__filename {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-viewer__dir {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-viewer__meta {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diff-viewer__selection-count {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 11px;
+}
+
+.diff-viewer__toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.diff-viewer__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 120ms ease;
+}
+
+.diff-viewer__tab:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.diff-viewer__tab.is-active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.diff-viewer__divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--vscode-editorGroupHeader-tabsBorder);
+}
+
+.diff-viewer__hunk-counter {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.view-action.is-active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
 }
 
 .diff-viewer__body {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 0;
   flex: 1;
+}
+
+.diff-viewer__body--no-outline {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .diff-viewer__sidebar {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px;
-  border-right: 1px solid var(--border-subtle);
-  background: var(--bg-left-panel);
+  gap: 12px;
+  padding: 8px;
+  border-right: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-sideBar-background);
+  overflow-y: auto;
 }
 
 .diff-viewer__content {
   overflow: auto;
-  padding: 18px;
+  padding: 0;
+  background: var(--vscode-editor-background);
 }
 
 .diff-viewer__placeholder {
   display: grid;
   place-items: center;
   padding: 48px 18px;
-  color: var(--text-muted);
-  font-size: 0.92rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
 }
 
-.diff-viewer__meta {
-  color: var(--text-muted);
-  font-size: 0.82rem;
+/* Welcome-state keybinding hints (UX-SPEC §4.5). Mirrors VS Code's
+   "no editor open" surface: a faint right-aligned column of label + keys. */
+.welcome-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: end;
+  justify-content: center;
+  height: 100%;
+  padding: 32px max(48px, 10%);
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-editor-background);
+  font-size: 13px;
+  pointer-events: none;
+  user-select: none;
 }
 
-.diff-viewer__mode-switch {
+.welcome-hints__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.welcome-hints__plus {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.welcome-hints kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--vscode-keybindingLabel-background);
+  color: var(--vscode-keybindingLabel-foreground);
+  border: 1px solid var(--vscode-keybindingLabel-border);
+  border-bottom-color: var(--vscode-keybindingLabel-bottomBorder);
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Blame view (UX-SPEC §4.4) */
+.blame-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.blame-view__list {
+  overflow-y: auto;
+  background: var(--vscode-editor-background);
+}
+
+.blame-view__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-left: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-sideBar-background);
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.blame-view__detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.blame-view__detail-message {
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.blame-view__detail-sha {
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.blame-view__detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.blame-view__detail-body {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: var(--vscode-foreground);
+}
+
+.blame-view__empty {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+}
+
+.blame-row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 0;
+  width: 100%;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  position: relative;
+}
+
+.blame-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.blame-row.is-active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.blame-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-right: 1px solid var(--vscode-editorGroup-border);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Grouped rows: meta is hidden but a thin tinted bar shows the visual group */
+.blame-row.is-grouped .blame-row__meta {
+  border-right-color: var(--vscode-editorGroup-border);
+}
+
+.blame-row__author {
+  font-weight: 500;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 0 auto;
+  max-width: 90px;
+}
+
+.blame-row__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.blame-row__date {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.blame-row__code {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 0 8px;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 13px;
+  line-height: 22px;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.blame-row__line-number {
+  display: inline-block;
+  min-width: 32px;
+  text-align: right;
+  color: var(--vscode-editorLineNumber-foreground);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.blame-row__content {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .diff-navigation,
@@ -218,58 +631,161 @@
   background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
 }
 
+/* Merge editor (UX-SPEC §4.3) */
 .merge-editor {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  overflow-y: auto;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
 }
 
-.merge-editor__body {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 18px;
-  padding: 18px;
-  overflow: auto;
+.merge-editor__loading {
+  padding: 32px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
 }
 
-.merge-editor__references,
-.merge-editor__region-grid {
+.merge-editor__panes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.merge-editor__region-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-bottom: 1px solid var(--vscode-editorGroup-border);
 }
 
 .merge-pane {
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  max-height: 380px;
+  background: var(--vscode-editor-background);
+  border-right: 1px solid var(--vscode-editorGroup-border);
   overflow: hidden;
-  background: var(--bg-left-panel);
 }
 
-.merge-pane--resolved {
-  min-height: 220px;
+.merge-pane:last-child {
+  border-right: 0;
 }
 
 .merge-pane__title {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  font-size: 0.82rem;
+  padding: 6px 12px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.merge-pane--ours .merge-pane__title {
+  border-bottom-color: var(--vscode-diffEditor-removedLineBackground);
+}
+
+.merge-pane--theirs .merge-pane__title {
+  border-bottom-color: var(--vscode-diffEditor-insertedLineBackground);
+}
+
+.merge-pane--result .merge-pane__title {
+  border-bottom-color: var(--vscode-focusBorder);
 }
 
 .merge-pane__code {
   margin: 0;
-  padding: 14px 16px 22px;
+  padding: 8px 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: "IBM Plex Mono", "Fira Code", monospace;
-  font-size: 0.84rem;
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-y: auto;
+  flex: 1;
+  color: var(--vscode-editor-foreground);
+}
+
+.merge-editor__base {
+  margin: 0 16px 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--vscode-editorGroup-border);
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background);
+}
+
+.merge-editor__base summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+}
+
+.merge-editor__regions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.merge-region {
+  border: 1px solid var(--vscode-editorGroup-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vscode-sideBar-background);
+}
+
+.merge-region__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+}
+
+.merge-region__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.merge-region__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.merge-region__panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.merge-region__panes .merge-pane__code {
+  max-height: 240px;
+  padding: 8px 12px;
+}
+
+.merge-pane__code--ours {
+  background: var(--vscode-diffEditor-removedLineBackground);
+  border-right: 1px solid var(--vscode-editorGroup-border);
+}
+
+.merge-pane__code--theirs {
+  background: var(--vscode-diffEditor-insertedLineBackground);
+}
+
+.merge-editor__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  position: sticky;
+  bottom: 0;
 }

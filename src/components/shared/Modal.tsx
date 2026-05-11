@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { Codicon } from "./Codicon";
 
 interface ModalProps {
   isOpen: boolean;
@@ -41,8 +41,14 @@ export function Modal({ isOpen, title, onClose, children }: ModalProps) {
       >
         <div className="modal-card__header">
           <div className="modal-card__title">{title}</div>
-          <button className="icon-button" onClick={onClose} type="button">
-            <X size={16} />
+          <button
+            className="icon-button"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close"
+            type="button"
+          >
+            <Codicon name="close" size={14} />
           </button>
         </div>
         <div className="modal-card__body">{children}</div>

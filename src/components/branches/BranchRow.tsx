@@ -1,4 +1,5 @@
-import { GitBranch, Pencil, Trash2 } from "lucide-react";
+import { memo } from "react";
+import { Codicon } from "../shared/Codicon";
 import type { BranchInfo } from "../../types/git";
 
 interface BranchRowProps {
@@ -8,38 +9,60 @@ interface BranchRowProps {
   onDelete: (branch: BranchInfo) => void;
 }
 
-export function BranchRow({ branch, onSwitch, onRename, onDelete }: BranchRowProps) {
+function BranchRowImpl({ branch, onSwitch, onRename, onDelete }: BranchRowProps) {
+  const shortName = branch.isRemote
+    ? branch.name.split("/").slice(1).join("/") || branch.name
+    : branch.name;
+
   return (
-    <div className={`file-row ${branch.isCurrent ? "is-active" : ""}`}>
-      <div className="file-row__left">
-        <div className="badge">
-          <GitBranch size={13} />
-          {branch.isCurrent ? "HEAD" : branch.isRemote ? "Remote" : "Local"}
-        </div>
-        <div>
-          <div className="file-row__name">{branch.name}</div>
-          <div className="file-row__path">
-            {branch.upstream ?? "No upstream"} • {branch.lastCommitDate || "Unknown date"}
-          </div>
-        </div>
-      </div>
-      <div className="file-row__actions">
+    <div
+      className={`scm-row${branch.isCurrent ? " is-selected" : ""}`}
+      onClick={() => !branch.isCurrent && onSwitch(branch)}
+      role="treeitem"
+    >
+      <Codicon
+        name={branch.isCurrent ? "check" : "git-branch"}
+        size={14}
+        className="scm-row__icon"
+      />
+      <span className="scm-row__name" title={branch.name}>
+        {shortName}
+      </span>
+      {branch.upstream ? (
+        <span className="scm-row__path" title={branch.upstream}>
+          {branch.upstream}
+        </span>
+      ) : null}
+      <span className="scm-row__actions">
+        {!branch.isRemote && !branch.isCurrent ? (
+          <button
+            className="scm-row__action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRename(branch);
+            }}
+            title="Rename Branch"
+            type="button"
+          >
+            <Codicon name="edit" size={14} />
+          </button>
+        ) : null}
         {!branch.isCurrent ? (
-          <button className="panel-button" onClick={() => onSwitch(branch)} type="button">
-            Checkout
+          <button
+            className="scm-row__action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(branch);
+            }}
+            title="Delete Branch"
+            type="button"
+          >
+            <Codicon name="trash" size={14} />
           </button>
         ) : null}
-        {!branch.isRemote ? (
-          <button className="icon-button" onClick={() => onRename(branch)} type="button">
-            <Pencil size={14} />
-          </button>
-        ) : null}
-        {!branch.isCurrent ? (
-          <button className="icon-button" onClick={() => onDelete(branch)} type="button">
-            <Trash2 size={14} />
-          </button>
-        ) : null}
-      </div>
+      </span>
     </div>
   );
 }
+
+export const BranchRow = memo(BranchRowImpl);
