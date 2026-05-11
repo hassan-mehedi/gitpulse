@@ -7,9 +7,16 @@ interface BranchRowProps {
   onSwitch: (branch: BranchInfo) => void;
   onRename: (branch: BranchInfo) => void;
   onDelete: (branch: BranchInfo) => void;
+  onContextMenu: (branch: BranchInfo, position: { x: number; y: number }) => void;
 }
 
-function BranchRowImpl({ branch, onSwitch, onRename, onDelete }: BranchRowProps) {
+function BranchRowImpl({
+  branch,
+  onSwitch,
+  onRename,
+  onDelete,
+  onContextMenu
+}: BranchRowProps) {
   const shortName = branch.isRemote
     ? branch.name.split("/").slice(1).join("/") || branch.name
     : branch.name;
@@ -18,6 +25,10 @@ function BranchRowImpl({ branch, onSwitch, onRename, onDelete }: BranchRowProps)
     <div
       className={`scm-row${branch.isCurrent ? " is-selected" : ""}`}
       onClick={() => !branch.isCurrent && onSwitch(branch)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu(branch, { x: event.clientX, y: event.clientY });
+      }}
       role="treeitem"
     >
       <Codicon
@@ -60,6 +71,19 @@ function BranchRowImpl({ branch, onSwitch, onRename, onDelete }: BranchRowProps)
             <Codicon name="trash" size={14} />
           </button>
         ) : null}
+        <button
+          className="scm-row__action"
+          onClick={(event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            onContextMenu(branch, { x: rect.right, y: rect.bottom });
+          }}
+          title="More Actions…"
+          type="button"
+        >
+          <Codicon name="ellipsis" size={14} />
+        </button>
       </span>
     </div>
   );

@@ -7,9 +7,11 @@ import { ToastViewport } from "../shared/ToastViewport";
 import type { ActivityView } from "../../types/git";
 import { BranchManager } from "../branches/BranchManager";
 import { SettingsPanel } from "../settings/SettingsPanel";
-import { CommitGraph } from "../graph/CommitGraph";
+import { CommitGraphList } from "../graph/CommitGraphList";
+import { CommitGraphDetail } from "../graph/CommitGraphDetail";
 import { BlameView } from "../blame/BlameView";
 import { TabStrip } from "../diff/TabStrip";
+import { Sash } from "./Sash";
 import { BranchPickerModal } from "../branches/BranchPickerModal";
 import { ShortcutReferenceModal } from "../shared/ShortcutReferenceModal";
 import { useGit } from "../../hooks/useGit";
@@ -37,6 +39,21 @@ export function AppShell() {
   const [branchPickerCreateMode, setBranchPickerCreateMode] = useState(false);
   const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(false);
   const [awaitingShortcutChord, setAwaitingShortcutChord] = useState<number | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 300;
+    const stored = window.localStorage?.getItem("gitpulse:sidebarWidth");
+    const parsed = stored ? Number(stored) : 300;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("gitpulse:sidebarWidth", String(sidebarWidth));
+    } catch {
+      // localStorage may be unavailable (private mode); silent.
+    }
+  }, [sidebarWidth]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
@@ -184,24 +201,36 @@ export function AppShell() {
     <div className="app-shell">
       <div
         className={`main-layout${
-          activeView === "graph" || activeView === "blame" ? " main-layout--no-sidebar" : ""
+          activeView === "blame" ? " main-layout--no-sidebar" : ""
         }`}
+        style={
+          activeView === "blame"
+            ? undefined
+            : ({
+                "--sidebar-width": `${sidebarWidth}px`
+              } as React.CSSProperties)
+        }
       >
         <ActivityBar activeView={activeView} onNavigate={setActiveView} />
-        {activeView === "graph" || activeView === "blame" ? null : (
-          <section className="left-panel">
-            {activeView === "branches" ? (
-              <BranchManager />
-            ) : activeView === "settings" ? (
-              <SettingsPanel />
-            ) : (
-              <SourceControlPanel activeView={activeView} />
-            )}
-          </section>
+        {activeView === "blame" ? null : (
+          <>
+            <section className="left-panel">
+              {activeView === "branches" ? (
+                <BranchManager />
+              ) : activeView === "settings" ? (
+                <SettingsPanel />
+              ) : activeView === "graph" ? (
+                <CommitGraphList />
+              ) : (
+                <SourceControlPanel activeView={activeView} />
+              )}
+            </section>
+            <Sash value={sidebarWidth} onChange={setSidebarWidth} min={170} max={720} />
+          </>
         )}
         <section className="content-panel">
           {activeView === "graph" ? (
-            <CommitGraph />
+            <CommitGraphDetail />
           ) : activeView === "blame" ? (
             <BlameView />
           ) : (

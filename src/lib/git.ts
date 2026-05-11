@@ -134,6 +134,14 @@ export async function gitMerge(repoPath: string, branch: string): Promise<Operat
   return gitInvoke("git_merge", { repoPath, branch });
 }
 
+export async function gitDeleteRemoteBranch(
+  repoPath: string,
+  remote: string,
+  branch: string
+): Promise<void> {
+  return gitInvoke("git_delete_remote_branch", { repoPath, remote, branch });
+}
+
 export async function gitRebase(repoPath: string, onto: string): Promise<OperationResult> {
   return gitInvoke("git_rebase", { repoPath, onto });
 }

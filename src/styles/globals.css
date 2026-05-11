@@ -657,7 +657,7 @@ button:disabled {
 
 .main-layout {
   display: grid;
-  grid-template-columns: 48px 300px minmax(0, 1fr);
+  grid-template-columns: 48px var(--sidebar-width, 300px) 4px minmax(0, 1fr);
   grid-template-rows: 1fr;
   min-height: 0;
   overflow: hidden;
@@ -667,6 +667,43 @@ button:disabled {
    surface uses the entire window width. */
 .main-layout--no-sidebar {
   grid-template-columns: 48px minmax(0, 1fr);
+}
+
+/* Sash — 4 px drag handle between the SCM sidebar and the editor area */
+.sash {
+  position: relative;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+
+.sash::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.sash:hover::before,
+body.is-resizing-sidebar .sash::before {
+  background: var(--vscode-sash-hoverBorder);
+}
+
+body.is-resizing-sidebar {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.is-resizing-sidebar * {
+  cursor: col-resize !important;
 }
 
 /* Activity bar (UX-SPEC §1.2): 48px wide, codicon-only, 2px active left border */
@@ -961,6 +998,103 @@ button:disabled {
   padding: 0 8px 0 22px;
   color: var(--vscode-sideBar-foreground);
   font-size: 13px;
+}
+
+/* Nested file tree (used in SCM tree mode + commit graph changed files) */
+.file-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-tree__directory {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-sideBar-foreground);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-tree__directory:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.file-tree__chevron {
+  flex: 0 0 14px;
+  color: var(--vscode-icon-foreground);
+}
+
+.file-tree__folder-icon {
+  flex: 0 0 14px;
+  color: var(--vscode-icon-foreground);
+}
+
+.file-tree__directory-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree__leaf {
+  display: block;
+}
+
+/* Inside a tree leaf, the SCM row shouldn't add its own 22 px chevron-column
+   padding — indentation is handled by the wrapper. */
+.file-tree__leaf .scm-row {
+  padding-left: 0;
+}
+
+/* Current-branch summary card at the top of the Branches view */
+.current-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 14px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+}
+
+.current-branch__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.current-branch__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-foreground);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.current-branch__upstream {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.current-branch__upstream--missing {
+  color: var(--vscode-gitDecoration-untrackedResourceForeground);
+}
+
+.current-branch__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 /* Branches view filter input */
@@ -1408,6 +1542,49 @@ button:disabled {
   gap: 12px;
   padding: 12px;
   overflow-y: auto;
+}
+
+/* Input modal — VS Code-style text prompt */
+.input-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input-modal__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.input-modal__input {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 13px;
+}
+
+.input-modal__input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.input-modal__error {
+  font-size: 12px;
+  color: var(--vscode-errorForeground);
+}
+
+.input-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 /* Context menu (UX-SPEC §5.3) */

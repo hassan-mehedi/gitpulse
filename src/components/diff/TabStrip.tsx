@@ -1,7 +1,9 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { FileIcon } from "../shared/FileIcon";
 import { useDiffStore } from "../../stores/diff";
+
+const DRAG_TYPE = "application/x-gitpulse-tab";
 
 export const TabStrip = memo(function TabStrip() {
   const tabs = useDiffStore((state) => state.tabs);
@@ -9,6 +11,11 @@ export const TabStrip = memo(function TabStrip() {
   const selectTab = useDiffStore((state) => state.selectTab);
   const closeTab = useDiffStore((state) => state.closeTab);
   const pinActiveTab = useDiffStore((state) => state.pinActiveTab);
+  const reorderTab = useDiffStore((state) => state.reorderTab);
+
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [hoverSide, setHoverSide] = useState<"before" | "after">("before");
 
   if (tabs.length === 0) {
     return null;
@@ -19,18 +26,60 @@ export const TabStrip = memo(function TabStrip() {
       {tabs.map((tab) => {
         const name = tab.change.path.split("/").pop() ?? tab.change.path;
         const isActive = tab.key === activeTabKey;
+        const isHover = hoverKey === tab.key && dragKey !== null && dragKey !== tab.key;
         return (
           <div
             key={tab.key}
-            className={`tab${isActive ? " is-active" : ""}${tab.preview ? " is-preview" : ""}`}
+            className={[
+              "tab",
+              isActive ? "is-active" : "",
+              tab.preview ? "is-preview" : "",
+              dragKey === tab.key ? "is-dragging" : "",
+              isHover && hoverSide === "before" ? "is-drop-before" : "",
+              isHover && hoverSide === "after" ? "is-drop-after" : ""
+            ]
+              .filter(Boolean)
+              .join(" ")}
             role="tab"
             aria-selected={isActive}
+            draggable
+            onDragStart={(event) => {
+              setDragKey(tab.key);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData(DRAG_TYPE, tab.key);
+            }}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              const rect = event.currentTarget.getBoundingClientRect();
+              const midpoint = rect.left + rect.width / 2;
+              setHoverKey(tab.key);
+              setHoverSide(event.clientX < midpoint ? "before" : "after");
+            }}
+            onDragLeave={() => {
+              if (hoverKey === tab.key) {
+                setHoverKey(null);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const fromKey = event.dataTransfer.getData(DRAG_TYPE);
+              if (fromKey && fromKey !== tab.key) {
+                reorderTab(fromKey, tab.key, hoverSide);
+              }
+              setDragKey(null);
+              setHoverKey(null);
+            }}
+            onDragEnd={() => {
+              setDragKey(null);
+              setHoverKey(null);
+            }}
             onClick={() => void selectTab(tab.key)}
             onDoubleClick={() => {
               pinActiveTab();
             }}
             onAuxClick={(event) => {
-              // Middle-click closes tab (matches VS Code).
               if (event.button === 1) {
                 event.preventDefault();
                 void closeTab(tab.key);

@@ -35,7 +35,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const runGit = useGit();
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
   const [surface, setSurface] = useState<"diff" | "history">("diff");
-  const [showOutline, setShowOutline] = useState(true);
+  const [showOutline, setShowOutline] = useState(false);
   const diffState = activeDiff;
   const changeState = activeChange;
   const repoState = activeRepo;

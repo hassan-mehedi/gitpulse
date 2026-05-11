@@ -44,6 +44,7 @@ pub fn run() {
             commands::branch::git_rebase,
             commands::branch::git_abort_merge,
             commands::branch::git_abort_rebase,
+            commands::branch::git_delete_remote_branch,
             commands::cherry_pick::git_cherry_pick,
             commands::cherry_pick::git_cherry_pick_abort,
             commands::conflict::git_list_conflicts,

@@ -341,14 +341,30 @@ pub fn parse_branches(output: &str) -> Vec<BranchInfo> {
         .lines()
         .filter_map(|line| {
             let parts: Vec<&str> = line.split('\x1f').collect();
-            if parts.len() != 5 {
+            if parts.len() < 5 {
                 return None;
             }
 
+            let full_ref = parts[0];
+            // Skip the implicit `refs/remotes/<remote>/HEAD` pointer — git emits
+            // it from `branch -a` but it's a symbolic alias, not a real branch.
+            if full_ref.ends_with("/HEAD") {
+                return None;
+            }
+
+            let (is_remote, name) = if let Some(short) = full_ref.strip_prefix("refs/heads/") {
+                (false, short.to_string())
+            } else if let Some(short) = full_ref.strip_prefix("refs/remotes/") {
+                (true, short.to_string())
+            } else {
+                // Unknown ref namespace (e.g. tags arriving here by accident) — skip.
+                return None;
+            };
+
             Some(BranchInfo {
-                name: parts[0].to_string(),
-                is_current: parts[1] == "*",
-                is_remote: parts[0].starts_with("remotes/"),
+                name,
+                is_current: parts[1].trim() == "*",
+                is_remote,
                 upstream: if parts[2].is_empty() {
                     None
                 } else {

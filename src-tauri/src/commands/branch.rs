@@ -65,3 +65,12 @@ pub async fn git_abort_merge(repo_path: String) -> Result<(), GitError> {
 pub async fn git_abort_rebase(repo_path: String) -> Result<(), GitError> {
     branch::abort_rebase(Path::new(&repo_path)).await
 }
+
+#[tauri::command]
+pub async fn git_delete_remote_branch(
+    repo_path: String,
+    remote: String,
+    branch: String,
+) -> Result<(), GitError> {
+    branch::delete_remote_branch(Path::new(&repo_path), &remote, &branch).await
+}

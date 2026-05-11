@@ -35,6 +35,7 @@ interface DiffStore {
   pinActiveTab: () => void;
   selectTab: (key: string) => Promise<void>;
   closeTab: (key: string) => Promise<void>;
+  reorderTab: (fromKey: string, toKey: string, position: "before" | "after") => void;
   refreshActiveDiff: () => Promise<void>;
   clear: () => void;
 }
@@ -132,6 +133,26 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
       activeDiff: diff,
       staged: tab.staged,
       activeHunkIndex: 0
+    });
+  },
+
+  reorderTab(fromKey, toKey, position) {
+    set((state) => {
+      if (fromKey === toKey) return state;
+      const tabs = [...state.tabs];
+      const fromIndex = tabs.findIndex((tab) => tab.key === fromKey);
+      if (fromIndex < 0) return state;
+      const [moving] = tabs.splice(fromIndex, 1);
+      if (!moving) return state;
+      // Pinned the moving tab — drag-reorder also pins (matches VS Code).
+      const pinned = { ...moving, preview: false };
+      const targetIndex = tabs.findIndex((tab) => tab.key === toKey);
+      if (targetIndex < 0) {
+        tabs.push(pinned);
+      } else {
+        tabs.splice(position === "before" ? targetIndex : targetIndex + 1, 0, pinned);
+      }
+      return { tabs };
     });
   },
 

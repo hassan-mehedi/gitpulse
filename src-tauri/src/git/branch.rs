@@ -6,7 +6,10 @@ use crate::git::runner::GitRunner;
 use crate::git::types::{BranchInfo, OperationResult};
 
 pub async fn branches(repo_path: &Path) -> Result<Vec<BranchInfo>, GitError> {
-    let format = "%(refname:short)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)";
+    // %(refname) gives the FULL ref (`refs/heads/<name>` or `refs/remotes/<name>`)
+    // so we can reliably classify local vs. remote branches. `%(refname:short)`
+    // strips both prefixes, losing the local/remote distinction.
+    let format = "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)";
     let output = GitRunner::run(repo_path, &["branch", "-a", "--format", format]).await?;
     Ok(parse_branches(&output))
 }
@@ -67,5 +70,14 @@ pub async fn abort_merge(repo_path: &Path) -> Result<(), GitError> {
 
 pub async fn abort_rebase(repo_path: &Path) -> Result<(), GitError> {
     GitRunner::run(repo_path, &["rebase", "--abort"]).await?;
+    Ok(())
+}
+
+pub async fn delete_remote_branch(
+    repo_path: &Path,
+    remote: &str,
+    branch: &str,
+) -> Result<(), GitError> {
+    GitRunner::run(repo_path, &["push", remote, "--delete", branch]).await?;
     Ok(())
 }

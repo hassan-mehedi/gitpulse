@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Codicon, type CodiconName } from "../shared/Codicon";
+import { FileTree, type FileTreeEntry } from "../shared/FileTree";
 import type { FileChange, Repository } from "../../types/git";
 import { FileChangeRow } from "./FileChangeRow";
 
@@ -84,7 +85,19 @@ export function FileChangeList({
       </header>
 
       {!collapsed ? (
-        shouldVirtualize ? (
+        viewMode === "tree" ? (
+          <TreeBody
+            repo={repo}
+            changes={changes}
+            staged={staged}
+            selectedKey={selectedKey}
+            rowKey={rowKey}
+            onSelect={onSelect}
+            onStageToggle={onStageToggle}
+            onDiscard={onDiscard}
+            onContextMenu={onContextMenu}
+          />
+        ) : shouldVirtualize ? (
           <VirtualizedRows
             repo={repo}
             changes={changes}
@@ -98,31 +111,19 @@ export function FileChangeList({
           />
         ) : (
           <div className="scm-section__body">
-            {viewMode === "tree"
-              ? renderTree(
-                  changes,
-                  rowKey,
-                  selectedKey,
-                  repo,
-                  staged,
-                  onSelect,
-                  onStageToggle,
-                  onDiscard,
-                  onContextMenu
-                )
-              : changes.map((change) => (
-                  <FileChangeRow
-                    key={rowKey(change)}
-                    repo={repo}
-                    change={change}
-                    staged={staged}
-                    isSelected={selectedKey === rowKey(change)}
-                    onSelect={onSelect}
-                    onStageToggle={onStageToggle}
-                    onDiscard={onDiscard}
-                    onContextMenu={onContextMenu}
-                  />
-                ))}
+            {changes.map((change) => (
+              <FileChangeRow
+                key={rowKey(change)}
+                repo={repo}
+                change={change}
+                staged={staged}
+                isSelected={selectedKey === rowKey(change)}
+                onSelect={onSelect}
+                onStageToggle={onStageToggle}
+                onDiscard={onDiscard}
+                onContextMenu={onContextMenu}
+              />
+            ))}
           </div>
         )
       ) : null}
@@ -204,47 +205,53 @@ function VirtualizedRows({
   );
 }
 
-function renderTree(
-  changes: FileChange[],
-  rowKey: (change: FileChange) => string,
-  selectedKey: string | null,
-  repo: Repository,
-  staged: boolean,
-  onSelect: FileChangeListProps["onSelect"],
-  onStageToggle: FileChangeListProps["onStageToggle"],
-  onDiscard: FileChangeListProps["onDiscard"],
-  onContextMenu: FileChangeListProps["onContextMenu"]
-) {
-  const grouped = changes.reduce<Record<string, FileChange[]>>((accumulator, change) => {
-    const directory = change.path.includes("/")
-      ? change.path.split("/").slice(0, -1).join("/")
-      : ".";
-    accumulator[directory] ??= [];
-    accumulator[directory].push(change);
-    return accumulator;
-  }, {});
+interface TreeBodyProps {
+  repo: Repository;
+  changes: FileChange[];
+  staged: boolean;
+  selectedKey: string | null;
+  rowKey: (change: FileChange) => string;
+  onSelect: FileChangeListProps["onSelect"];
+  onStageToggle: FileChangeListProps["onStageToggle"];
+  onDiscard: FileChangeListProps["onDiscard"];
+  onContextMenu: FileChangeListProps["onContextMenu"];
+}
 
-  return Object.entries(grouped).map(([directory, directoryChanges]) => (
-    <div key={`${staged}-${directory}`}>
-      <div className="scm-tree__directory">
-        <Codicon name="chevron-down" size={12} />
-        <Codicon name="folder" size={14} />
-        <span>{directory}</span>
-      </div>
-      {directoryChanges.map((change) => (
-        <FileChangeRow
-          key={rowKey(change)}
-          repo={repo}
-          change={change}
-          staged={staged}
-          isSelected={selectedKey === rowKey(change)}
-          indent={1}
-          onSelect={onSelect}
-          onStageToggle={onStageToggle}
-          onDiscard={onDiscard}
-          onContextMenu={onContextMenu}
-        />
-      ))}
+function TreeBody({
+  repo,
+  changes,
+  staged,
+  selectedKey,
+  rowKey,
+  onSelect,
+  onStageToggle,
+  onDiscard,
+  onContextMenu
+}: TreeBodyProps) {
+  const entries: FileTreeEntry<FileChange>[] = useMemo(
+    () => changes.map((change) => ({ path: change.path, data: change })),
+    [changes]
+  );
+
+  return (
+    <div className="scm-section__body">
+      <FileTree
+        entries={entries}
+        storageKey={`scm:${repo.id}:${staged ? "s" : "u"}`}
+        renderFile={(entry) => (
+          <FileChangeRow
+            change={entry.data}
+            repo={repo}
+            staged={staged}
+            isSelected={selectedKey === rowKey(entry.data)}
+            onSelect={onSelect}
+            onStageToggle={onStageToggle}
+            onDiscard={onDiscard}
+            onContextMenu={onContextMenu}
+          />
+        )}
+        isSelected={(entry) => selectedKey === rowKey(entry.data)}
+      />
     </div>
-  ));
+  );
 }
