@@ -8,9 +8,10 @@ const DRAG_TYPE = "application/x-gitpulse-tab";
 
 interface TabStripProps {
   scope?: Extract<ActivityView, "source-control" | "graph">;
+  repoPath?: string;
 }
 
-export const TabStrip = memo(function TabStrip({ scope }: TabStripProps) {
+export const TabStrip = memo(function TabStrip({ scope, repoPath }: TabStripProps) {
   const tabs = useDiffStore((state) => state.tabs);
   const activeTabKey = useDiffStore((state) => state.activeTabKey);
   const selectTab = useDiffStore((state) => state.selectTab);
@@ -21,7 +22,15 @@ export const TabStrip = memo(function TabStrip({ scope }: TabStripProps) {
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [hoverSide, setHoverSide] = useState<"before" | "after">("before");
-  const visibleTabs = scope ? tabs.filter((tab) => tab.scope === scope) : tabs;
+  const visibleTabs = tabs.filter((tab) => {
+    if (scope && tab.scope !== scope) {
+      return false;
+    }
+    if (repoPath && tab.repo.path !== repoPath) {
+      return false;
+    }
+    return true;
+  });
 
   if (visibleTabs.length === 0) {
     return null;
@@ -99,9 +108,7 @@ export const TabStrip = memo(function TabStrip({ scope }: TabStripProps) {
           >
             <FileIcon path={tab.filePath} size={16} className="tab__icon" />
             <span className="tab__name">{name}</span>
-            {tab.kind === "commit" ? (
-              <span className="tab__badge">{tab.commit.shortSha}</span>
-            ) : tab.staged ? (
+            {tab.staged ? (
               <span className="tab__badge">staged</span>
             ) : null}
             <button

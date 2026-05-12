@@ -53,8 +53,21 @@ export function CommitInput({ repo }: CommitInputProps) {
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const runGit = useGit();
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const maxHeight = 120;
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${Math.max(nextHeight, 30)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [message]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -133,7 +146,9 @@ export function CommitInput({ repo }: CommitInputProps) {
     <div className="commit-input">
       <textarea
         className="commit-input__textarea"
+        ref={textareaRef}
         onChange={(event) => setMessage(event.target.value)}
+        onFocus={() => setActiveRepo(repo.id)}
         onKeyDown={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();

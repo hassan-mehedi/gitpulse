@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { gitBranches, gitCreateBranch, gitSwitchBranch } from "../../lib/git";
+import { findTrackedLocalBranch, formatBranchMeta, inferLocalBranchName } from "../../lib/branches";
 import { useGit } from "../../hooks/useGit";
 import { useRepo } from "../../hooks/useRepo";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -26,23 +27,37 @@ export function BranchPickerModal({
   const [createMode, setCreateMode] = useState(initialCreateMode);
   const [newBranchName, setNewBranchName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
     setCreateMode(initialCreateMode);
+    setQuery("");
+    setNewBranchName("");
+    setLoadError(null);
   }, [initialCreateMode, isOpen]);
 
   useEffect(() => {
     if (!isOpen || !activeRepo) {
       setBranches([]);
+      setLoadError(null);
       return;
     }
 
     setIsLoading(true);
+    setLoadError(null);
     void runGit(() => gitBranches(activeRepo.path))
       .then((nextBranches) => setBranches(nextBranches))
+      .catch((error) => {
+        const detail =
+          (error as { message?: string; stderr?: string })?.message ??
+          (error as { stderr?: string })?.stderr ??
+          String(error);
+        setLoadError(detail);
+        setBranches([]);
+      })
       .finally(() => setIsLoading(false));
   }, [activeRepo?.path, isOpen, runGit]);
 
@@ -58,8 +73,13 @@ export function BranchPickerModal({
 
     await runGit(async () => {
       if (branch.isRemote) {
-        const localName = inferLocalBranchName(branch.name);
-        await gitCreateBranch(activeRepo.path, localName, branch.name);
+        const trackedLocal = findTrackedLocalBranch(branches, branch);
+        if (trackedLocal && !trackedLocal.isRemote) {
+          await gitSwitchBranch(activeRepo.path, trackedLocal.name);
+        } else {
+          const localName = inferLocalBranchName(branch.name);
+          await gitCreateBranch(activeRepo.path, localName, branch.name);
+        }
       } else {
         await gitSwitchBranch(activeRepo.path, branch.name);
       }
@@ -124,10 +144,22 @@ export function BranchPickerModal({
               </div>
             ) : null}
 
-            {!isLoading && filteredBranches.length === 0 ? (
+            {!isLoading && loadError ? (
               <div className="file-row">
                 <div className="file-row__left">
-                  <span className="file-row__path">No matching branches</span>
+                  <span className="file-row__path">Failed to load branches: {loadError}</span>
+                </div>
+              </div>
+            ) : null}
+
+            {!isLoading && !loadError && filteredBranches.length === 0 ? (
+              <div className="file-row">
+                <div className="file-row__left">
+                  <span className="file-row__path">
+                    {query.trim()
+                      ? "No matching branches"
+                      : "No branches available yet. Create the first branch or commit to this repository."}
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -143,15 +175,13 @@ export function BranchPickerModal({
                   <div className="badge">{branch.isRemote ? "Remote" : branch.isCurrent ? "HEAD" : "Local"}</div>
                   <div>
                     <div className="file-row__name">{branch.name}</div>
-                    <div className="file-row__path">
-                      {branch.upstream ?? "No upstream"} • {branch.lastCommitDate || "Unknown date"}
-                    </div>
+                    <div className="file-row__path">{formatBranchMeta(branch)}</div>
                   </div>
                 </div>
                 <div className="file-row__actions">
                   {!branch.isCurrent ? (
                     <span className="panel-button">
-                      {branch.isRemote ? "Track" : "Checkout"}
+                      {branch.isRemote && findTrackedLocalBranch(branches, branch) ? "Checkout" : branch.isRemote ? "Track" : "Checkout"}
                     </span>
                   ) : null}
                 </div>
@@ -162,8 +192,4 @@ export function BranchPickerModal({
       )}
     </Modal>
   );
-}
-
-function inferLocalBranchName(branchName: string) {
-  return branchName.replace(/^remotes\/[^/]+\//, "");
 }

@@ -23,8 +23,7 @@ pub async fn commit_diff(repo_path: &Path, sha: &str) -> Result<Vec<FileDiff>, G
 
 pub async fn diff_refs(repo_path: &Path, from: &str, to: &str) -> Result<Vec<FileDiff>, GitError> {
     let range = format!("{from}..{to}");
-    let output =
-        GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
+    let output = GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
     parse_multi_file_diff(&output)
 }
 
@@ -36,8 +35,7 @@ pub async fn diff_merge_base(
     let base = GitRunner::run(repo_path, &["merge-base", ref1, ref2]).await?;
     let base = base.trim().to_string();
     let range = format!("{base}..{ref2}");
-    let output =
-        GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
+    let output = GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
     parse_multi_file_diff(&output)
 }
 

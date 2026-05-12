@@ -4,14 +4,16 @@ import { FileIcon } from "../shared/FileIcon";
 import { FileTree } from "../shared/FileTree";
 import { DiffViewer } from "../diff/DiffViewer";
 import { TabStrip } from "../diff/TabStrip";
-import { useRepo } from "../../hooks/useRepo";
 import { useGraphStore } from "../../stores/graph";
 import { useDiffStore } from "../../stores/diff";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { gitCommitDiff } from "../../lib/git";
-import type { CommitDetail, CommitFileStat, FileDiff } from "../../types/git";
+import type { CommitDetail, CommitFileStat, FileDiff, Repository } from "../../types/git";
 
 export function CommitGraphDetail() {
-  const { activeRepo } = useRepo();
+  const repositories = useWorkspaceStore((state) => state.repositories);
+  const graphRepoId = useGraphStore((state) => state.repoId);
+  const activeRepo = repositories.find((repo) => repo.id === graphRepoId) ?? null;
   const selectedCommitDetail = useGraphStore((state) => state.selectedCommitDetail);
   const selectedCommitSha = useGraphStore((state) => state.selectedCommitSha);
   const activeFilePath = useDiffStore((state) => state.activeFilePath);
@@ -155,7 +157,7 @@ export function CommitGraphDetail() {
         <section className="commit-detail__diff-pane">
           {commitFiles.length > 0 ? (
             <>
-              <TabStrip scope="graph" />
+              <TabStrip scope="graph" repoPath={activeRepo?.path} />
               <DiffViewer activeView="graph" />
             </>
           ) : (
@@ -172,7 +174,7 @@ export function CommitGraphDetail() {
 function handleSelectFile(
   filePath: string,
   diffs: FileDiff[],
-  activeRepo: ReturnType<typeof useRepo>["activeRepo"],
+  activeRepo: Repository | null,
   commit: CommitDetail,
   setSelectedFile: (file: string) => void,
   setActiveCommitDiff: ReturnType<typeof useDiffStore.getState>["setActiveCommitDiff"]

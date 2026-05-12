@@ -16,7 +16,11 @@ pub async fn git_discard_all(repo_path: String) -> Result<(), GitError> {
 }
 
 #[tauri::command]
-pub async fn git_discard_lines(repo_path: String, file: String, patch: String) -> Result<(), GitError> {
+pub async fn git_discard_lines(
+    repo_path: String,
+    file: String,
+    patch: String,
+) -> Result<(), GitError> {
     let _ = file;
     GitRunner::run_with_input(
         Path::new(&repo_path),

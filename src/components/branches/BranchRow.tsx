@@ -4,10 +4,11 @@ import type { BranchInfo } from "../../types/git";
 
 interface BranchRowProps {
   branch: BranchInfo;
+  onSelect: (branch: BranchInfo) => void;
   onContextMenu: (branch: BranchInfo, position: { x: number; y: number }) => void;
 }
 
-function BranchRowImpl({ branch, onContextMenu }: BranchRowProps) {
+function BranchRowImpl({ branch, onSelect, onContextMenu }: BranchRowProps) {
   const shortName = branch.isRemote
     ? branch.name.split("/").slice(1).join("/") || branch.name
     : branch.name;
@@ -19,7 +20,7 @@ function BranchRowImpl({ branch, onContextMenu }: BranchRowProps) {
   return (
     <div
       className={`scm-row branch-row${branch.isCurrent ? " is-current" : ""}`}
-      onClick={(event) => openMenu({ x: event.clientX, y: event.clientY })}
+      onClick={() => onSelect(branch)}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu({ x: event.clientX, y: event.clientY });

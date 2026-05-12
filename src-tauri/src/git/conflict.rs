@@ -48,7 +48,9 @@ async fn show_stage(repo_path: &Path, stage: usize, file: &str) -> Result<String
     let stage_ref = format!(":{stage}:{file}");
     match GitRunner::run(repo_path, &["show", &stage_ref]).await {
         Ok(content) => Ok(content),
-        Err(GitError::CommandFailed { code: Some(128), .. }) => Ok(String::new()),
+        Err(GitError::CommandFailed {
+            code: Some(128), ..
+        }) => Ok(String::new()),
         Err(error) => Err(error),
     }
 }

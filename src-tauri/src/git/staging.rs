@@ -29,8 +29,12 @@ pub async fn stage_dir(repo_path: &Path, dir: &str) -> Result<(), GitError> {
 }
 
 pub async fn stage_lines(repo_path: &Path, patch: &str) -> Result<(), GitError> {
-    GitRunner::run_with_input(repo_path, &["apply", "--cached", "--unidiff-zero", "-"], patch)
-        .await?;
+    GitRunner::run_with_input(
+        repo_path,
+        &["apply", "--cached", "--unidiff-zero", "-"],
+        patch,
+    )
+    .await?;
     Ok(())
 }
 

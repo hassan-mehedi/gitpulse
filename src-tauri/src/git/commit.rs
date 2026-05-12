@@ -41,7 +41,12 @@ pub async fn log(
     file: Option<&str>,
 ) -> Result<Vec<CommitInfo>, GitError> {
     let limit = n.to_string();
-    let mut args = vec!["log", "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI", "-n", &limit];
+    let mut args = vec![
+        "log",
+        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI",
+        "-n",
+        &limit,
+    ];
     let skip_value;
     if let Some(skip) = skip {
         skip_value = format!("--skip={skip}");

@@ -18,24 +18,32 @@ import {
   gitSwitchBranch,
   gitSync
 } from "../../lib/git";
+import { findTrackedLocalBranch, inferLocalBranchName } from "../../lib/branches";
 import { useGit } from "../../hooks/useGit";
-import { useRepo } from "../../hooks/useRepo";
 import { useWorkspaceStore } from "../../stores/workspace";
-import type { BranchInfo } from "../../types/git";
+import type { BranchInfo, Repository } from "../../types/git";
 import { BranchRow } from "./BranchRow";
 
+interface RepoBranchState {
+  branches: BranchInfo[];
+  isLoading: boolean;
+  loadError: string | null;
+}
+
 interface BranchMenuTarget {
+  repo: Repository;
+  branches: BranchInfo[];
   branch: BranchInfo;
   position: { x: number; y: number };
 }
 
 interface InputModalState {
+  repo: Repository;
   kind: "create" | "create-from" | "rename" | "publish";
   title: string;
   label: string;
   initialValue?: string;
   placeholder?: string;
-  /** Extra context the submit handler may need (e.g. the source branch). */
   context?: BranchInfo;
 }
 
@@ -47,94 +55,118 @@ interface ConfirmModalState {
   onConfirm: () => void;
 }
 
+const EMPTY_REPO_STATE: RepoBranchState = {
+  branches: [],
+  isLoading: false,
+  loadError: null
+};
+
 export function BranchManager() {
-  const { activeRepo } = useRepo();
+  const repositories = useWorkspaceStore((state) => state.repositories);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const runGit = useGit();
-  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [branchStateByRepo, setBranchStateByRepo] = useState<Record<string, RepoBranchState>>({});
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [menu, setMenu] = useState<BranchMenuTarget | null>(null);
   const [inputModal, setInputModal] = useState<InputModalState | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
-  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>(
-    {}
+  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
+
+  const setRepoState = useCallback((repoPath: string, next: Partial<RepoBranchState>) => {
+    setBranchStateByRepo((state) => ({
+      ...state,
+      [repoPath]: {
+        ...(state[repoPath] ?? EMPTY_REPO_STATE),
+        ...next
+      }
+    }));
+  }, []);
+
+  const reloadRepo = useCallback(
+    async (repo: Repository) => {
+      setRepoState(repo.path, { isLoading: true, loadError: null });
+      try {
+        const branches = await gitBranches(repo.path);
+        setRepoState(repo.path, {
+          branches,
+          isLoading: false,
+          loadError: null
+        });
+      } catch (error) {
+        const detail =
+          (error as { message?: string; stderr?: string })?.message ??
+          (error as { stderr?: string })?.stderr ??
+          String(error);
+        setRepoState(repo.path, {
+          branches: [],
+          isLoading: false,
+          loadError: detail
+        });
+      }
+    },
+    [setRepoState]
   );
-
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const reload = useCallback(async () => {
-    if (!activeRepo) {
-      setBranches([]);
-      setLoadError(null);
-      return;
-    }
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const nextBranches = await gitBranches(activeRepo.path);
-      setBranches(nextBranches);
-    } catch (error) {
-      const detail =
-        (error as { message?: string; stderr?: string })?.message ??
-        (error as { stderr?: string })?.stderr ??
-        String(error);
-      setLoadError(detail);
-      console.error("[branches] gitBranches failed", error);
-      setBranches([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeRepo]);
 
   useEffect(() => {
-    void reload().catch(() => {});
-  }, [reload]);
-
-  const filteredBranches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return branches;
-    return branches.filter((branch) => branch.name.toLowerCase().includes(needle));
-  }, [branches, query]);
-
-  const localBranches = useMemo(
-    () => filteredBranches.filter((branch) => !branch.isRemote),
-    [filteredBranches]
-  );
-
-  const remoteGroups = useMemo(() => {
-    const groups = new Map<string, BranchInfo[]>();
-    for (const branch of filteredBranches) {
-      if (!branch.isRemote) continue;
-      const remote = branch.name.split("/")[0] ?? "remote";
-      const list = groups.get(remote) ?? [];
-      list.push(branch);
-      groups.set(remote, list);
+    if (repositories.length === 0) {
+      setBranchStateByRepo({});
+      return;
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredBranches]);
+
+    const repoPaths = new Set(repositories.map((repo) => repo.path));
+    setBranchStateByRepo((state) => {
+      const next = { ...state };
+      let changed = false;
+      for (const path of Object.keys(next)) {
+        if (!repoPaths.has(path)) {
+          delete next[path];
+          changed = true;
+        }
+      }
+      return changed ? next : state;
+    });
+
+    for (const repo of repositories) {
+      if (!branchStateByRepo[repo.path]) {
+        void reloadRepo(repo);
+      }
+    }
+  }, [branchStateByRepo, reloadRepo, repositories]);
 
   function toggle(section: string) {
     setSectionsCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
   }
 
-  function withRefresh(operation: () => Promise<unknown>) {
+  function withRepoRefresh(repo: Repository, operation: () => Promise<unknown>) {
+    setActiveRepo(repo.id);
     runGit(async () => {
       await operation();
-      if (activeRepo) {
-        await refreshRepo(activeRepo.path);
-      }
-      await reload();
+      await refreshRepo(repo.path);
+      await reloadRepo(repo);
     }).catch(() => {});
   }
 
-  function switchBranch(branch: BranchInfo) {
-    if (!activeRepo || branch.isCurrent) return;
-    withRefresh(() => gitSwitchBranch(activeRepo.path, branch.name));
+  function switchBranch(repo: Repository, branches: BranchInfo[], branch: BranchInfo) {
+    if (branch.isCurrent) {
+      return;
+    }
+
+    if (branch.isRemote) {
+      const trackedLocal = findTrackedLocalBranch(branches, branch);
+      if (trackedLocal && !trackedLocal.isRemote) {
+        withRepoRefresh(repo, () => gitSwitchBranch(repo.path, trackedLocal.name));
+      } else {
+        const localName = inferLocalBranchName(branch.name);
+        withRepoRefresh(repo, () => gitCreateBranch(repo.path, localName, branch.name));
+      }
+      return;
+    }
+
+    withRepoRefresh(repo, () => gitSwitchBranch(repo.path, branch.name));
   }
 
-  function deleteBranch(branch: BranchInfo) {
-    if (!activeRepo) return;
+  function deleteBranch(repo: Repository, branch: BranchInfo) {
     setConfirmModal({
       title: "Delete Branch",
       body: (
@@ -145,14 +177,11 @@ export function BranchManager() {
       confirmLabel: "Delete",
       danger: true,
       onConfirm: () =>
-        withRefresh(() =>
-          gitDeleteBranch(activeRepo.path, branch.name, !branch.isCurrent)
-        )
+        withRepoRefresh(repo, () => gitDeleteBranch(repo.path, branch.name, !branch.isCurrent))
     });
   }
 
-  function mergeFrom(branch: BranchInfo) {
-    if (!activeRepo) return;
+  function mergeFrom(repo: Repository, branch: BranchInfo) {
     setConfirmModal({
       title: "Merge Branch",
       body: (
@@ -161,12 +190,11 @@ export function BranchManager() {
         </>
       ),
       confirmLabel: "Merge",
-      onConfirm: () => withRefresh(() => gitMerge(activeRepo.path, branch.name))
+      onConfirm: () => withRepoRefresh(repo, () => gitMerge(repo.path, branch.name))
     });
   }
 
-  function rebaseOnto(branch: BranchInfo) {
-    if (!activeRepo) return;
+  function rebaseOnto(repo: Repository, branch: BranchInfo) {
     setConfirmModal({
       title: "Rebase Branch",
       body: (
@@ -175,30 +203,28 @@ export function BranchManager() {
         </>
       ),
       confirmLabel: "Rebase",
-      onConfirm: () => withRefresh(() => gitRebase(activeRepo.path, branch.name))
+      onConfirm: () => withRepoRefresh(repo, () => gitRebase(repo.path, branch.name))
     });
   }
 
-  function deleteRemoteBranch(branch: BranchInfo) {
-    if (!activeRepo || !branch.isRemote) return;
+  function deleteRemoteBranch(repo: Repository, branch: BranchInfo) {
     const [remote, ...rest] = branch.name.split("/");
-    if (!remote || rest.length === 0) return;
+    if (!remote || rest.length === 0) {
+      return;
+    }
+
     const remoteBranchName = rest.join("/");
     setConfirmModal({
       title: "Delete Remote Branch",
       body: (
         <>
-          Delete remote branch <strong>{remoteBranchName}</strong> on{" "}
-          <strong>{remote}</strong>? This pushes a deletion to the remote and is
-          irreversible.
+          Delete remote branch <strong>{remoteBranchName}</strong> on <strong>{remote}</strong>?
         </>
       ),
       confirmLabel: "Delete from remote",
       danger: true,
       onConfirm: () =>
-        withRefresh(() =>
-          gitDeleteRemoteBranch(activeRepo.path, remote, remoteBranchName)
-        )
+        withRepoRefresh(repo, () => gitDeleteRemoteBranch(repo.path, remote, remoteBranchName))
     });
   }
 
@@ -207,29 +233,29 @@ export function BranchManager() {
   }
 
   function handleInputSubmit(value: string) {
-    if (!inputModal || !activeRepo) return;
-    const repoPath = activeRepo.path;
+    if (!inputModal) {
+      return;
+    }
+
+    const repo = inputModal.repo;
+    const repoPath = repo.path;
     switch (inputModal.kind) {
       case "create":
-        withRefresh(() => gitCreateBranch(repoPath, value));
+        withRepoRefresh(repo, () => gitCreateBranch(repoPath, value));
         break;
       case "create-from":
         if (inputModal.context) {
-          withRefresh(() =>
-            gitCreateBranch(repoPath, value, inputModal.context!.name)
-          );
+          withRepoRefresh(repo, () => gitCreateBranch(repoPath, value, inputModal.context!.name));
         }
         break;
       case "rename":
         if (inputModal.context) {
-          withRefresh(() =>
-            gitRenameBranch(repoPath, inputModal.context!.name, value)
-          );
+          withRepoRefresh(repo, () => gitRenameBranch(repoPath, inputModal.context!.name, value));
         }
         break;
       case "publish":
         if (inputModal.context) {
-          withRefresh(() =>
+          withRepoRefresh(repo, () =>
             gitPushSetUpstream(repoPath, value, inputModal.context!.name)
           );
         }
@@ -237,66 +263,45 @@ export function BranchManager() {
     }
   }
 
-  function pullCurrent() {
-    if (!activeRepo) return;
-    withRefresh(() => gitPull(activeRepo.path));
+  function fetchForBranch(repo: Repository, branch: BranchInfo) {
+    const remote = branch.isRemote ? branch.name.split("/")[0] : branch.upstream?.split("/")[0];
+    withRepoRefresh(repo, () => gitFetch(repo.path, remote));
   }
 
-  function pushCurrent() {
-    if (!activeRepo) return;
-    withRefresh(() => gitPush(activeRepo.path));
-  }
-
-  function syncCurrent() {
-    if (!activeRepo) return;
-    withRefresh(() => gitSync(activeRepo.path));
-  }
-
-  function fetchForBranch(branch: BranchInfo) {
-    if (!activeRepo) return;
-    const remote = branch.isRemote
-      ? branch.name.split("/")[0]
-      : branch.upstream?.split("/")[0];
-    withRefresh(() => gitFetch(activeRepo.path, remote));
-  }
-
-  function buildMenuItems(branch: BranchInfo): ContextMenuItem[] {
+  function buildMenuItems(
+    repo: Repository,
+    branches: BranchInfo[],
+    branch: BranchInfo
+  ): ContextMenuItem[] {
     const items: ContextMenuItem[] = [];
 
     if (!branch.isCurrent) {
-      items.push({ label: "Checkout", onSelect: () => switchBranch(branch) });
+      const checkoutLabel =
+        branch.isRemote && !findTrackedLocalBranch(branches, branch)
+          ? "Track and Checkout"
+          : "Checkout";
+      items.push({ label: checkoutLabel, onSelect: () => switchBranch(repo, branches, branch) });
     }
 
-    // Remote-sync actions for the CURRENT branch (Pull / Push / Sync / Fetch
-    // operate on `HEAD`, so they only meaningfully sit under the current row).
     if (branch.isCurrent) {
-      items.push({
-        label: "Pull",
-        onSelect: pullCurrent
-      });
-      items.push({
-        label: "Push",
-        onSelect: pushCurrent
-      });
-      items.push({
-        label: "Sync (Pull, then Push)",
-        onSelect: syncCurrent
-      });
+      items.push({ label: "Pull", onSelect: () => withRepoRefresh(repo, () => gitPull(repo.path)) });
+      items.push({ label: "Push", onSelect: () => withRepoRefresh(repo, () => gitPush(repo.path)) });
+      items.push({ label: "Sync (Pull, then Push)", onSelect: () => withRepoRefresh(repo, () => gitSync(repo.path)) });
     }
 
     items.push({
       label: "Fetch",
-      onSelect: () => fetchForBranch(branch)
+      onSelect: () => fetchForBranch(repo, branch)
     });
 
     if (!branch.isCurrent) {
       items.push({
         label: `Merge "${branch.name}" into current`,
-        onSelect: () => mergeFrom(branch)
+        onSelect: () => mergeFrom(repo, branch)
       });
       items.push({
         label: `Rebase current onto "${branch.name}"`,
-        onSelect: () => rebaseOnto(branch)
+        onSelect: () => rebaseOnto(repo, branch)
       });
     }
 
@@ -304,6 +309,7 @@ export function BranchManager() {
       label: "Create Branch From…",
       onSelect: () =>
         openInput("create-from", {
+          repo,
           title: "Create Branch",
           label: `Create new branch from "${branch.name}":`,
           placeholder: "branch-name",
@@ -316,6 +322,7 @@ export function BranchManager() {
         label: "Rename Branch…",
         onSelect: () =>
           openInput("rename", {
+            repo,
             title: "Rename Branch",
             label: `Rename "${branch.name}" to:`,
             initialValue: branch.name,
@@ -329,6 +336,7 @@ export function BranchManager() {
         label: "Publish Branch…",
         onSelect: () =>
           openInput("publish", {
+            repo,
             title: "Publish Branch",
             label: `Push "${branch.name}" to remote:`,
             initialValue: "origin",
@@ -341,7 +349,7 @@ export function BranchManager() {
       items.push({
         danger: true,
         label: "Delete Branch",
-        onSelect: () => deleteBranch(branch)
+        onSelect: () => deleteBranch(repo, branch)
       });
     }
 
@@ -349,18 +357,29 @@ export function BranchManager() {
       items.push({
         danger: true,
         label: "Delete Remote Branch",
-        onSelect: () => deleteRemoteBranch(branch)
+        onSelect: () => deleteRemoteBranch(repo, branch)
       });
     }
 
     return items;
   }
 
+  const hasRepositories = repositories.length > 0;
   const openBranchMenu = useCallback(
-    (branch: BranchInfo, position: { x: number; y: number }) => {
-      setMenu({ branch, position });
+    (
+      repo: Repository,
+      branches: BranchInfo[],
+      branch: BranchInfo,
+      position: { x: number; y: number }
+    ) => {
+      setMenu({ repo, branches, branch, position });
     },
     []
+  );
+
+  const anyLoading = useMemo(
+    () => repositories.some((repo) => branchStateByRepo[repo.path]?.isLoading),
+    [branchStateByRepo, repositories]
   );
 
   return (
@@ -370,39 +389,26 @@ export function BranchManager() {
         <div className="view-title__actions">
           <button
             className="view-action"
-            onClick={() => void reload()}
-            title="Refresh"
+            onClick={() => {
+              for (const repo of repositories) {
+                void reloadRepo(repo);
+              }
+            }}
+            title="Refresh All"
             type="button"
-            disabled={!activeRepo}
+            disabled={!hasRepositories || anyLoading}
           >
             <Codicon name="refresh" size={16} />
-          </button>
-          <button
-            className="view-action"
-            onClick={() =>
-              openInput("create", {
-                title: "Create Branch",
-                label: "New branch name:",
-                placeholder: "feature/my-branch"
-              })
-            }
-            title="Create Branch"
-            type="button"
-            disabled={!activeRepo}
-          >
-            <Codicon name="plus" size={16} />
           </button>
         </div>
       </div>
 
       <div className="scm-body">
-        {!activeRepo ? (
+        {!hasRepositories ? (
           <div className="scm-welcome">
             <p className="scm-welcome__lead">No repository loaded.</p>
           </div>
-        ) : null}
-
-        {activeRepo ? (
+        ) : (
           <>
             <div className="branches-filter">
               <Codicon name="search" size={14} />
@@ -414,55 +420,136 @@ export function BranchManager() {
               />
             </div>
 
-            <BranchSection
-              title="Local"
-              count={localBranches.length}
-              collapsed={!!sectionsCollapsed.local}
-              onToggle={() => toggle("local")}
-              isLoading={isLoading}
-              emptyMessage={
-                loadError
-                  ? `Failed to load branches: ${loadError}`
-                  : branches.length === 0
-                    ? "No branches yet. Use + above to create one."
-                    : query.trim()
-                      ? "No local branches match the filter."
-                      : null
-              }
-            >
-              {localBranches.map((branch) => (
-                <BranchRow
-                  key={branch.name}
-                  branch={branch}
-                  onContextMenu={openBranchMenu}
-                />
-              ))}
-            </BranchSection>
+            {repositories.map((repo) => {
+              const repoState = branchStateByRepo[repo.path] ?? EMPTY_REPO_STATE;
+              const filteredBranches = filterBranches(repoState.branches, query);
+              const localBranches = filteredBranches.filter((branch) => !branch.isRemote);
+              const remoteGroups = groupRemoteBranches(filteredBranches);
+              const repoKey = `repo:${repo.id}`;
+              return (
+                <section className="repo-section" key={repo.id}>
+                  <button
+                    className="repo-section__header"
+                    onClick={() => toggle(repoKey)}
+                    type="button"
+                  >
+                    <Codicon
+                      name={sectionsCollapsed[repoKey] ? "chevron-right" : "chevron-down"}
+                      size={14}
+                    />
+                    <Codicon name="repo" size={14} />
+                    <span className="repo-section__meta">
+                      <span className="repo-section__name" title={repo.name}>
+                        {repo.name}
+                      </span>
+                      <span className="repo-section__branch" title={repo.branch}>
+                        <Codicon name="git-branch" size={12} />
+                        <span className="repo-section__branch-label">{repo.branch}</span>
+                      </span>
+                    </span>
+                    <span
+                      className="repo-section__actions"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        className="repo-section__action"
+                        onClick={() => void reloadRepo(repo)}
+                        title="Refresh"
+                        aria-label={`Refresh ${repo.name} branches`}
+                        type="button"
+                      >
+                        <Codicon name="refresh" size={14} />
+                      </button>
+                      <button
+                        className="repo-section__action"
+                        onClick={() =>
+                          openInput("create", {
+                            repo,
+                            title: "Create Branch",
+                            label: `New branch name for ${repo.name}:`,
+                            placeholder: "feature/my-branch"
+                          })
+                        }
+                        title="Create Branch"
+                        aria-label={`Create branch in ${repo.name}`}
+                        type="button"
+                      >
+                        <Codicon name="plus" size={14} />
+                      </button>
+                    </span>
+                  </button>
 
-            {remoteGroups.map(([remoteName, list]) => (
-              <BranchSection
-                key={remoteName}
-                title={remoteName.charAt(0).toUpperCase() + remoteName.slice(1)}
-                count={list.length}
-                collapsed={!!sectionsCollapsed[`remote:${remoteName}`]}
-                onToggle={() => toggle(`remote:${remoteName}`)}
-                isLoading={isLoading}
-              >
-                {list.map((branch) => (
-                  <BranchRow
-                    key={branch.name}
-                    branch={branch}
-                    onContextMenu={openBranchMenu}
-                  />
-                ))}
-              </BranchSection>
-            ))}
+                  {!sectionsCollapsed[repoKey] ? (
+                    <>
+                      <BranchSection
+                        title="Local"
+                        count={localBranches.length}
+                        collapsed={!!sectionsCollapsed[`${repoKey}:local`]}
+                        onToggle={() => toggle(`${repoKey}:local`)}
+                        isLoading={repoState.isLoading}
+                        emptyMessage={
+                          repoState.loadError
+                            ? `Failed to load branches: ${repoState.loadError}`
+                            : repoState.branches.length === 0
+                              ? "No branches available yet. Create the first branch or commit to this repository."
+                              : query.trim()
+                                ? "No local branches match the filter."
+                                : null
+                        }
+                      >
+                        {localBranches.map((branch) => (
+                          <BranchRow
+                            key={`${repo.id}:${branch.name}`}
+                            branch={branch}
+                            onSelect={(selectedBranch) =>
+                              switchBranch(repo, repoState.branches, selectedBranch)
+                            }
+                            onContextMenu={(selectedBranch, position) =>
+                              openBranchMenu(repo, repoState.branches, selectedBranch, position)
+                            }
+                          />
+                        ))}
+                      </BranchSection>
+
+                      {remoteGroups.map(([remoteName, list]) => (
+                        <BranchSection
+                          key={`${repo.id}:${remoteName}`}
+                          title={remoteName.charAt(0).toUpperCase() + remoteName.slice(1)}
+                          count={list.length}
+                          collapsed={!!sectionsCollapsed[`${repoKey}:remote:${remoteName}`]}
+                          onToggle={() => toggle(`${repoKey}:remote:${remoteName}`)}
+                          isLoading={repoState.isLoading}
+                        >
+                          {list.map((branch) => (
+                            <BranchRow
+                              key={`${repo.id}:${branch.name}`}
+                              branch={branch}
+                              onSelect={(selectedBranch) =>
+                                switchBranch(repo, repoState.branches, selectedBranch)
+                              }
+                              onContextMenu={(selectedBranch, position) =>
+                                openBranchMenu(
+                                  repo,
+                                  repoState.branches,
+                                  selectedBranch,
+                                  position
+                                )
+                              }
+                            />
+                          ))}
+                        </BranchSection>
+                      ))}
+                    </>
+                  ) : null}
+                </section>
+              );
+            })}
           </>
-        ) : null}
+        )}
       </div>
 
       <ContextMenu
-        items={menu ? buildMenuItems(menu.branch) : []}
+        items={menu ? buildMenuItems(menu.repo, menu.branches, menu.branch) : []}
         position={menu?.position ?? null}
         onClose={() => setMenu(null)}
       />
@@ -488,6 +575,31 @@ export function BranchManager() {
       />
     </>
   );
+}
+
+function filterBranches(branches: BranchInfo[], query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return branches;
+  }
+
+  return branches.filter((branch) => branch.name.toLowerCase().includes(needle));
+}
+
+function groupRemoteBranches(branches: BranchInfo[]) {
+  const groups = new Map<string, BranchInfo[]>();
+  for (const branch of branches) {
+    if (!branch.isRemote) {
+      continue;
+    }
+
+    const remote = branch.name.split("/")[0] ?? "remote";
+    const list = groups.get(remote) ?? [];
+    list.push(branch);
+    groups.set(remote, list);
+  }
+
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
 interface BranchSectionProps {
@@ -536,4 +648,3 @@ function BranchSection({
     </section>
   );
 }
-

@@ -23,7 +23,8 @@ impl GitRunner {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if stderr.contains("Authentication failed") || stderr.contains("could not read Username")
+            if stderr.contains("Authentication failed")
+                || stderr.contains("could not read Username")
             {
                 return Err(GitError::AuthRequired {
                     remote: repo_path.display().to_string(),

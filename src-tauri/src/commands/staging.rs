@@ -24,7 +24,11 @@ pub async fn git_stage_dir(repo_path: String, dir: String) -> Result<(), GitErro
 }
 
 #[tauri::command]
-pub async fn git_stage_lines(repo_path: String, file: String, patch: String) -> Result<(), GitError> {
+pub async fn git_stage_lines(
+    repo_path: String,
+    file: String,
+    patch: String,
+) -> Result<(), GitError> {
     let _ = file;
     staging::stage_lines(Path::new(&repo_path), &patch).await
 }
@@ -40,7 +44,11 @@ pub async fn git_unstage_all(repo_path: String) -> Result<(), GitError> {
 }
 
 #[tauri::command]
-pub async fn git_unstage_lines(repo_path: String, file: String, patch: String) -> Result<(), GitError> {
+pub async fn git_unstage_lines(
+    repo_path: String,
+    file: String,
+    patch: String,
+) -> Result<(), GitError> {
     let _ = file;
     staging::unstage_lines(Path::new(&repo_path), &patch).await
 }

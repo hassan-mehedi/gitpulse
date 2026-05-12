@@ -81,8 +81,54 @@ impl WorkspaceManager {
         self.set_workspace(app_handle, state)
     }
 
+    pub fn append_repositories<R: Runtime>(
+        &self,
+        app_handle: &AppHandle<R>,
+        repositories: Vec<Repository>,
+    ) -> Result<WorkspaceState, GitError> {
+        let current = self.current()?;
+        let mut merged = current.repositories.clone();
+
+        for repository in repositories {
+            if let Some(existing) = merged
+                .iter_mut()
+                .find(|entry| entry.path == repository.path)
+            {
+                *existing = repository;
+            } else {
+                merged.push(repository);
+            }
+        }
+
+        let active_repo_id = if current
+            .active_repo_id
+            .as_ref()
+            .is_some_and(|active_id| merged.iter().any(|repo| &repo.id == active_id))
+        {
+            current.active_repo_id
+        } else {
+            merged.first().map(|repo| repo.id.clone())
+        };
+
+        let state = WorkspaceState {
+            mode: if merged.len() <= 1 {
+                "single".to_string()
+            } else {
+                "multi".to_string()
+            },
+            workspace_file_path: None,
+            repositories: merged,
+            active_repo_id,
+        };
+
+        self.set_workspace(app_handle, state)
+    }
+
     pub fn current(&self) -> Result<WorkspaceState, GitError> {
-        let guard = self.inner.lock().map_err(|err| GitError::Io(err.to_string()))?;
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|err| GitError::Io(err.to_string()))?;
         Ok(guard.clone())
     }
 
@@ -104,7 +150,10 @@ impl WorkspaceManager {
             .map_err(|err| GitError::Io(err.to_string()))?;
         *watchers = next_watchers;
 
-        let mut guard = self.inner.lock().map_err(|err| GitError::Io(err.to_string()))?;
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|err| GitError::Io(err.to_string()))?;
         *guard = state;
         Ok(guard.clone())
     }
@@ -144,6 +193,22 @@ pub async fn is_git_repo(path: &Path) -> bool {
         .await
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+pub async fn collect_multi_repos(root: &Path) -> Result<Vec<Repository>, GitError> {
+    let mut repositories = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            let path = entry.path();
+            if is_git_repo(&path).await {
+                repositories.push(scan_repo(&path).await?);
+            }
+        }
+    }
+
+    repositories.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(repositories)
 }
 
 fn hash_path(path: &str) -> String {

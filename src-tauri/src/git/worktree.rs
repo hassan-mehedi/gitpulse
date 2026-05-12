@@ -8,7 +8,8 @@ use crate::git::types::{OperationResult, WorktreeInfo};
 pub async fn list(repo_path: &Path) -> Result<Vec<WorktreeInfo>, GitError> {
     let repo_path = repo_path.canonicalize()?;
     let repo_path = repo_path.display().to_string();
-    let output = GitRunner::run(Path::new(&repo_path), &["worktree", "list", "--porcelain"]).await?;
+    let output =
+        GitRunner::run(Path::new(&repo_path), &["worktree", "list", "--porcelain"]).await?;
     Ok(parse_worktrees(&output, &repo_path))
 }
 
@@ -35,7 +36,11 @@ pub async fn add(
     worktrees
         .into_iter()
         .find(|worktree| worktree.path == expected_path)
-        .ok_or_else(|| GitError::Parse(format!("unable to locate created worktree at {expected_path}")))
+        .ok_or_else(|| {
+            GitError::Parse(format!(
+                "unable to locate created worktree at {expected_path}"
+            ))
+        })
 }
 
 pub async fn remove(repo_path: &Path, path: &str) -> Result<OperationResult, GitError> {

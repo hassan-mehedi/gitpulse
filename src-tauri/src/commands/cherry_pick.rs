@@ -5,10 +5,7 @@ use crate::git::cherry_pick;
 use crate::git::types::CherryPickResult;
 
 #[tauri::command]
-pub async fn git_cherry_pick(
-    repo_path: String,
-    sha: String,
-) -> Result<CherryPickResult, GitError> {
+pub async fn git_cherry_pick(repo_path: String, sha: String) -> Result<CherryPickResult, GitError> {
     cherry_pick::cherry_pick(Path::new(&repo_path), &sha).await
 }
 

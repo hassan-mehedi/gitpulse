@@ -3,7 +3,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ContextMenu } from "../shared/ContextMenu";
 import { InputModal } from "../shared/InputModal";
 import { useGit } from "../../hooks/useGit";
-import { useRepo } from "../../hooks/useRepo";
 import { useGraphStore } from "../../stores/graph";
 import { useWorkspaceStore } from "../../stores/workspace";
 import {
@@ -27,8 +26,9 @@ const lanePalette = [
   "#737373"
 ];
 
-const ROW_HEIGHT = 32;
-const LANE_WIDTH = 16;
+const ROW_HEIGHT = 24;
+const LANE_WIDTH = 12;
+const MAX_VISIBLE_LANES = 7;
 
 interface PendingInput {
   kind: "create-branch" | "create-tag";
@@ -39,19 +39,43 @@ interface PendingInput {
 }
 
 export function CommitGraphList() {
-  const { activeRepo } = useRepo();
   const runGit = useGit();
+  const repositories = useWorkspaceStore((state) => state.repositories);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [input, setInput] = useState<PendingInput | null>(null);
-  const { nodes, selectedCommitSha, isLoading, loadGraph, selectCommit } = useGraphStore();
+  const {
+    nodes,
+    repoId,
+    selectedCommitSha,
+    isLoading,
+    loadGraph,
+    selectCommit,
+    setRepoId
+  } = useGraphStore();
+
+  const selectedRepo =
+    repositories.find((repo) => repo.id === repoId) ?? repositories[0] ?? null;
 
   useEffect(() => {
-    if (!activeRepo) return;
-    void runGit(() => loadGraph(activeRepo)).catch(() => {});
-  }, [activeRepo?.path]);
+    if (repositories.length === 0) {
+      setRepoId(null);
+      return;
+    }
+
+    if (!selectedRepo) {
+      setRepoId(repositories[0]!.id);
+    }
+  }, [repositories, selectedRepo, setRepoId]);
+
+  useEffect(() => {
+    if (!selectedRepo) return;
+    setActiveRepo(selectedRepo.id);
+    void runGit(() => loadGraph(selectedRepo)).catch(() => {});
+  }, [loadGraph, runGit, selectedRepo, setActiveRepo]);
 
   const visibleNodes = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -79,32 +103,35 @@ export function CommitGraphList() {
   }, [rowVirtualizer, selectedCommitSha, visibleNodes]);
 
   async function handleSelectCommit(sha: string) {
-    if (!activeRepo) return;
-    await runGit(() => selectCommit(activeRepo, sha)).catch(() => {});
+    if (!selectedRepo) return;
+    setActiveRepo(selectedRepo.id);
+    await runGit(() => selectCommit(selectedRepo, sha)).catch(() => {});
   }
 
   function handleCheckout(node: GraphNode) {
-    if (!activeRepo) return;
+    if (!selectedRepo) return;
     const target = inferCheckoutTarget(node);
     runGit(async () => {
-      await gitSwitchBranch(activeRepo.path, target);
-      await refreshRepo(activeRepo.path);
-      await loadGraph(activeRepo);
+      setActiveRepo(selectedRepo.id);
+      await gitSwitchBranch(selectedRepo.path, target);
+      await refreshRepo(selectedRepo.path);
+      await loadGraph(selectedRepo);
     }).catch(() => {});
   }
 
   function handleCherryPick(node: GraphNode) {
-    if (!activeRepo) return;
+    if (!selectedRepo) return;
     runGit(async () => {
-      await gitCherryPick(activeRepo.path, node.sha);
-      await refreshRepo(activeRepo.path);
-      await loadGraph(activeRepo);
+      setActiveRepo(selectedRepo.id);
+      await gitCherryPick(selectedRepo.path, node.sha);
+      await refreshRepo(selectedRepo.path);
+      await loadGraph(selectedRepo);
     }).catch(() => {});
   }
 
   function handleInputSubmit(value: string) {
-    if (!input || !activeRepo) return;
-    const repoPath = activeRepo.path;
+    if (!input || !selectedRepo) return;
+    const repoPath = selectedRepo.path;
     const node = input.node;
     runGit(async () => {
       if (input.kind === "create-branch") {
@@ -112,11 +139,11 @@ export function CommitGraphList() {
       } else {
         await gitCreateTag(repoPath, value, node.sha);
       }
-      await loadGraph(activeRepo);
+      await loadGraph(selectedRepo);
     }).catch(() => {});
   }
 
-  if (!activeRepo) {
+  if (!selectedRepo) {
     return (
       <div className="scm-welcome">
         <p className="scm-welcome__lead">No repository loaded.</p>
@@ -127,9 +154,12 @@ export function CommitGraphList() {
   return (
     <>
       <GraphToolbar
+        repositories={repositories}
+        selectedRepoId={selectedRepo.id}
+        onRepoChange={(nextRepoId) => setRepoId(nextRepoId)}
         onQueryChange={setQuery}
         onReload={() => {
-          void runGit(() => loadGraph(activeRepo)).catch(() => {});
+          void runGit(() => loadGraph(selectedRepo)).catch(() => {});
         }}
         query={query}
       />
@@ -159,7 +189,8 @@ export function CommitGraphList() {
             const branchRefs = node.refs.filter((ref) => !ref.startsWith("tag: "));
             const tagRefs = node.refs.filter((ref) => ref.startsWith("tag: "));
             const laneColor = lanePalette[node.lane % lanePalette.length];
-            const svgWidth = (maxLane + 1) * LANE_WIDTH;
+            const laneWindow = getLaneWindow(node, maxLane);
+            const svgWidth = laneWindow.count * LANE_WIDTH;
             const centerY = ROW_HEIGHT / 2;
 
             return (
@@ -188,7 +219,9 @@ export function CommitGraphList() {
                       viewBox={`0 0 ${svgWidth} ${ROW_HEIGHT}`}
                       width={svgWidth}
                     >
-                      {Array.from({ length: maxLane + 1 }).map((_, lane) => (
+                      {Array.from({ length: laneWindow.count }).map((_, laneOffset) => {
+                        const lane = laneWindow.start + laneOffset;
+                        return (
                         <line
                           key={`${node.sha}-lane-${lane}`}
                           stroke={
@@ -198,15 +231,22 @@ export function CommitGraphList() {
                           }
                           strokeOpacity={lane === node.lane ? 0.6 : 0.45}
                           strokeWidth="1.5"
-                          x1={lane * LANE_WIDTH + LANE_WIDTH / 2}
-                          x2={lane * LANE_WIDTH + LANE_WIDTH / 2}
+                          x1={laneOffset * LANE_WIDTH + LANE_WIDTH / 2}
+                          x2={laneOffset * LANE_WIDTH + LANE_WIDTH / 2}
                           y1={0}
                           y2={ROW_HEIGHT}
                         />
-                      ))}
+                        );
+                      })}
                       {node.connections.map((connection, index) => {
-                        const fromX = connection.fromLane * LANE_WIDTH + LANE_WIDTH / 2;
-                        const toX = connection.toLane * LANE_WIDTH + LANE_WIDTH / 2;
+                        const fromX =
+                          clampLane(connection.fromLane - laneWindow.start, laneWindow.count) *
+                            LANE_WIDTH +
+                          LANE_WIDTH / 2;
+                        const toX =
+                          clampLane(connection.toLane - laneWindow.start, laneWindow.count) *
+                            LANE_WIDTH +
+                          LANE_WIDTH / 2;
                         const stroke = lanePalette[connection.fromLane % lanePalette.length];
                         const d =
                           fromX === toX
@@ -224,7 +264,9 @@ export function CommitGraphList() {
                         );
                       })}
                       <circle
-                        cx={node.lane * LANE_WIDTH + LANE_WIDTH / 2}
+                        cx={
+                          (node.lane - laneWindow.start) * LANE_WIDTH + LANE_WIDTH / 2
+                        }
                         cy={centerY}
                         fill={laneColor}
                         r="4.5"
@@ -260,8 +302,11 @@ export function CommitGraphList() {
                         ))}
                       </div>
                     ) : null}
-                    <span className="graph-row__author" title={`${node.author} · ${node.date}`}>
-                      {formatRelativeTime(node.date) || node.author}
+                    <span className="graph-row__author" title={node.author}>
+                      {node.author}
+                    </span>
+                    <span className="graph-row__date" title={node.date}>
+                      {formatRelativeTime(node.date)}
                     </span>
                   </div>
                 </button>
@@ -325,6 +370,17 @@ export function CommitGraphList() {
       />
     </>
   );
+}
+
+function getLaneWindow(node: GraphNode, maxLane: number) {
+  const count = Math.min(maxLane + 1, MAX_VISIBLE_LANES);
+  const maxStart = Math.max(0, maxLane + 1 - count);
+  const start = Math.max(0, Math.min(node.lane - 1, maxStart));
+  return { start, count };
+}
+
+function clampLane(relativeLane: number, count: number) {
+  return Math.max(0, Math.min(relativeLane, count - 1));
 }
 
 /** Shows "5m", "2d", "3w", "1y" etc. given an ISO 8601 timestamp. */

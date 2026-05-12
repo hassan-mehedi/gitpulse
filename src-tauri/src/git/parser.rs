@@ -214,7 +214,9 @@ pub fn parse_diff_stat(output: &str) -> DiffStat {
 
     for line in output.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.contains("file changed") || trimmed.contains("files changed")
+        if trimmed.is_empty()
+            || trimmed.contains("file changed")
+            || trimmed.contains("files changed")
         {
             continue;
         }
@@ -497,7 +499,10 @@ pub fn parse_blame(output: &str) -> Result<Vec<BlameLine>, GitError> {
         let content_line = lines
             .next()
             .ok_or_else(|| GitError::Parse("missing blame content line".to_string()))?;
-        let content = content_line.strip_prefix('\t').unwrap_or(content_line).to_string();
+        let content = content_line
+            .strip_prefix('\t')
+            .unwrap_or(content_line)
+            .to_string();
 
         let meta = cache.get(&sha).cloned().unwrap_or_default();
         blame_lines.push(BlameLine {

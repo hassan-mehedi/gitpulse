@@ -46,6 +46,10 @@ export async function openRepositoryTarget(path: string): Promise<WorkspaceState
   return gitInvoke("open_repository_target", { path });
 }
 
+export async function addRepositoryTarget(path: string): Promise<WorkspaceState> {
+  return gitInvoke("add_repository_target", { path });
+}
+
 export async function openWorkspaceFile(filePath: string): Promise<Repository[]> {
   return gitInvoke("open_workspace_file", { filePath });
 }

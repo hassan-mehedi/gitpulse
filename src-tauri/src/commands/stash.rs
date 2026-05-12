@@ -48,7 +48,10 @@ pub async fn git_stash_drop(
 }
 
 #[tauri::command]
-pub async fn git_stash_show(repo_path: String, stash_ref: String) -> Result<Vec<FileDiff>, GitError> {
+pub async fn git_stash_show(
+    repo_path: String,
+    stash_ref: String,
+) -> Result<Vec<FileDiff>, GitError> {
     stash::show(Path::new(&repo_path), &stash_ref).await
 }
 

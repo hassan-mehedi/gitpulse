@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::error::GitError;
-use crate::git::parser::parse_branches;
+use crate::git::parser::{parse_branches, parse_status};
 use crate::git::runner::GitRunner;
 use crate::git::types::{BranchInfo, OperationResult};
 
@@ -9,9 +9,43 @@ pub async fn branches(repo_path: &Path) -> Result<Vec<BranchInfo>, GitError> {
     // %(refname) gives the FULL ref (`refs/heads/<name>` or `refs/remotes/<name>`)
     // so we can reliably classify local vs. remote branches. `%(refname:short)`
     // strips both prefixes, losing the local/remote distinction.
-    let format = "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)";
+    let format =
+        "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)";
     let output = GitRunner::run(repo_path, &["branch", "-a", "--format", format]).await?;
-    Ok(parse_branches(&output))
+    let mut branches = parse_branches(&output);
+
+    // In an unborn repository, `git status --branch` still knows the symbolic
+    // HEAD name (e.g. `dev`) but `git branch -a` returns no refs yet. Synthesize
+    // the current local branch so the UI doesn't lose the active branch state.
+    let status_output =
+        GitRunner::run(repo_path, &["status", "--porcelain=v2", "--branch"]).await?;
+    let status = parse_status(&status_output, 0)?;
+    let current_branch = status.branch.trim();
+    if is_named_branch(current_branch) {
+        if let Some(existing) = branches
+            .iter_mut()
+            .find(|branch| !branch.is_remote && branch.name == current_branch)
+        {
+            existing.is_current = true;
+            if existing.upstream.is_none() {
+                existing.upstream = status.upstream.clone();
+            }
+        } else {
+            branches.insert(
+                0,
+                BranchInfo {
+                    name: current_branch.to_string(),
+                    is_current: true,
+                    is_remote: false,
+                    upstream: status.upstream,
+                    last_commit_sha: String::new(),
+                    last_commit_date: String::new(),
+                },
+            );
+        }
+    }
+
+    Ok(branches)
 }
 
 pub async fn current_branch(repo_path: &Path) -> Result<String, GitError> {
@@ -80,4 +114,8 @@ pub async fn delete_remote_branch(
 ) -> Result<(), GitError> {
     GitRunner::run(repo_path, &["push", remote, "--delete", branch]).await?;
     Ok(())
+}
+
+fn is_named_branch(branch: &str) -> bool {
+    !branch.is_empty() && branch != "HEAD" && !branch.starts_with('(')
 }

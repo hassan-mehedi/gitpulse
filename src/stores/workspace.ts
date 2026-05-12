@@ -1,12 +1,16 @@
 import { create } from "zustand";
-import { gitDiffFile, gitStatus, openRepositoryTarget } from "../lib/git";
-import type { FileDiff, FileChange, Repository, WorkspaceState } from "../types/git";
+import { addRepositoryTarget, gitDiffFile, gitStatus, openRepositoryTarget } from "../lib/git";
+import { createId } from "../lib/ids";
+import type { FileDiff, FileChange, GitError, Repository, WorkspaceState } from "../types/git";
 import { useDiffStore } from "./diff";
+import { useInlineBlameStore } from "./inlineBlame";
+import { useNotificationStore } from "./notifications";
 
 interface WorkspaceStore extends WorkspaceState {
   isLoading: boolean;
   initialize: () => Promise<void>;
   loadTarget: (path: string) => Promise<void>;
+  addTarget: (path: string) => Promise<void>;
   setActiveRepo: (repoId: string) => void;
   refreshRepo: (repoPath: string) => Promise<void>;
   openDiff: (repo: Repository, change: FileChange, staged: boolean) => Promise<void>;
@@ -17,6 +21,20 @@ const emptyState: WorkspaceState = {
   repositories: [],
   activeRepoId: null
 };
+
+function detailFromError(error: unknown) {
+  const gitError = error as GitError;
+  return gitError.message ?? gitError.stderr ?? gitError.kind ?? String(error);
+}
+
+function notifyWorkspaceError(title: string, error: unknown) {
+  useNotificationStore.getState().pushNotification({
+    id: createId(),
+    tone: "error",
+    title,
+    message: detailFromError(error)
+  });
+}
 
 // Per-repo refresh dedup: collapses bursts of refresh calls (e.g. one from the user
 // action followed by 2-3 from the filesystem watcher firing for the same git op).
@@ -72,12 +90,29 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ isLoading: true });
     try {
       const workspace = await openRepositoryTarget(path);
+      useDiffStore.getState().clear();
+      useInlineBlameStore.getState().setTarget(null);
       set({
         ...workspace,
         isLoading: false
       });
-    } catch {
+    } catch (error) {
       set({ isLoading: false });
+      notifyWorkspaceError("Open target failed", error);
+    }
+  },
+  async addTarget(path) {
+    set({ isLoading: true });
+    try {
+      const workspace = await addRepositoryTarget(path);
+      useDiffStore.getState().reconcileWorkspace(workspace.repositories);
+      set({
+        ...workspace,
+        isLoading: false
+      });
+    } catch (error) {
+      set({ isLoading: false });
+      notifyWorkspaceError("Add repository failed", error);
     }
   },
   setActiveRepo(repoId) {
@@ -102,22 +137,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           if (existingRepo && statusEqual(existingRepo, nextStatus)) {
             return state;
           }
+          const repositories = state.repositories.map((repo) =>
+            repo.path === repoPath
+              ? {
+                  ...repo,
+                  branch: nextStatus.branch,
+                  upstream: nextStatus.upstream,
+                  ahead: nextStatus.ahead,
+                  behind: nextStatus.behind,
+                  stashCount: nextStatus.stashCount,
+                  changes: nextStatus.changes,
+                  staged: nextStatus.staged,
+                  hasConflicts: nextStatus.hasConflicts
+                }
+              : repo
+          );
+          useDiffStore.getState().reconcileWorkspace(repositories);
           return {
-            repositories: state.repositories.map((repo) =>
-              repo.path === repoPath
-                ? {
-                    ...repo,
-                    branch: nextStatus.branch,
-                    upstream: nextStatus.upstream,
-                    ahead: nextStatus.ahead,
-                    behind: nextStatus.behind,
-                    stashCount: nextStatus.stashCount,
-                    changes: nextStatus.changes,
-                    staged: nextStatus.staged,
-                    hasConflicts: nextStatus.hasConflicts
-                  }
-                : repo
-            )
+            repositories
           };
         });
       } finally {
@@ -135,6 +172,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   },
   async openDiff(repo, change, staged) {
     const fileDiff: FileDiff = await gitDiffFile(repo.path, change.path, staged);
+    set({ activeRepoId: repo.id });
     useDiffStore.getState().setActiveDiff(repo, change, staged, fileDiff);
   }
 }));

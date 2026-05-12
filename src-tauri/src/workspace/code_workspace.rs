@@ -17,7 +17,9 @@ pub struct WorkspaceFolder {
 }
 
 pub async fn open_workspace_file(file_path: &Path) -> Result<Vec<Repository>, GitError> {
-    let workspace_dir = file_path.parent().ok_or_else(|| GitError::Io("workspace file has no parent directory".to_string()))?;
+    let workspace_dir = file_path
+        .parent()
+        .ok_or_else(|| GitError::Io("workspace file has no parent directory".to_string()))?;
     let content = tokio::fs::read_to_string(file_path).await?;
     let workspace: CodeWorkspace = serde_json::from_str(&content)?;
 

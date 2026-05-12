@@ -25,10 +25,7 @@ pub async fn graph(
     Ok(parse_log(&output))
 }
 
-pub async fn ref_log(
-    repo_path: &Path,
-    n: Option<usize>,
-) -> Result<Vec<ReflogEntry>, GitError> {
+pub async fn ref_log(repo_path: &Path, n: Option<usize>) -> Result<Vec<ReflogEntry>, GitError> {
     let limit = n.unwrap_or(50).to_string();
     let output = GitRunner::run(
         repo_path,

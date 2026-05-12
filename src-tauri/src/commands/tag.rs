@@ -16,7 +16,13 @@ pub async fn git_create_tag(
     sha: Option<String>,
     message: Option<String>,
 ) -> Result<OperationResult, GitError> {
-    tag::create(Path::new(&repo_path), &name, sha.as_deref(), message.as_deref()).await
+    tag::create(
+        Path::new(&repo_path),
+        &name,
+        sha.as_deref(),
+        message.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]

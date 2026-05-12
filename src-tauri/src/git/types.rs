@@ -119,9 +119,9 @@ pub struct CommitDetail {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitResult {
-  pub sha: String,
-  pub short_sha: String,
-  pub summary: String,
+    pub sha: String,
+    pub short_sha: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

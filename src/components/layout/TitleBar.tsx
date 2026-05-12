@@ -48,7 +48,7 @@ export function TitleBar() {
   }
 
   return (
-    <header className="title-bar" data-tauri-drag-region>
+    <header className="title-bar">
       <div className="title-bar__brand" data-tauri-drag-region>
         <span className="title-bar__title" data-tauri-drag-region>
           {title}

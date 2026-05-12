@@ -49,7 +49,10 @@ pub fn create_watchers<R: Runtime>(
         let mut debouncer = new_debouncer(
             Duration::from_millis(300),
             None,
-            move |events: Result<Vec<DebouncedEvent>, Vec<notify_debouncer_full::notify::Error>>| {
+            move |events: Result<
+                Vec<DebouncedEvent>,
+                Vec<notify_debouncer_full::notify::Error>,
+            >| {
                 if let Ok(events) = events {
                     for event in events {
                         emit_repo_event(&app_handle, &repo_root_for_events, &event);

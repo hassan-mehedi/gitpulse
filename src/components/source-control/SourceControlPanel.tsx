@@ -4,15 +4,7 @@ import { ContextMenu } from "../shared/ContextMenu";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
-import {
-  gitDiscardFile,
-  gitFetchAll,
-  gitPull,
-  gitPush,
-  gitStageFile,
-  gitSync,
-  gitUnstageFile
-} from "../../lib/git";
+import { gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
 import { pickRepositoryDirectory, pickWorkspaceFile } from "../../lib/openTarget";
 import { RepoSection } from "./RepoSection";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
@@ -31,31 +23,35 @@ interface MenuTarget {
 export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
   const repositories = useWorkspaceStore((state) => state.repositories);
   const loadTarget = useWorkspaceStore((state) => state.loadTarget);
+  const addTarget = useWorkspaceStore((state) => state.addTarget);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const openDiff = useWorkspaceStore((state) => state.openDiff);
   const activeChange = useDiffStore((state) => state.activeChange);
   const activeStaged = useDiffStore((state) => state.staged);
+  const activeDiffRepo = useDiffStore((state) => state.activeRepo);
   const runGit = useGit();
 
   const [viewMode, setViewMode] = useState<"tree" | "list">("list");
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
 
-  const activeRepo = repositories[0] ?? null;
   const selectedKey = activeChange
-    ? `${activeStaged ? "s" : "u"}:${activeChange.path}`
+    ? `${activeStaged ? "s" : "u"}:${activeDiffRepo?.id ?? "unknown"}:${activeChange.path}`
     : null;
 
   const handleSelect = useCallback(
     (repo: Repository, change: FileChange, staged: boolean) => {
+      setActiveRepo(repo.id);
       runGit(async () => {
         await openDiff(repo, change, staged);
       }).catch(() => {});
     },
-    [openDiff, runGit]
+    [openDiff, runGit, setActiveRepo]
   );
 
   const handleStageToggle = useCallback(
     (repo: Repository, change: FileChange, staged: boolean) => {
+      setActiveRepo(repo.id);
       runGit(async () => {
         if (staged) {
           await gitUnstageFile(repo.path, change.path);
@@ -65,17 +61,18 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
         await refreshRepo(repo.path);
       }).catch(() => {});
     },
-    [refreshRepo, runGit]
+    [refreshRepo, runGit, setActiveRepo]
   );
 
   const handleDiscard = useCallback(
     (repo: Repository, change: FileChange) => {
+      setActiveRepo(repo.id);
       runGit(async () => {
         await gitDiscardFile(repo.path, change.path);
         await refreshRepo(repo.path);
       }).catch(() => {});
     },
-    [refreshRepo, runGit]
+    [refreshRepo, runGit, setActiveRepo]
   );
 
   const handleContextMenu = useCallback(
@@ -85,9 +82,10 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
       staged: boolean,
       position: { x: number; y: number }
     ) => {
+      setActiveRepo(repo.id);
       setMenuTarget({ repo, change, staged, position });
     },
-    []
+    [setActiveRepo]
   );
 
   async function handleOpenRepository() {
@@ -102,12 +100,14 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
     await loadTarget(selection);
   }
 
-  async function withActiveRepo(operation: (repoPath: string) => Promise<unknown>) {
-    if (!activeRepo) return;
-    await runGit(async () => {
-      await operation(activeRepo.path);
-      await refreshRepo(activeRepo.path);
-    }).catch(() => {});
+  async function handleAddRepository() {
+    const selection = await pickRepositoryDirectory();
+    if (!selection) return;
+    await addTarget(selection);
+  }
+
+  async function handleRefreshAll() {
+    await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch(() => {});
   }
 
   if (activeView !== "source-control") {
@@ -128,48 +128,36 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
         <div className="view-title__actions">
           <button
             className="view-action"
-            onClick={() => activeRepo && void refreshRepo(activeRepo.path)}
-            title="Refresh"
+            onClick={() => void handleOpenRepository()}
+            title="Open Repository"
             type="button"
-            disabled={!activeRepo}
+          >
+            <Codicon name="folder-opened" size={16} />
+          </button>
+          <button
+            className="view-action"
+            onClick={() => void handleAddRepository()}
+            title="Add Repository"
+            type="button"
+          >
+            <Codicon name="add" size={16} />
+          </button>
+          <button
+            className="view-action"
+            onClick={() => void handleOpenWorkspace()}
+            title="Open Workspace"
+            type="button"
+          >
+            <Codicon name="folder" size={16} />
+          </button>
+          <button
+            className="view-action"
+            onClick={() => void handleRefreshAll()}
+            title="Refresh All"
+            type="button"
+            disabled={repositories.length === 0}
           >
             <Codicon name="refresh" size={16} />
-          </button>
-          <button
-            className="view-action"
-            onClick={() => void withActiveRepo(gitFetchAll)}
-            title="Fetch"
-            type="button"
-            disabled={!activeRepo}
-          >
-            <Codicon name="repo-fetch" size={16} />
-          </button>
-          <button
-            className="view-action"
-            onClick={() => void withActiveRepo(gitPull)}
-            title="Pull"
-            type="button"
-            disabled={!activeRepo}
-          >
-            <Codicon name="repo-pull" size={16} />
-          </button>
-          <button
-            className="view-action"
-            onClick={() => void withActiveRepo(gitPush)}
-            title="Push"
-            type="button"
-            disabled={!activeRepo}
-          >
-            <Codicon name="repo-push" size={16} />
-          </button>
-          <button
-            className="view-action"
-            onClick={() => void withActiveRepo(gitSync)}
-            title="Sync"
-            type="button"
-            disabled={!activeRepo}
-          >
-            <Codicon name="sync" size={16} />
           </button>
           <button
             className="view-action"
@@ -211,7 +199,6 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
             repo={repo}
             viewMode={viewMode}
             showRepoHeader={repositories.length > 1}
-            isFirst={index === 0}
             selectedKey={selectedKey}
             onSelect={handleSelect}
             onStageToggle={handleStageToggle}

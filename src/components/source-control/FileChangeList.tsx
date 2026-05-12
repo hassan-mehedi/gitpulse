@@ -53,7 +53,7 @@ export function FileChangeList({
   const shouldVirtualize = viewMode === "list" && changes.length > VIRTUALIZE_THRESHOLD;
 
   function rowKey(change: FileChange) {
-    return `${staged ? "s" : "u"}:${change.path}`;
+    return `${staged ? "s" : "u"}:${repo.id}:${change.path}`;
   }
 
   return (

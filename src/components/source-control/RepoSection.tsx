@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { gitDiscardAll, gitStageAll, gitUnstageAll } from "../../lib/git";
+import { gitDiscardAll, gitFetchAll, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
 import { StashSection } from "./StashSection";
@@ -12,7 +12,6 @@ interface RepoSectionProps {
   repo: Repository;
   viewMode: "tree" | "list";
   showRepoHeader: boolean;
-  isFirst: boolean;
   selectedKey: string | null;
   onSelect: (repo: Repository, change: FileChange, staged: boolean) => void;
   onStageToggle: (repo: Repository, change: FileChange, staged: boolean) => void;
@@ -29,7 +28,6 @@ export function RepoSection({
   repo,
   viewMode,
   showRepoHeader,
-  isFirst,
   selectedKey,
   onSelect,
   onStageToggle,
@@ -38,6 +36,7 @@ export function RepoSection({
 }: RepoSectionProps) {
   const runGit = useGit();
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const [collapsed, setCollapsed] = useState(false);
 
   const conflicted = repo.changes.filter((change) => change.status === "U");
@@ -49,6 +48,7 @@ export function RepoSection({
 
   function withRefresh(operation: () => Promise<unknown>) {
     runGit(async () => {
+      setActiveRepo(repo.id);
       await operation();
       await refreshRepo(repo.path);
     }).catch(() => {});
@@ -64,14 +64,71 @@ export function RepoSection({
         >
           <Codicon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
           <Codicon name="repo" size={14} />
-          <span className="repo-section__name">{repo.name}</span>
-          <span className="repo-section__branch">{repo.branch}</span>
+          <span className="repo-section__meta">
+            <span className="repo-section__name" title={repo.name}>
+              {repo.name}
+            </span>
+            <span className="repo-section__branch" title={repo.branch}>
+              <Codicon name="git-branch" size={12} />
+              <span className="repo-section__branch-label">{repo.branch}</span>
+            </span>
+          </span>
+          <span
+            className="repo-section__actions"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="repo-section__action"
+              onClick={() => withRefresh(() => Promise.resolve())}
+              title="Refresh"
+              aria-label={`Refresh ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="refresh" size={14} />
+            </button>
+            <button
+              className="repo-section__action"
+              onClick={() => withRefresh(() => gitFetchAll(repo.path))}
+              title="Fetch"
+              aria-label={`Fetch ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="repo-fetch" size={14} />
+            </button>
+            <button
+              className="repo-section__action"
+              onClick={() => withRefresh(() => gitPull(repo.path))}
+              title="Pull"
+              aria-label={`Pull ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="repo-pull" size={14} />
+            </button>
+            <button
+              className="repo-section__action"
+              onClick={() => withRefresh(() => gitPush(repo.path))}
+              title="Push"
+              aria-label={`Push ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="repo-push" size={14} />
+            </button>
+            <button
+              className="repo-section__action"
+              onClick={() => withRefresh(() => gitSync(repo.path))}
+              title="Sync"
+              aria-label={`Sync ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="sync" size={14} />
+            </button>
+          </span>
         </button>
       ) : null}
 
       {!collapsed ? (
         <>
-          {isFirst ? <CommitInput repo={repo} /> : null}
+          <CommitInput repo={repo} />
 
           {hasConflicts ? (
             <FileChangeList

@@ -40,10 +40,7 @@ pub async fn pop(repo_path: &Path, stash_ref: Option<&str>) -> Result<OperationR
 
     GitRunner::run(repo_path, &args).await?;
     Ok(OperationResult {
-        summary: format!(
-            "Popped {}",
-            stash_ref.unwrap_or("latest stash")
-        ),
+        summary: format!("Popped {}", stash_ref.unwrap_or("latest stash")),
     })
 }
 
@@ -55,10 +52,7 @@ pub async fn apply(repo_path: &Path, stash_ref: Option<&str>) -> Result<Operatio
 
     GitRunner::run(repo_path, &args).await?;
     Ok(OperationResult {
-        summary: format!(
-            "Applied {}",
-            stash_ref.unwrap_or("latest stash")
-        ),
+        summary: format!("Applied {}", stash_ref.unwrap_or("latest stash")),
     })
 }
 

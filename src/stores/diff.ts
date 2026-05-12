@@ -61,6 +61,7 @@ interface DiffStore {
   closeTab: (key: string) => Promise<void>;
   reorderTab: (fromKey: string, toKey: string, position: "before" | "after") => void;
   refreshActiveDiff: () => Promise<void>;
+  reconcileWorkspace: (repositories: Repository[]) => void;
   clear: () => void;
 }
 
@@ -332,6 +333,94 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
           ? 0
           : Math.min(current.activeHunkIndex, activeDiff.hunks.length - 1)
     }));
+  },
+
+  reconcileWorkspace(repositories) {
+    set((state) => {
+      const repositoriesByPath = new Map(
+        repositories.map((repository) => [repository.path, repository])
+      );
+
+      const tabs = state.tabs
+        .filter((tab) => {
+          const repository = repositoriesByPath.get(tab.repo.path);
+          if (!repository) {
+            return false;
+          }
+
+          if (tab.kind === "commit") {
+            return true;
+          }
+
+          const changes = tab.staged ? repository.staged : repository.changes;
+          return changes.some((change) => change.path === tab.change.path);
+        })
+        .map((tab) => {
+          const repository = repositoriesByPath.get(tab.repo.path);
+          if (!repository) {
+            return tab;
+          }
+
+          if (tab.kind === "commit") {
+            return {
+              ...tab,
+              repo: repository
+            };
+          }
+
+          const changes = tab.staged ? repository.staged : repository.changes;
+          const change = changes.find((entry) => entry.path === tab.change.path) ?? tab.change;
+          return {
+            ...tab,
+            repo: repository,
+            change
+          };
+        });
+
+      const activeTab =
+        state.activeTabKey ? tabs.find((tab) => tab.key === state.activeTabKey) ?? null : null;
+
+      if (!activeTab) {
+        if (tabs.length === 0) {
+          return {
+            tabs: [],
+            ...clearActiveState()
+          };
+        }
+
+        return {
+          tabs,
+          ...clearActiveState()
+        };
+      }
+
+      const activeRepo = repositoriesByPath.get(activeTab.repo.path) ?? activeTab.repo;
+
+      if (activeTab.kind === "commit") {
+        return {
+          tabs,
+          activeRepo,
+          activeFilePath: activeTab.filePath,
+          activeCommit: activeTab.commit,
+          activeChange: null,
+          activeDiff: activeTab.diff,
+          activeScope: "graph",
+          activeSourceKind: "commit",
+          staged: false
+        };
+      }
+
+      return {
+        tabs,
+        activeRepo,
+        activeFilePath: activeTab.filePath,
+        activeChange: activeTab.change,
+        activeCommit: null,
+        activeScope: "source-control",
+        activeSourceKind: "working-tree",
+        staged: activeTab.staged
+      };
+    });
   },
 
   clear() {
