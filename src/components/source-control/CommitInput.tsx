@@ -62,11 +62,10 @@ export function CommitInput({ repo }: CommitInputProps) {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const maxHeight = 120;
     textarea.style.height = "0px";
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    const nextHeight = textarea.scrollHeight;
     textarea.style.height = `${Math.max(nextHeight, 30)}px`;
-    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+    textarea.style.overflowY = "hidden";
   }, [message]);
 
   useEffect(() => {

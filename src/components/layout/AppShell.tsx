@@ -38,6 +38,7 @@ export function AppShell() {
   const [activeView, setActiveView] = useState<ActivityView>("source-control");
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const [branchPickerCreateMode, setBranchPickerCreateMode] = useState(false);
+  const [branchPickerRepoId, setBranchPickerRepoId] = useState<string | null>(null);
   const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(false);
   const [awaitingShortcutChord, setAwaitingShortcutChord] = useState<number | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -198,6 +199,16 @@ export function AppShell() {
     };
   }, [awaitingShortcutChord, refreshActiveDiff, refreshRepo, runGit]);
 
+  function openBranchPickerForRepo(repoId?: string | null, createMode = false) {
+    const resolvedRepoId = repoId ?? useWorkspaceStore.getState().activeRepoId ?? null;
+    setBranchPickerRepoId(resolvedRepoId);
+    if (repoId) {
+      useWorkspaceStore.getState().setActiveRepo(repoId);
+    }
+    setBranchPickerCreateMode(createMode);
+    setIsBranchPickerOpen(true);
+  }
+
   return (
     <div className="app-shell">
       <TitleBar />
@@ -218,13 +229,16 @@ export function AppShell() {
           <>
             <section className="left-panel">
               {activeView === "branches" ? (
-                <BranchManager />
+                <BranchManager onOpenBranchPicker={(repo) => openBranchPickerForRepo(repo.id)} />
               ) : activeView === "settings" ? (
                 <SettingsPanel />
               ) : activeView === "graph" ? (
                 <CommitGraphList />
               ) : (
-                <SourceControlPanel activeView={activeView} />
+                <SourceControlPanel
+                  activeView={activeView}
+                  onOpenBranchPicker={(repo) => openBranchPickerForRepo(repo.id)}
+                />
               )}
             </section>
             <Sash value={sidebarWidth} onChange={setSidebarWidth} min={170} max={720} />
@@ -245,15 +259,18 @@ export function AppShell() {
       </div>
       <StatusBar
         onOpenBranchPicker={() => {
-          setBranchPickerCreateMode(false);
-          setIsBranchPickerOpen(true);
+          openBranchPickerForRepo(null, false);
         }}
       />
       <ToastViewport />
       <BranchPickerModal
         initialCreateMode={branchPickerCreateMode}
         isOpen={isBranchPickerOpen}
-        onClose={() => setIsBranchPickerOpen(false)}
+        targetRepoId={branchPickerRepoId}
+        onClose={() => {
+          setIsBranchPickerOpen(false);
+          setBranchPickerRepoId(null);
+        }}
       />
       <ShortcutReferenceModal
         isOpen={isShortcutReferenceOpen}

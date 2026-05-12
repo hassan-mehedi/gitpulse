@@ -648,7 +648,6 @@ button:disabled {
 .commit-input__textarea {
   width: 100%;
   min-height: 30px;
-  max-height: 120px;
   padding: 6px 10px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
@@ -1763,6 +1762,158 @@ body.is-resizing-sidebar * {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+.branch-picker-modal {
+  width: min(680px, 100%);
+}
+
+.branch-picker-modal__body {
+  padding: 8px;
+  gap: 8px;
+}
+
+.branch-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-picker__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-picker__input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 13px;
+}
+
+.branch-picker__input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.branch-picker__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 56vh;
+  overflow-y: auto;
+  border-radius: 4px;
+}
+
+.branch-picker__action,
+.branch-picker__item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-quickInput-foreground);
+  text-align: left;
+  font: inherit;
+}
+
+.branch-picker__action:hover,
+.branch-picker__item:hover,
+.branch-picker__item.is-current {
+  background: var(--vscode-quickInputList-focusBackground);
+  color: var(--vscode-quickInputList-focusForeground);
+}
+
+.branch-picker__action {
+  align-items: center;
+}
+
+.branch-picker__create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  margin: 2px 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--vscode-input-background) 70%, transparent);
+}
+
+.branch-picker__create-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.branch-picker__section-label {
+  padding: 8px 8px 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.branch-picker__item-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.branch-picker__item-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.branch-picker__item-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-picker__item-meta {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-picker__item:hover .branch-picker__item-meta,
+.branch-picker__item.is-current .branch-picker__item-meta {
+  color: color-mix(in srgb, var(--vscode-quickInputList-focusForeground) 70%, transparent);
+}
+
+.branch-picker__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.branch-picker__empty {
+  padding: 10px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
 }
 
 /* Context menu (UX-SPEC §5.3) */

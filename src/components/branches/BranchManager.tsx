@@ -61,7 +61,11 @@ const EMPTY_REPO_STATE: RepoBranchState = {
   loadError: null
 };
 
-export function BranchManager() {
+interface BranchManagerProps {
+  onOpenBranchPicker: (repo: Repository) => void;
+}
+
+export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
   const repositories = useWorkspaceStore((state) => state.repositories);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
@@ -451,6 +455,15 @@ export function BranchManager() {
                       className="repo-section__actions"
                       onClick={(event) => event.stopPropagation()}
                     >
+                      <button
+                        className="repo-section__action"
+                        onClick={() => onOpenBranchPicker(repo)}
+                        title="Switch Branch"
+                        aria-label={`Switch branch in ${repo.name}`}
+                        type="button"
+                      >
+                        <Codicon name="git-branch" size={14} />
+                      </button>
                       <button
                         className="repo-section__action"
                         onClick={() => void reloadRepo(repo)}

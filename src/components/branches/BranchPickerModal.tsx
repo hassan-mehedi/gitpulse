@@ -3,24 +3,27 @@ import { Codicon } from "../shared/Codicon";
 import { gitBranches, gitCreateBranch, gitSwitchBranch } from "../../lib/git";
 import { findTrackedLocalBranch, formatBranchMeta, inferLocalBranchName } from "../../lib/branches";
 import { useGit } from "../../hooks/useGit";
-import { useRepo } from "../../hooks/useRepo";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { BranchInfo } from "../../types/git";
 import { Modal } from "../shared/Modal";
 
 interface BranchPickerModalProps {
   isOpen: boolean;
+  targetRepoId?: string | null;
   initialCreateMode?: boolean;
   onClose: () => void;
 }
 
 export function BranchPickerModal({
   isOpen,
+  targetRepoId,
   initialCreateMode = false,
   onClose
 }: BranchPickerModalProps) {
-  const { activeRepo } = useRepo();
+  const repositories = useWorkspaceStore((state) => state.repositories);
+  const activeRepoId = useWorkspaceStore((state) => state.activeRepoId);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const runGit = useGit();
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [query, setQuery] = useState("");
@@ -28,6 +31,12 @@ export function BranchPickerModal({
   const [newBranchName, setNewBranchName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const activeRepo =
+    repositories.find((repo) => repo.id === (targetRepoId ?? activeRepoId)) ??
+    repositories.find((repo) => repo.id === activeRepoId) ??
+    repositories[0] ??
+    null;
 
   useEffect(() => {
     if (!isOpen) {
@@ -63,8 +72,17 @@ export function BranchPickerModal({
 
   const filteredBranches = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return branches.filter((branch) => branch.name.toLowerCase().includes(normalizedQuery));
+    const filtered = branches.filter((branch) => branch.name.toLowerCase().includes(normalizedQuery));
+    return [...filtered].sort((left, right) => {
+      if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;
+      if (left.isRemote !== right.isRemote) return left.isRemote ? 1 : -1;
+      return left.name.localeCompare(right.name);
+    });
   }, [branches, query]);
+
+  const localBranches = filteredBranches.filter((branch) => !branch.isRemote);
+  const remoteBranches = filteredBranches.filter((branch) => branch.isRemote);
+  const canCreateFromQuery = query.trim().length > 0 && !branches.some((branch) => branch.name === query.trim());
 
   async function handleCheckout(branch: BranchInfo) {
     if (!activeRepo) {
@@ -72,6 +90,7 @@ export function BranchPickerModal({
     }
 
     await runGit(async () => {
+      setActiveRepo(activeRepo.id);
       if (branch.isRemote) {
         const trackedLocal = findTrackedLocalBranch(branches, branch);
         if (trackedLocal && !trackedLocal.isRemote) {
@@ -95,6 +114,7 @@ export function BranchPickerModal({
     }
 
     await runGit(async () => {
+      setActiveRepo(activeRepo.id);
       await gitCreateBranch(activeRepo.path, newBranchName.trim());
       await refreshRepo(activeRepo.path);
       setNewBranchName("");
@@ -102,91 +122,148 @@ export function BranchPickerModal({
     });
   }
 
+  async function handleCreateFromCurrentQuery() {
+    if (!activeRepo || !query.trim()) {
+      return;
+    }
+
+    await runGit(async () => {
+      setActiveRepo(activeRepo.id);
+      await gitCreateBranch(activeRepo.path, query.trim());
+      await refreshRepo(activeRepo.path);
+      onClose();
+    });
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Branch Picker">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Branch Picker"
+      className="branch-picker-modal"
+      bodyClassName="branch-picker-modal__body"
+    >
       {!activeRepo ? (
         <div className="empty-state__body">No repository loaded.</div>
       ) : (
-        <div className="repo-card__section">
-          <div className="toolbar__actions">
+        <div className="branch-picker">
+          <div className="branch-picker__toolbar">
             <input
-              className="text-input"
+              autoFocus
+              className="branch-picker__input"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search branches"
+              placeholder="Select a branch or tag to checkout"
               value={query}
             />
-            <button className="panel-button" onClick={() => setCreateMode((value) => !value)} type="button">
-              <Codicon name="plus" size={14} />
-              {createMode ? "Hide Create" : "Create Branch"}
-            </button>
           </div>
 
-          {createMode ? (
-            <div className="repo-card__section">
-              <input
-                className="text-input"
-                onChange={(event) => setNewBranchName(event.target.value)}
-                placeholder="feature/new-branch"
-                value={newBranchName}
-              />
-              <button className="panel-button" onClick={() => void handleCreate()} type="button">
-                Create and Checkout
-              </button>
-            </div>
-          ) : null}
+          <div className="branch-picker__list" role="listbox" aria-label={`Branches for ${activeRepo.name}`}>
+            <button
+              className="branch-picker__action"
+              onClick={() => setCreateMode((value) => !value)}
+              type="button"
+            >
+              <Codicon name="plus" size={14} />
+              <span>{createMode ? "Hide create branch…" : "Create new branch…"}</span>
+            </button>
 
-          <div className="file-list">
-            {isLoading ? (
-              <div className="file-row">
-                <div className="file-row__left">
-                  <span className="file-row__path">Loading branches…</span>
-                </div>
+            {canCreateFromQuery ? (
+              <button
+                className="branch-picker__action"
+                onClick={() => void handleCreateFromCurrentQuery()}
+                type="button"
+              >
+                <Codicon name="git-branch" size={14} />
+                <span>Create branch '{query.trim()}'</span>
+              </button>
+            ) : null}
+
+            {createMode ? (
+              <div className="branch-picker__create">
+                <label className="branch-picker__create-label">
+                  <span>New branch name</span>
+                  <input
+                    className="branch-picker__input"
+                    onChange={(event) => setNewBranchName(event.target.value)}
+                    placeholder="feature/new-branch"
+                    value={newBranchName}
+                  />
+                </label>
+                <button
+                  className="vscode-button vscode-button--primary"
+                  onClick={() => void handleCreate()}
+                  type="button"
+                >
+                  Create and Checkout
+                </button>
               </div>
+            ) : null}
+
+            {isLoading ? (
+              <div className="branch-picker__empty">Loading branches…</div>
             ) : null}
 
             {!isLoading && loadError ? (
-              <div className="file-row">
-                <div className="file-row__left">
-                  <span className="file-row__path">Failed to load branches: {loadError}</span>
-                </div>
-              </div>
+              <div className="branch-picker__empty">Failed to load branches: {loadError}</div>
             ) : null}
 
             {!isLoading && !loadError && filteredBranches.length === 0 ? (
-              <div className="file-row">
-                <div className="file-row__left">
-                  <span className="file-row__path">
-                    {query.trim()
-                      ? "No matching branches"
-                      : "No branches available yet. Create the first branch or commit to this repository."}
-                  </span>
-                </div>
+              <div className="branch-picker__empty">
+                {query.trim()
+                  ? "No matching branches"
+                  : "No branches available yet. Create the first branch or commit to this repository."}
               </div>
             ) : null}
 
-            {filteredBranches.map((branch) => (
-              <button
-                className={`file-row ${branch.isCurrent ? "is-active" : ""}`}
-                key={branch.name}
-                onClick={() => void handleCheckout(branch)}
-                type="button"
-              >
-                <div className="file-row__left">
-                  <div className="badge">{branch.isRemote ? "Remote" : branch.isCurrent ? "HEAD" : "Local"}</div>
-                  <div>
-                    <div className="file-row__name">{branch.name}</div>
-                    <div className="file-row__path">{formatBranchMeta(branch)}</div>
-                  </div>
-                </div>
-                <div className="file-row__actions">
-                  {!branch.isCurrent ? (
-                    <span className="panel-button">
-                      {branch.isRemote && findTrackedLocalBranch(branches, branch) ? "Checkout" : branch.isRemote ? "Track" : "Checkout"}
-                    </span>
-                  ) : null}
-                </div>
-              </button>
-            ))}
+            {!isLoading && !loadError && localBranches.length > 0 ? (
+              <>
+                <div className="branch-picker__section-label">Branches</div>
+                {localBranches.map((branch) => (
+                  <button
+                    className={`branch-picker__item${branch.isCurrent ? " is-current" : ""}`}
+                    key={branch.name}
+                    onClick={() => void handleCheckout(branch)}
+                    type="button"
+                  >
+                    <div className="branch-picker__item-main">
+                      <div className="branch-picker__item-title">
+                        <Codicon
+                          name={branch.isCurrent ? "check" : "git-branch"}
+                          size={14}
+                        />
+                        <span>{branch.name}</span>
+                        {branch.isCurrent ? (
+                          <span className="branch-picker__badge">HEAD</span>
+                        ) : null}
+                      </div>
+                      <div className="branch-picker__item-meta">{formatBranchMeta(branch)}</div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : null}
+
+            {!isLoading && !loadError && remoteBranches.length > 0 ? (
+              <>
+                <div className="branch-picker__section-label">Remote Branches</div>
+                {remoteBranches.map((branch) => (
+                  <button
+                    className="branch-picker__item"
+                    key={branch.name}
+                    onClick={() => void handleCheckout(branch)}
+                    type="button"
+                  >
+                    <div className="branch-picker__item-main">
+                      <div className="branch-picker__item-title">
+                        <Codicon name="remote" size={14} />
+                        <span>{branch.name}</span>
+                      </div>
+                      <div className="branch-picker__item-meta">{formatBranchMeta(branch)}</div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : null}
           </div>
         </div>
       )}

@@ -7,9 +7,18 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
 }
 
-export function Modal({ isOpen, title, onClose, children }: ModalProps) {
+export function Modal({
+  isOpen,
+  title,
+  onClose,
+  children,
+  className,
+  bodyClassName
+}: ModalProps) {
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -35,7 +44,7 @@ export function Modal({ isOpen, title, onClose, children }: ModalProps) {
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <section
         aria-modal="true"
-        className="modal-card"
+        className={`modal-card${className ? ` ${className}` : ""}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -51,7 +60,9 @@ export function Modal({ isOpen, title, onClose, children }: ModalProps) {
             <Codicon name="close" size={14} />
           </button>
         </div>
-        <div className="modal-card__body">{children}</div>
+        <div className={`modal-card__body${bodyClassName ? ` ${bodyClassName}` : ""}`}>
+          {children}
+        </div>
       </section>
     </div>
   );

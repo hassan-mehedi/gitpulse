@@ -13,6 +13,7 @@ interface RepoSectionProps {
   viewMode: "tree" | "list";
   showRepoHeader: boolean;
   selectedKey: string | null;
+  onOpenBranchPicker: (repo: Repository) => void;
   onSelect: (repo: Repository, change: FileChange, staged: boolean) => void;
   onStageToggle: (repo: Repository, change: FileChange, staged: boolean) => void;
   onDiscard: (repo: Repository, change: FileChange) => void;
@@ -29,6 +30,7 @@ export function RepoSection({
   viewMode,
   showRepoHeader,
   selectedKey,
+  onOpenBranchPicker,
   onSelect,
   onStageToggle,
   onDiscard,
@@ -77,6 +79,15 @@ export function RepoSection({
             className="repo-section__actions"
             onClick={(event) => event.stopPropagation()}
           >
+            <button
+              className="repo-section__action"
+              onClick={() => onOpenBranchPicker(repo)}
+              title="Switch Branch"
+              aria-label={`Switch branch in ${repo.name}`}
+              type="button"
+            >
+              <Codicon name="git-branch" size={14} />
+            </button>
             <button
               className="repo-section__action"
               onClick={() => withRefresh(() => Promise.resolve())}

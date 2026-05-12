@@ -11,6 +11,7 @@ import type { ActivityView, FileChange, Repository } from "../../types/git";
 
 interface SourceControlPanelProps {
   activeView: ActivityView;
+  onOpenBranchPicker: (repo: Repository) => void;
 }
 
 interface MenuTarget {
@@ -20,7 +21,10 @@ interface MenuTarget {
   position: { x: number; y: number };
 }
 
-export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
+export function SourceControlPanel({
+  activeView,
+  onOpenBranchPicker
+}: SourceControlPanelProps) {
   const repositories = useWorkspaceStore((state) => state.repositories);
   const loadTarget = useWorkspaceStore((state) => state.loadTarget);
   const addTarget = useWorkspaceStore((state) => state.addTarget);
@@ -200,6 +204,7 @@ export function SourceControlPanel({ activeView }: SourceControlPanelProps) {
             viewMode={viewMode}
             showRepoHeader={repositories.length > 1}
             selectedKey={selectedKey}
+            onOpenBranchPicker={onOpenBranchPicker}
             onSelect={handleSelect}
             onStageToggle={handleStageToggle}
             onDiscard={handleDiscard}
