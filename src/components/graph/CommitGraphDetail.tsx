@@ -17,6 +17,7 @@ export function CommitGraphDetail() {
   const [commitFileDiffs, setCommitFileDiffs] = useState<FileDiff[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [filesViewMode, setFilesViewMode] = useState<"list" | "tree">("tree");
+  const [diffMode, setDiffMode] = useState<"split" | "inline">("split");
 
   useEffect(() => {
     if (!activeRepo || !selectedCommitSha) {
@@ -121,37 +122,62 @@ export function CommitGraphDetail() {
           )}
         </aside>
 
-        <section className="commit-detail__diff">
+        <section className="commit-detail__diff-pane">
           {activeFileDiff ? (
             <>
-              <div className="commit-detail__diff-title" title={activeFileDiff.file}>
-                <FileIcon path={activeFileDiff.file} size={14} />
-                <span>{activeFileDiff.file}</span>
+              <div className="commit-detail__diff-toolbar">
+                <div className="commit-detail__diff-title" title={activeFileDiff.file}>
+                  <FileIcon path={activeFileDiff.file} size={14} />
+                  <span>{activeFileDiff.file}</span>
+                </div>
+                <div className="commit-detail__diff-actions">
+                  <button
+                    className={`view-action${diffMode === "split" ? " is-active" : ""}`}
+                    onClick={() => setDiffMode("split")}
+                    title="Side-by-side"
+                    aria-label="Side-by-side"
+                    type="button"
+                  >
+                    <Codicon name="split-horizontal" size={16} />
+                  </button>
+                  <button
+                    className={`view-action${diffMode === "inline" ? " is-active" : ""}`}
+                    onClick={() => setDiffMode("inline")}
+                    title="Inline"
+                    aria-label="Inline"
+                    type="button"
+                  >
+                    <Codicon name="list-flat" size={16} />
+                  </button>
+                </div>
               </div>
-              {activeFileDiff.isBinary ? (
-                <div className="diff-viewer__placeholder">
-                  Binary file — no textual diff.
-                </div>
-              ) : activeFileDiff.hunks.length === 0 ? (
-                <div className="diff-viewer__placeholder">
-                  No textual changes to display.
-                </div>
-              ) : (
-                activeFileDiff.hunks.map((hunk, index) => (
-                  <DiffHunk
-                    filePath={activeFileDiff.file}
-                    hunk={hunk}
-                    hunkIndex={index}
-                    isActive={false}
-                    key={`${activeFileDiff.file}-${hunk.header}-${index}`}
-                    mode="inline"
-                    onFocus={() => {}}
-                    onToggleLine={() => {}}
-                    selectedLineIndices={[]}
-                    theme={theme}
-                  />
-                ))
-              )}
+              <div className="commit-detail__diff">
+                {activeFileDiff.isBinary ? (
+                  <div className="diff-viewer__placeholder">
+                    Binary file — no textual diff.
+                  </div>
+                ) : activeFileDiff.hunks.length === 0 ? (
+                  <div className="diff-viewer__placeholder">
+                    No textual changes to display.
+                  </div>
+                ) : (
+                  activeFileDiff.hunks.map((hunk, index) => (
+                    <DiffHunk
+                      filePath={activeFileDiff.file}
+                      repoPath={activeRepo?.path}
+                      hunk={hunk}
+                      hunkIndex={index}
+                      isActive={false}
+                      key={`${activeFileDiff.file}-${hunk.header}-${index}`}
+                      mode={diffMode}
+                      onFocus={() => {}}
+                      onToggleLine={() => {}}
+                      selectedLineIndices={[]}
+                      theme={theme}
+                    />
+                  ))
+                )}
+              </div>
             </>
           ) : (
             <div className="commit-detail__diff-placeholder">

@@ -4,6 +4,8 @@ import { DiffLine } from "./DiffLine";
 
 interface DiffHunkProps {
   filePath: string;
+  /** Repo path — forwarded to DiffLine for inline-blame on hover. */
+  repoPath?: string;
   hunk: DiffHunkType;
   hunkIndex: number;
   isActive: boolean;
@@ -16,6 +18,7 @@ interface DiffHunkProps {
 
 export function DiffHunk({
   filePath,
+  repoPath,
   hunk,
   hunkIndex,
   isActive,
@@ -46,6 +49,7 @@ export function DiffHunk({
               {oldLines.map(({ line, index }) => (
                 <DiffLine
                   filePath={filePath}
+                  repoPath={repoPath}
                   key={`old-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.oldLineno}
@@ -63,6 +67,7 @@ export function DiffHunk({
               {newLines.map(({ line, index }) => (
                 <DiffLine
                   filePath={filePath}
+                  repoPath={repoPath}
                   key={`new-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.newLineno}
@@ -80,6 +85,7 @@ export function DiffHunk({
           {hunk.lines.map((line, index) => (
             <DiffLine
               filePath={filePath}
+              repoPath={repoPath}
               key={`inline-${hunk.header}-${index}`}
               line={line}
               lineNumber={line.newLineno ?? line.oldLineno}

@@ -1,27 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import { ContextMenu, type ContextMenuItem } from "../shared/ContextMenu";
 import { InputModal } from "../shared/InputModal";
 import {
-  gitAddWorktree,
   gitBranches,
   gitCreateBranch,
   gitDeleteBranch,
   gitDeleteRemoteBranch,
-  gitListTags,
-  gitListWorktrees,
+  gitFetch,
   gitMerge,
-  gitPruneWorktrees,
+  gitPull,
+  gitPush,
   gitPushSetUpstream,
   gitRebase,
   gitRenameBranch,
-  gitRemoveWorktree,
-  gitSwitchBranch
+  gitSwitchBranch,
+  gitSync
 } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import { useRepo } from "../../hooks/useRepo";
 import { useWorkspaceStore } from "../../stores/workspace";
-import type { BranchInfo, TagInfo, WorktreeInfo } from "../../types/git";
+import type { BranchInfo } from "../../types/git";
 import { BranchRow } from "./BranchRow";
 
 interface BranchMenuTarget {
@@ -30,7 +30,7 @@ interface BranchMenuTarget {
 }
 
 interface InputModalState {
-  kind: "create" | "create-from" | "rename" | "publish" | "add-worktree";
+  kind: "create" | "create-from" | "rename" | "publish";
   title: string;
   label: string;
   initialValue?: string;
@@ -39,38 +39,49 @@ interface InputModalState {
   context?: BranchInfo;
 }
 
+interface ConfirmModalState {
+  title: string;
+  body: React.ReactNode;
+  confirmLabel?: string;
+  danger?: boolean;
+  onConfirm: () => void;
+}
+
 export function BranchManager() {
   const { activeRepo } = useRepo();
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const runGit = useGit();
   const [branches, setBranches] = useState<BranchInfo[]>([]);
-  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
-  const [tags, setTags] = useState<TagInfo[]>([]);
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [menu, setMenu] = useState<BranchMenuTarget | null>(null);
   const [inputModal, setInputModal] = useState<InputModalState | null>(null);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>(
     {}
   );
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const reload = useCallback(async () => {
     if (!activeRepo) {
       setBranches([]);
-      setWorktrees([]);
-      setTags([]);
+      setLoadError(null);
       return;
     }
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const [nextBranches, nextWorktrees, nextTags] = await Promise.all([
-        gitBranches(activeRepo.path).catch(() => [] as BranchInfo[]),
-        gitListWorktrees(activeRepo.path).catch(() => [] as WorktreeInfo[]),
-        gitListTags(activeRepo.path).catch(() => [] as TagInfo[])
-      ]);
+      const nextBranches = await gitBranches(activeRepo.path);
       setBranches(nextBranches);
-      setWorktrees(nextWorktrees);
-      setTags(nextTags);
+    } catch (error) {
+      const detail =
+        (error as { message?: string; stderr?: string })?.message ??
+        (error as { stderr?: string })?.stderr ??
+        String(error);
+      setLoadError(detail);
+      console.error("[branches] gitBranches failed", error);
+      setBranches([]);
     } finally {
       setIsLoading(false);
     }
@@ -103,11 +114,6 @@ export function BranchManager() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [filteredBranches]);
 
-  const currentBranch = useMemo(
-    () => branches.find((branch) => branch.isCurrent) ?? null,
-    [branches]
-  );
-
   function toggle(section: string) {
     setSectionsCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
   }
@@ -129,20 +135,48 @@ export function BranchManager() {
 
   function deleteBranch(branch: BranchInfo) {
     if (!activeRepo) return;
-    if (!window.confirm(`Delete branch "${branch.name}"?`)) return;
-    withRefresh(() => gitDeleteBranch(activeRepo.path, branch.name, !branch.isCurrent));
+    setConfirmModal({
+      title: "Delete Branch",
+      body: (
+        <>
+          Delete local branch <strong>{branch.name}</strong>? This cannot be undone.
+        </>
+      ),
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: () =>
+        withRefresh(() =>
+          gitDeleteBranch(activeRepo.path, branch.name, !branch.isCurrent)
+        )
+    });
   }
 
   function mergeFrom(branch: BranchInfo) {
     if (!activeRepo) return;
-    if (!window.confirm(`Merge "${branch.name}" into the current branch?`)) return;
-    withRefresh(() => gitMerge(activeRepo.path, branch.name));
+    setConfirmModal({
+      title: "Merge Branch",
+      body: (
+        <>
+          Merge <strong>{branch.name}</strong> into the current branch?
+        </>
+      ),
+      confirmLabel: "Merge",
+      onConfirm: () => withRefresh(() => gitMerge(activeRepo.path, branch.name))
+    });
   }
 
   function rebaseOnto(branch: BranchInfo) {
     if (!activeRepo) return;
-    if (!window.confirm(`Rebase the current branch onto "${branch.name}"?`)) return;
-    withRefresh(() => gitRebase(activeRepo.path, branch.name));
+    setConfirmModal({
+      title: "Rebase Branch",
+      body: (
+        <>
+          Rebase the current branch onto <strong>{branch.name}</strong>?
+        </>
+      ),
+      confirmLabel: "Rebase",
+      onConfirm: () => withRefresh(() => gitRebase(activeRepo.path, branch.name))
+    });
   }
 
   function deleteRemoteBranch(branch: BranchInfo) {
@@ -150,16 +184,22 @@ export function BranchManager() {
     const [remote, ...rest] = branch.name.split("/");
     if (!remote || rest.length === 0) return;
     const remoteBranchName = rest.join("/");
-    if (
-      !window.confirm(
-        `Delete remote branch "${remoteBranchName}" on "${remote}"? This is irreversible.`
-      )
-    ) {
-      return;
-    }
-    withRefresh(() =>
-      gitDeleteRemoteBranch(activeRepo.path, remote, remoteBranchName)
-    );
+    setConfirmModal({
+      title: "Delete Remote Branch",
+      body: (
+        <>
+          Delete remote branch <strong>{remoteBranchName}</strong> on{" "}
+          <strong>{remote}</strong>? This pushes a deletion to the remote and is
+          irreversible.
+        </>
+      ),
+      confirmLabel: "Delete from remote",
+      danger: true,
+      onConfirm: () =>
+        withRefresh(() =>
+          gitDeleteRemoteBranch(activeRepo.path, remote, remoteBranchName)
+        )
+    });
   }
 
   function openInput(kind: InputModalState["kind"], options: Omit<InputModalState, "kind">) {
@@ -194,10 +234,30 @@ export function BranchManager() {
           );
         }
         break;
-      case "add-worktree":
-        withRefresh(() => gitAddWorktree(repoPath, value));
-        break;
     }
+  }
+
+  function pullCurrent() {
+    if (!activeRepo) return;
+    withRefresh(() => gitPull(activeRepo.path));
+  }
+
+  function pushCurrent() {
+    if (!activeRepo) return;
+    withRefresh(() => gitPush(activeRepo.path));
+  }
+
+  function syncCurrent() {
+    if (!activeRepo) return;
+    withRefresh(() => gitSync(activeRepo.path));
+  }
+
+  function fetchForBranch(branch: BranchInfo) {
+    if (!activeRepo) return;
+    const remote = branch.isRemote
+      ? branch.name.split("/")[0]
+      : branch.upstream?.split("/")[0];
+    withRefresh(() => gitFetch(activeRepo.path, remote));
   }
 
   function buildMenuItems(branch: BranchInfo): ContextMenuItem[] {
@@ -206,6 +266,28 @@ export function BranchManager() {
     if (!branch.isCurrent) {
       items.push({ label: "Checkout", onSelect: () => switchBranch(branch) });
     }
+
+    // Remote-sync actions for the CURRENT branch (Pull / Push / Sync / Fetch
+    // operate on `HEAD`, so they only meaningfully sit under the current row).
+    if (branch.isCurrent) {
+      items.push({
+        label: "Pull",
+        onSelect: pullCurrent
+      });
+      items.push({
+        label: "Push",
+        onSelect: pushCurrent
+      });
+      items.push({
+        label: "Sync (Pull, then Push)",
+        onSelect: syncCurrent
+      });
+    }
+
+    items.push({
+      label: "Fetch",
+      onSelect: () => fetchForBranch(branch)
+    });
 
     if (!branch.isCurrent) {
       items.push({
@@ -281,17 +363,6 @@ export function BranchManager() {
     []
   );
 
-  function removeWorktree(worktree: WorktreeInfo) {
-    if (!activeRepo || worktree.isMain) return;
-    if (!window.confirm(`Remove worktree at ${worktree.path}?`)) return;
-    withRefresh(() => gitRemoveWorktree(activeRepo.path, worktree.path));
-  }
-
-  function pruneWorktrees() {
-    if (!activeRepo) return;
-    withRefresh(() => gitPruneWorktrees(activeRepo.path));
-  }
-
   return (
     <>
       <div className="view-title">
@@ -333,36 +404,6 @@ export function BranchManager() {
 
         {activeRepo ? (
           <>
-            {currentBranch ? (
-              <CurrentBranchHeader
-                branch={currentBranch}
-                onCreateFrom={() =>
-                  openInput("create-from", {
-                    title: "Create Branch",
-                    label: `Create new branch from "${currentBranch.name}":`,
-                    placeholder: "branch-name",
-                    context: currentBranch
-                  })
-                }
-                onRename={() =>
-                  openInput("rename", {
-                    title: "Rename Branch",
-                    label: `Rename "${currentBranch.name}" to:`,
-                    initialValue: currentBranch.name,
-                    context: currentBranch
-                  })
-                }
-                onPublish={() =>
-                  openInput("publish", {
-                    title: "Publish Branch",
-                    label: `Push "${currentBranch.name}" to remote:`,
-                    initialValue: "origin",
-                    context: currentBranch
-                  })
-                }
-              />
-            ) : null}
-
             <div className="branches-filter">
               <Codicon name="search" size={14} />
               <input
@@ -380,27 +421,19 @@ export function BranchManager() {
               onToggle={() => toggle("local")}
               isLoading={isLoading}
               emptyMessage={
-                branches.length === 0
-                  ? "No branches yet. Use + above to create one."
-                  : query.trim()
-                    ? "No local branches match the filter."
-                    : null
+                loadError
+                  ? `Failed to load branches: ${loadError}`
+                  : branches.length === 0
+                    ? "No branches yet. Use + above to create one."
+                    : query.trim()
+                      ? "No local branches match the filter."
+                      : null
               }
             >
               {localBranches.map((branch) => (
                 <BranchRow
                   key={branch.name}
                   branch={branch}
-                  onSwitch={switchBranch}
-                  onRename={(b) =>
-                    openInput("rename", {
-                      title: "Rename Branch",
-                      label: `Rename "${b.name}" to:`,
-                      initialValue: b.name,
-                      context: b
-                    })
-                  }
-                  onDelete={deleteBranch}
                   onContextMenu={openBranchMenu}
                 />
               ))}
@@ -409,7 +442,7 @@ export function BranchManager() {
             {remoteGroups.map(([remoteName, list]) => (
               <BranchSection
                 key={remoteName}
-                title={`Remote: ${remoteName}`}
+                title={remoteName.charAt(0).toUpperCase() + remoteName.slice(1)}
                 count={list.length}
                 collapsed={!!sectionsCollapsed[`remote:${remoteName}`]}
                 onToggle={() => toggle(`remote:${remoteName}`)}
@@ -419,42 +452,11 @@ export function BranchManager() {
                   <BranchRow
                     key={branch.name}
                     branch={branch}
-                    onSwitch={switchBranch}
-                    onRename={(b) =>
-                      openInput("rename", {
-                        title: "Rename Branch",
-                        label: `Rename "${b.name}" to:`,
-                        initialValue: b.name,
-                        context: b
-                      })
-                    }
-                    onDelete={deleteBranch}
                     onContextMenu={openBranchMenu}
                   />
                 ))}
               </BranchSection>
             ))}
-
-            <WorktreeSection
-              worktrees={worktrees}
-              collapsed={!!sectionsCollapsed.worktrees}
-              onToggle={() => toggle("worktrees")}
-              onAdd={() =>
-                openInput("add-worktree", {
-                  title: "Add Worktree",
-                  label: "Worktree path (absolute):",
-                  placeholder: "/path/to/new/worktree"
-                })
-              }
-              onPrune={pruneWorktrees}
-              onRemove={removeWorktree}
-            />
-
-            <TagSection
-              tags={tags}
-              collapsed={!!sectionsCollapsed.tags}
-              onToggle={() => toggle("tags")}
-            />
           </>
         ) : null}
       </div>
@@ -474,63 +476,17 @@ export function BranchManager() {
         onSubmit={handleInputSubmit}
         onClose={() => setInputModal(null)}
       />
+
+      <ConfirmModal
+        isOpen={confirmModal !== null}
+        title={confirmModal?.title ?? ""}
+        body={confirmModal?.body ?? null}
+        confirmLabel={confirmModal?.confirmLabel}
+        danger={confirmModal?.danger}
+        onConfirm={() => confirmModal?.onConfirm()}
+        onClose={() => setConfirmModal(null)}
+      />
     </>
-  );
-}
-
-interface CurrentBranchHeaderProps {
-  branch: BranchInfo;
-  onCreateFrom: () => void;
-  onRename: () => void;
-  onPublish: () => void;
-}
-
-function CurrentBranchHeader({
-  branch,
-  onCreateFrom,
-  onRename,
-  onPublish
-}: CurrentBranchHeaderProps) {
-  return (
-    <div className="current-branch">
-      <div className="current-branch__heading">
-        <Codicon name="check" size={14} />
-        <span className="current-branch__label">Current branch</span>
-      </div>
-      <div className="current-branch__name" title={branch.name}>
-        <Codicon name="git-branch" size={16} />
-        <span>{branch.name}</span>
-      </div>
-      {branch.upstream ? (
-        <div className="current-branch__upstream">
-          Tracking <strong>{branch.upstream}</strong>
-        </div>
-      ) : (
-        <div className="current-branch__upstream current-branch__upstream--missing">
-          No upstream configured
-        </div>
-      )}
-      <div className="current-branch__actions">
-        <button
-          className="vscode-button vscode-button--primary"
-          onClick={onCreateFrom}
-          type="button"
-        >
-          <Codicon name="plus" size={14} />
-          Create branch from here
-        </button>
-        {!branch.upstream ? (
-          <button className="vscode-button" onClick={onPublish} type="button">
-            <Codicon name="repo-push" size={14} />
-            Publish
-          </button>
-        ) : null}
-        <button className="vscode-button" onClick={onRename} type="button">
-          <Codicon name="edit" size={14} />
-          Rename
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -581,124 +537,3 @@ function BranchSection({
   );
 }
 
-interface WorktreeSectionProps {
-  worktrees: WorktreeInfo[];
-  collapsed: boolean;
-  onToggle: () => void;
-  onAdd: () => void;
-  onPrune: () => void;
-  onRemove: (worktree: WorktreeInfo) => void;
-}
-
-function WorktreeSection({
-  worktrees,
-  collapsed,
-  onToggle,
-  onAdd,
-  onPrune,
-  onRemove
-}: WorktreeSectionProps) {
-  return (
-    <section className="scm-section">
-      <header className="scm-section__header">
-        <button className="scm-section__toggle" onClick={onToggle} type="button">
-          <Codicon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
-          <span className="scm-section__title">Worktrees</span>
-        </button>
-        <div className="scm-section__actions">
-          <button
-            className="scm-section__action"
-            onClick={onAdd}
-            title="Add Worktree"
-            type="button"
-          >
-            <Codicon name="plus" size={16} />
-          </button>
-          <button
-            className="scm-section__action"
-            onClick={onPrune}
-            title="Prune Worktrees"
-            type="button"
-          >
-            <Codicon name="trash" size={16} />
-          </button>
-        </div>
-        <span className="scm-section__count">{worktrees.length}</span>
-      </header>
-      {!collapsed ? (
-        <div className="scm-section__body">
-          {worktrees.map((worktree) => (
-            <div className="scm-row" key={worktree.path}>
-              <Codicon name="folder" size={16} className="scm-row__icon" />
-              <span className="scm-row__name" title={worktree.path}>
-                {worktree.branch}
-              </span>
-              <span className="scm-row__path" title={worktree.path}>
-                {worktree.path}
-              </span>
-              {worktree.isMain ? (
-                <span
-                  className="scm-row__status"
-                  style={{ color: "var(--vscode-descriptionForeground)" }}
-                >
-                  main
-                </span>
-              ) : (
-                <span className="scm-row__actions">
-                  <button
-                    className="scm-row__action"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onRemove(worktree);
-                    }}
-                    title="Remove Worktree"
-                    type="button"
-                  >
-                    <Codicon name="trash" size={14} />
-                  </button>
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function TagSection({
-  tags,
-  collapsed,
-  onToggle
-}: {
-  tags: TagInfo[];
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  if (tags.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="scm-section">
-      <header className="scm-section__header">
-        <button className="scm-section__toggle" onClick={onToggle} type="button">
-          <Codicon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
-          <span className="scm-section__title">Tags</span>
-        </button>
-        <span className="scm-section__count">{tags.length}</span>
-      </header>
-      {!collapsed ? (
-        <div className="scm-section__body">
-          {tags.map((tag) => (
-            <div className="scm-row" key={tag.name} title={tag.message}>
-              <Codicon name="tag" size={16} className="scm-row__icon" />
-              <span className="scm-row__name">{tag.name}</span>
-              <span className="scm-row__path">{tag.sha.slice(0, 7)}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}

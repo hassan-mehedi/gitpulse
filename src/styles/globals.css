@@ -452,13 +452,78 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 1fr 22px;
+  grid-template-rows: 30px 1fr 22px;
   height: 100vh;
   overflow: hidden;
 }
 
-/* No in-app title bar — Tauri's OS-native window decorations are the title bar (UX-SPEC §1.1).
-   Legacy compatibility shims for unmigrated views. */
+/* Custom title bar (30 px) — replaces native OS decorations. */
+.title-bar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  background: var(--vscode-titleBar-activeBackground);
+  color: var(--vscode-titleBar-activeForeground);
+  border-bottom: 1px solid var(--vscode-titleBar-border);
+  user-select: none;
+}
+
+.title-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  flex: 0 0 auto;
+  cursor: default;
+}
+
+.title-bar__title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-bar__filler {
+  flex: 1 1 auto;
+  height: 30px;
+}
+
+.title-bar__controls {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.title-bar__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-titleBar-activeForeground);
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.title-bar__control svg {
+  display: block;
+}
+
+.title-bar__control:hover {
+  background: var(--vscode-statusBarItem-hoverBackground);
+}
+
+.title-bar__control--close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+/* Legacy compatibility shims for unmigrated views (none currently). */
 .toolbar,
 .toolbar__actions,
 .toolbar__repo,
@@ -1052,51 +1117,6 @@ body.is-resizing-sidebar * {
   padding-left: 0;
 }
 
-/* Current-branch summary card at the top of the Branches view */
-.current-branch {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 12px 14px;
-  border-bottom: 1px solid var(--vscode-sideBar-border);
-  background: var(--vscode-editorGroupHeader-tabsBackground);
-}
-
-.current-branch__heading {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.current-branch__name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--vscode-foreground);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.current-branch__upstream {
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground);
-}
-
-.current-branch__upstream--missing {
-  color: var(--vscode-gitDecoration-untrackedResourceForeground);
-}
-
-.current-branch__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-
 /* Branches view filter input */
 .branches-filter {
   display: flex;
@@ -1137,6 +1157,24 @@ body.is-resizing-sidebar * {
 
 .scm-row--placeholder:hover {
   background: transparent;
+}
+
+/* Branch row: bold + green check for the currently checked-out branch */
+.branch-row.is-current {
+  background: transparent;
+  color: var(--vscode-foreground);
+}
+
+.branch-row.is-current:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.branch-row.is-current .scm-row__name {
+  font-weight: 600;
+}
+
+.branch-row.is-current .scm-row__icon {
+  color: var(--vscode-gitDecoration-untrackedResourceForeground);
 }
 
 /* SCM file row (UX-SPEC §3.1): 22px, hover-only actions, status letter on right */
@@ -1542,6 +1580,34 @@ body.is-resizing-sidebar * {
   gap: 12px;
   padding: 12px;
   overflow-y: auto;
+}
+
+/* Confirm modal */
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm-modal__body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vscode-foreground);
+}
+
+.confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vscode-button--danger {
+  background: var(--vscode-errorForeground);
+  color: var(--vscode-button-foreground);
+}
+
+.vscode-button--danger:hover:not(:disabled) {
+  filter: brightness(0.92);
 }
 
 /* Input modal — VS Code-style text prompt */

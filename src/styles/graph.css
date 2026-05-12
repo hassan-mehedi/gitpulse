@@ -109,25 +109,30 @@
 }
 
 .graph-row__content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.graph-row__title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   font-size: 13px;
 }
 
 .graph-row__message {
+  /* Message yields space FIRST (basis 0) so ref pills stay fully readable when
+     the sidebar is narrow. */
+  flex: 1 1 0;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Container holding HEAD / branch / tag pills. Keeps its natural size so the
+   pills stay fully readable; the message shrinks to make room. */
+.graph-row__refs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -160,21 +165,17 @@
   color: var(--vscode-foreground);
 }
 
-.graph-row__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.graph-row__author {
+  flex: 0 0 auto;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
   white-space: nowrap;
-  justify-self: end;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.graph-row__sha {
-  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
-}
-
-.graph-row.is-active .graph-row__meta {
+.graph-row.is-active .graph-row__author {
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -339,6 +340,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex: 1;
   height: 100%;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
@@ -398,6 +400,9 @@
 .commit-detail__split {
   display: grid;
   grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  /* Bound the row so grid items can `overflow-y: auto` properly. Without an
+     explicit row track the row would grow to content height and never scroll. */
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -406,6 +411,7 @@
   border-right: 1px solid var(--vscode-editorGroup-border);
   background: var(--vscode-sideBar-background);
   overflow-y: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -431,8 +437,36 @@
   padding-left: 0;
 }
 
+/* Diff column = fixed toolbar on top + independently scrollable body */
+.commit-detail__diff-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.commit-detail__diff-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 35px;
+  padding: 0 8px 0 12px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  flex: 0 0 auto;
+}
+
+.commit-detail__diff-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .commit-detail__diff {
-  overflow-y: auto;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -443,14 +477,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: var(--vscode-editorGroupHeader-tabsBackground);
-  border-radius: 2px;
   font-family: var(--vscode-editor-font-family, "Menlo", monospace);
   font-size: 12px;
   color: var(--vscode-foreground);
-  align-self: flex-start;
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -464,6 +494,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
   padding: 48px 18px;
   color: var(--vscode-descriptionForeground);
   font-size: 13px;

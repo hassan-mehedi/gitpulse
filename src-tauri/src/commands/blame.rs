@@ -17,3 +17,12 @@ pub async fn git_blame(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn git_blame_line(
+    repo_path: String,
+    file: String,
+    line: usize,
+) -> Result<Option<BlameLine>, GitError> {
+    blame::blame_line(Path::new(&repo_path), &file, line).await
+}

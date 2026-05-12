@@ -58,6 +58,14 @@ export async function gitDiffFile(repoPath: string, file: string, staged = false
   return gitInvoke("git_diff_file", { repoPath, file, staged });
 }
 
+export async function gitBlameLine(
+  repoPath: string,
+  file: string,
+  line: number
+): Promise<BlameLine | null> {
+  return gitInvoke("git_blame_line", { repoPath, file, line });
+}
+
 export async function gitDiffStat(repoPath: string): Promise<DiffStat> {
   return gitInvoke("git_diff_stat", { repoPath });
 }

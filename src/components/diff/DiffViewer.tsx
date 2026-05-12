@@ -352,6 +352,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
               diff.hunks.map((hunk, index) => (
                 <DiffHunk
                   filePath={change.path}
+                  repoPath={repo.path}
                   key={`${hunk.header}-${index}`}
                   hunk={hunk}
                   hunkIndex={index}

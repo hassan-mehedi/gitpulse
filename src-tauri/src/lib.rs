@@ -34,6 +34,7 @@ pub fn run() {
             commands::repo::git_get_user_info,
             commands::repo::git_version,
             commands::blame::git_blame,
+            commands::blame::git_blame_line,
             commands::branch::git_branches,
             commands::branch::git_current_branch,
             commands::branch::git_create_branch,

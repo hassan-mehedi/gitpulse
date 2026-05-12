@@ -234,31 +234,35 @@ export function CommitGraphList() {
                     </svg>
                   </div>
                   <div className="graph-row__content">
-                    <div className="graph-row__title">
-                      <span className="graph-row__message">{node.message}</span>
-                      {isHead ? <span className="graph-row__head">HEAD</span> : null}
-                      {branchRefs.map((ref) => (
-                        <span
-                          className="graph-row__ref"
-                          key={`${node.sha}-ref-${ref}`}
-                        >
-                          {ref.replace(/^HEAD -> /, "")}
-                        </span>
-                      ))}
-                      {tagRefs.map((ref) => (
-                        <span
-                          className="graph-row__tag"
-                          key={`${node.sha}-tag-${ref}`}
-                        >
-                          {ref.replace(/^tag: /, "")}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="graph-row__meta">
-                      <span className="graph-row__sha">{node.shortSha}</span>
-                      <span>{node.author}</span>
-                      <span>{node.date}</span>
-                    </div>
+                    <span className="graph-row__message" title={node.message}>
+                      {node.message}
+                    </span>
+                    {isHead || branchRefs.length > 0 || tagRefs.length > 0 ? (
+                      <div className="graph-row__refs">
+                        {isHead ? <span className="graph-row__head">HEAD</span> : null}
+                        {branchRefs.map((ref) => (
+                          <span
+                            className="graph-row__ref"
+                            key={`${node.sha}-ref-${ref}`}
+                            title={ref}
+                          >
+                            {ref.replace(/^HEAD -> /, "")}
+                          </span>
+                        ))}
+                        {tagRefs.map((ref) => (
+                          <span
+                            className="graph-row__tag"
+                            key={`${node.sha}-tag-${ref}`}
+                            title={ref}
+                          >
+                            {ref.replace(/^tag: /, "")}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <span className="graph-row__author" title={`${node.author} · ${node.date}`}>
+                      {formatRelativeTime(node.date) || node.author}
+                    </span>
                   </div>
                 </button>
               </div>
@@ -321,6 +325,20 @@ export function CommitGraphList() {
       />
     </>
   );
+}
+
+/** Shows "5m", "2d", "3w", "1y" etc. given an ISO 8601 timestamp. */
+function formatRelativeTime(iso: string): string {
+  const date = Date.parse(iso);
+  if (!Number.isFinite(date)) return "";
+  const seconds = Math.floor((Date.now() - date) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 86_400 * 7) return `${Math.floor(seconds / 86_400)}d`;
+  if (seconds < 86_400 * 30) return `${Math.floor(seconds / (86_400 * 7))}w`;
+  if (seconds < 86_400 * 365) return `${Math.floor(seconds / (86_400 * 30))}mo`;
+  return `${Math.floor(seconds / (86_400 * 365))}y`;
 }
 
 function visibleLaneCount(

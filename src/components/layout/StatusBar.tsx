@@ -5,10 +5,29 @@ import { useGit } from "../../hooks/useGit";
 import { useProgressStore } from "../../stores/progress";
 import { useNotificationStore } from "../../stores/notifications";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { useInlineBlameStore } from "../../stores/inlineBlame";
 import { gitFetchAll, gitSync } from "../../lib/git";
 
 interface StatusBarProps {
   onOpenBranchPicker?: () => void;
+}
+
+function formatRelativeBlame(unixOrIso: string): string {
+  // The blame parser emits author-time as a unix timestamp.
+  const asNumber = Number(unixOrIso);
+  const seconds = Number.isFinite(asNumber) && asNumber > 0
+    ? Math.floor(Date.now() / 1000) - asNumber
+    : Math.floor((Date.now() - Date.parse(unixOrIso)) / 1000);
+  if (!Number.isFinite(seconds) || seconds < 0) return unixOrIso;
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} hours ago`;
+  if (seconds < 86_400 * 7) return `${Math.floor(seconds / 86_400)} days ago`;
+  if (seconds < 86_400 * 30)
+    return `${Math.floor(seconds / (86_400 * 7))} weeks ago`;
+  if (seconds < 86_400 * 365)
+    return `${Math.floor(seconds / (86_400 * 30))} months ago`;
+  return `${Math.floor(seconds / (86_400 * 365))} years ago`;
 }
 
 export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
@@ -17,6 +36,7 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const progressItems = useProgressStore((state) => state.items);
   const notifications = useNotificationStore((state) => state.items);
+  const blame = useInlineBlameStore((state) => state.result);
 
   const activeProgress = useMemo(
     () => [...progressItems].sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null,
@@ -98,6 +118,17 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
       </div>
 
       <div className="status-bar__cluster status-bar__cluster--right">
+        {blame ? (
+          <span
+            className="status-bar__item status-bar__item--static status-bar__blame"
+            title={`${blame.author} · ${blame.summary} · ${blame.sha.slice(0, 7)}`}
+          >
+            <Codicon name="git-commit" size={13} />
+            <span>
+              {blame.author || "Unknown"} ({formatRelativeBlame(blame.date)})
+            </span>
+          </span>
+        ) : null}
         {isOperationActive ? (
           <span className="status-bar__item status-bar__item--static">
             <Codicon name="sync" size={13} spin />

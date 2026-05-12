@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityBar } from "./ActivityBar";
 import { StatusBar } from "./StatusBar";
+import { TitleBar } from "./TitleBar";
 import { SourceControlPanel } from "../source-control/SourceControlPanel";
 import { DiffViewer } from "../diff/DiffViewer";
 import { ToastViewport } from "../shared/ToastViewport";
@@ -199,6 +200,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <TitleBar />
       <div
         className={`main-layout${
           activeView === "blame" ? " main-layout--no-sidebar" : ""
