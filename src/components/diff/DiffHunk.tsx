@@ -6,12 +6,14 @@ interface DiffHunkProps {
   filePath: string;
   /** Repo path — forwarded to DiffLine for inline-blame on hover. */
   repoPath?: string;
+  enableBlame?: boolean;
   hunk: DiffHunkType;
   hunkIndex: number;
   isActive: boolean;
   mode: "split" | "inline";
   theme: ThemeMode;
   onFocus: () => void;
+  allowLineSelection?: boolean;
   selectedLineIndices: number[];
   onToggleLine: (hunkIndex: number, lineIndex: number) => void;
 }
@@ -19,12 +21,14 @@ interface DiffHunkProps {
 export function DiffHunk({
   filePath,
   repoPath,
+  enableBlame = true,
   hunk,
   hunkIndex,
   isActive,
   mode,
   theme,
   onFocus,
+  allowLineSelection = true,
   selectedLineIndices,
   onToggleLine
 }: DiffHunkProps) {
@@ -50,11 +54,12 @@ export function DiffHunk({
                 <DiffLine
                   filePath={filePath}
                   repoPath={repoPath}
+                  enableBlame={enableBlame}
                   key={`old-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.oldLineno}
                   onToggle={() => onToggleLine(hunkIndex, index)}
-                  selectable={line.lineType !== "context"}
+                  selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
                 />
@@ -68,11 +73,12 @@ export function DiffHunk({
                 <DiffLine
                   filePath={filePath}
                   repoPath={repoPath}
+                  enableBlame={enableBlame}
                   key={`new-${hunk.header}-${index}`}
                   line={line}
                   lineNumber={line.newLineno}
                   onToggle={() => onToggleLine(hunkIndex, index)}
-                  selectable={line.lineType !== "context"}
+                  selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
                 />
@@ -86,11 +92,12 @@ export function DiffHunk({
             <DiffLine
               filePath={filePath}
               repoPath={repoPath}
+              enableBlame={enableBlame}
               key={`inline-${hunk.header}-${index}`}
               line={line}
               lineNumber={line.newLineno ?? line.oldLineno}
               onToggle={() => onToggleLine(hunkIndex, index)}
-              selectable={line.lineType !== "context"}
+              selectable={allowLineSelection && line.lineType !== "context"}
               selected={selected.has(index)}
               theme={theme}
             />

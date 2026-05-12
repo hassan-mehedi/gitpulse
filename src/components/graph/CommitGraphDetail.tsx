@@ -2,50 +2,64 @@ import { useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { FileIcon } from "../shared/FileIcon";
 import { FileTree } from "../shared/FileTree";
-import { DiffHunk } from "../diff/DiffHunk";
+import { DiffViewer } from "../diff/DiffViewer";
+import { TabStrip } from "../diff/TabStrip";
 import { useRepo } from "../../hooks/useRepo";
 import { useGraphStore } from "../../stores/graph";
-import { useSettingsStore } from "../../stores/settings";
+import { useDiffStore } from "../../stores/diff";
 import { gitCommitDiff } from "../../lib/git";
-import type { CommitFileStat, FileDiff } from "../../types/git";
+import type { CommitDetail, CommitFileStat, FileDiff } from "../../types/git";
 
 export function CommitGraphDetail() {
   const { activeRepo } = useRepo();
-  const theme = useSettingsStore((state) => state.theme);
   const selectedCommitDetail = useGraphStore((state) => state.selectedCommitDetail);
   const selectedCommitSha = useGraphStore((state) => state.selectedCommitSha);
+  const activeFilePath = useDiffStore((state) => state.activeFilePath);
+  const activeScope = useDiffStore((state) => state.activeScope);
+  const setActiveCommitDiff = useDiffStore((state) => state.setActiveCommitDiff);
   const [commitFileDiffs, setCommitFileDiffs] = useState<FileDiff[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [filesViewMode, setFilesViewMode] = useState<"list" | "tree">("tree");
-  const [diffMode, setDiffMode] = useState<"split" | "inline">("split");
 
   useEffect(() => {
-    if (!activeRepo || !selectedCommitSha) {
+    if (!activeRepo || !selectedCommitSha || !selectedCommitDetail) {
       setCommitFileDiffs([]);
       setSelectedFile(null);
       return;
     }
+
     let cancelled = false;
     void gitCommitDiff(activeRepo.path, selectedCommitSha)
       .then((diffs) => {
         if (cancelled) return;
         setCommitFileDiffs(diffs);
-        setSelectedFile(diffs[0]?.file ?? null);
+        const firstDiff = diffs[0] ?? null;
+        setSelectedFile(firstDiff?.file ?? null);
+        if (firstDiff) {
+          setActiveCommitDiff(activeRepo, selectedCommitDetail, firstDiff);
+        }
       })
       .catch(() => {
         if (cancelled) return;
         setCommitFileDiffs([]);
         setSelectedFile(null);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [activeRepo?.path, selectedCommitSha]);
+  }, [activeRepo, selectedCommitDetail, selectedCommitSha, setActiveCommitDiff]);
 
-  const activeFileDiff = useMemo(
-    () => commitFileDiffs.find((diff) => diff.file === selectedFile) ?? null,
-    [commitFileDiffs, selectedFile]
+  const commitFiles = useMemo(
+    () => commitFileDiffs.map((diff) => toCommitFileStat(diff)),
+    [commitFileDiffs]
   );
+
+  useEffect(() => {
+    if (activeScope === "graph" && activeFilePath) {
+      setSelectedFile(activeFilePath);
+    }
+  }, [activeFilePath, activeScope]);
 
   if (!selectedCommitDetail) {
     return (
@@ -78,12 +92,10 @@ export function CommitGraphDetail() {
       <div className="commit-detail__split">
         <aside className="commit-detail__files">
           <div className="commit-detail__files-title">
-            <span>Changed Files ({selectedCommitDetail.files.length})</span>
+            <span>Changed Files ({commitFiles.length || selectedCommitDetail.files.length})</span>
             <button
               className="view-action"
-              onClick={() =>
-                setFilesViewMode((m) => (m === "tree" ? "list" : "tree"))
-              }
+              onClick={() => setFilesViewMode((mode) => (mode === "tree" ? "list" : "tree"))}
               title={filesViewMode === "tree" ? "View as List" : "View as Tree"}
               type="button"
             >
@@ -96,7 +108,7 @@ export function CommitGraphDetail() {
 
           {filesViewMode === "tree" ? (
             <FileTree<CommitFileStat>
-              entries={selectedCommitDetail.files.map((file) => ({
+              entries={commitFiles.map((file) => ({
                 path: file.file,
                 data: file
               }))}
@@ -106,78 +118,45 @@ export function CommitGraphDetail() {
                 <FileRow
                   file={entry.data}
                   isActive={selectedFile === entry.data.file}
-                  onSelect={() => setSelectedFile(entry.data.file)}
+                  onSelect={() =>
+                    handleSelectFile(
+                      entry.data.file,
+                      commitFileDiffs,
+                      activeRepo,
+                      selectedCommitDetail,
+                      setSelectedFile,
+                      setActiveCommitDiff
+                    )
+                  }
                 />
               )}
             />
           ) : (
-            selectedCommitDetail.files.map((file) => (
+            commitFiles.map((file) => (
               <FileRow
                 key={`${selectedCommitDetail.sha}-${file.file}`}
                 file={file}
                 isActive={selectedFile === file.file}
-                onSelect={() => setSelectedFile(file.file)}
+                onSelect={() =>
+                  handleSelectFile(
+                    file.file,
+                    commitFileDiffs,
+                    activeRepo,
+                    selectedCommitDetail,
+                    setSelectedFile,
+                    setActiveCommitDiff
+                  )
+                }
               />
             ))
           )}
         </aside>
 
         <section className="commit-detail__diff-pane">
-          {activeFileDiff ? (
+          {commitFiles.length > 0 ? (
             <>
-              <div className="commit-detail__diff-toolbar">
-                <div className="commit-detail__diff-title" title={activeFileDiff.file}>
-                  <FileIcon path={activeFileDiff.file} size={14} />
-                  <span>{activeFileDiff.file}</span>
-                </div>
-                <div className="commit-detail__diff-actions">
-                  <button
-                    className={`view-action${diffMode === "split" ? " is-active" : ""}`}
-                    onClick={() => setDiffMode("split")}
-                    title="Side-by-side"
-                    aria-label="Side-by-side"
-                    type="button"
-                  >
-                    <Codicon name="split-horizontal" size={16} />
-                  </button>
-                  <button
-                    className={`view-action${diffMode === "inline" ? " is-active" : ""}`}
-                    onClick={() => setDiffMode("inline")}
-                    title="Inline"
-                    aria-label="Inline"
-                    type="button"
-                  >
-                    <Codicon name="list-flat" size={16} />
-                  </button>
-                </div>
-              </div>
-              <div className="commit-detail__diff">
-                {activeFileDiff.isBinary ? (
-                  <div className="diff-viewer__placeholder">
-                    Binary file — no textual diff.
-                  </div>
-                ) : activeFileDiff.hunks.length === 0 ? (
-                  <div className="diff-viewer__placeholder">
-                    No textual changes to display.
-                  </div>
-                ) : (
-                  activeFileDiff.hunks.map((hunk, index) => (
-                    <DiffHunk
-                      filePath={activeFileDiff.file}
-                      repoPath={activeRepo?.path}
-                      hunk={hunk}
-                      hunkIndex={index}
-                      isActive={false}
-                      key={`${activeFileDiff.file}-${hunk.header}-${index}`}
-                      mode={diffMode}
-                      onFocus={() => {}}
-                      onToggleLine={() => {}}
-                      selectedLineIndices={[]}
-                      theme={theme}
-                    />
-                  ))
-                )}
-              </div>
+              <TabStrip scope="graph" />
+              <DiffViewer activeView="graph" />
             </>
           ) : (
             <div className="commit-detail__diff-placeholder">
@@ -188,6 +167,44 @@ export function CommitGraphDetail() {
       </div>
     </div>
   );
+}
+
+function handleSelectFile(
+  filePath: string,
+  diffs: FileDiff[],
+  activeRepo: ReturnType<typeof useRepo>["activeRepo"],
+  commit: CommitDetail,
+  setSelectedFile: (file: string) => void,
+  setActiveCommitDiff: ReturnType<typeof useDiffStore.getState>["setActiveCommitDiff"]
+) {
+  setSelectedFile(filePath);
+  const diff = diffs.find((entry) => entry.file === filePath);
+  if (activeRepo && diff) {
+    setActiveCommitDiff(activeRepo, commit, diff);
+  }
+}
+
+function toCommitFileStat(diff: FileDiff): CommitFileStat {
+  return {
+    file: diff.file,
+    additions: diff.hunks.reduce(
+      (count, hunk) => count + hunk.lines.filter((line) => line.lineType === "add").length,
+      0
+    ),
+    deletions: diff.hunks.reduce(
+      (count, hunk) =>
+        count + hunk.lines.filter((line) => line.lineType === "remove").length,
+      0
+    ),
+    status: diff.status ?? inferCommitFileStatus(diff)
+  };
+}
+
+function inferCommitFileStatus(diff: FileDiff) {
+  if (diff.oldFile && diff.oldFile !== diff.file) {
+    return "R";
+  }
+  return "M";
 }
 
 function FileRow({

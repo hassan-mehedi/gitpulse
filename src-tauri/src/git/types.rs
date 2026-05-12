@@ -64,6 +64,7 @@ pub struct DiffHunk {
 pub struct FileDiff {
     pub file: String,
     pub old_file: Option<String>,
+    pub status: Option<String>,
     pub hunks: Vec<DiffHunk>,
     pub is_binary: bool,
 }

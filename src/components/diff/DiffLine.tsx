@@ -8,6 +8,7 @@ interface DiffLineProps {
   filePath: string;
   /** Repo path — needed to fetch inline blame for the hovered line. */
   repoPath?: string;
+  enableBlame?: boolean;
   line: DiffLineType;
   lineNumber?: number;
   selected?: boolean;
@@ -19,6 +20,7 @@ interface DiffLineProps {
 function DiffLineImpl({
   filePath,
   repoPath,
+  enableBlame = true,
   line,
   lineNumber,
   selected,
@@ -35,7 +37,7 @@ function DiffLineImpl({
   const blameLine = line.oldLineno ?? line.newLineno ?? lineNumber;
 
   function handleEnter() {
-    if (!repoPath || !blameLine) return;
+    if (!enableBlame || !repoPath || !blameLine) return;
     setBlameTarget({ repoPath, file: filePath, line: blameLine });
   }
 

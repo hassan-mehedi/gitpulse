@@ -6,13 +6,17 @@ use crate::git::parser::{parse_diff, parse_show_commit};
 use crate::git::runner::GitRunner;
 use crate::git::types::{CommitDetail, FileDiff};
 
+const EMPTY_TREE_SHA: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 pub async fn show_commit(repo_path: &Path, sha: &str) -> Result<CommitDetail, GitError> {
     let output = show_commit_header(repo_path, sha).await?;
     parse_show_commit(&output)
 }
 
 pub async fn commit_diff(repo_path: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
-    let range = format!("{sha}~1..{sha}");
+    let parents = GitRunner::run(repo_path, &["rev-list", "--parents", "-n", "1", sha]).await?;
+    let parent = parents.split_whitespace().nth(1);
+    let range = format!("{}..{sha}", parent.unwrap_or(EMPTY_TREE_SHA));
     let output = GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
     parse_multi_file_diff(&output)
 }

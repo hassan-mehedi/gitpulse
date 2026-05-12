@@ -445,6 +445,15 @@
   overflow: hidden;
 }
 
+.commit-detail__diff-pane > .tab-strip,
+.commit-detail__diff-pane > .diff-viewer {
+  min-height: 0;
+}
+
+.commit-detail__diff-pane > .diff-viewer {
+  flex: 1;
+}
+
 .commit-detail__diff-toolbar {
   display: flex;
   align-items: center;

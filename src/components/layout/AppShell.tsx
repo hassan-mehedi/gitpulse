@@ -237,7 +237,7 @@ export function AppShell() {
             <BlameView />
           ) : (
             <>
-              <TabStrip />
+              <TabStrip scope="source-control" />
               <DiffViewer activeView={activeView} />
             </>
           )}

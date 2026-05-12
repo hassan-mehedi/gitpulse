@@ -98,6 +98,7 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
 pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {
     let mut file = String::new();
     let mut old_file = None;
+    let mut status = None;
     let mut hunks = Vec::new();
     let mut current_hunk: Option<DiffHunk> = None;
     let mut old_lineno = 0usize;
@@ -118,6 +119,26 @@ pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {
 
         if line.starts_with("Binary files ") {
             is_binary = true;
+            continue;
+        }
+
+        if line.starts_with("new file mode ") {
+            status = Some("A".to_string());
+            continue;
+        }
+
+        if line.starts_with("deleted file mode ") {
+            status = Some("D".to_string());
+            continue;
+        }
+
+        if line.starts_with("rename from ") {
+            status = Some("R".to_string());
+            continue;
+        }
+
+        if line.starts_with("copy from ") {
+            status = Some("C".to_string());
             continue;
         }
 
@@ -182,6 +203,7 @@ pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {
     Ok(FileDiff {
         file,
         old_file,
+        status,
         hunks,
         is_binary,
     })

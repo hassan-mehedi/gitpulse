@@ -56,6 +56,7 @@ export interface DiffHunk {
 export interface FileDiff {
   file: string;
   oldFile?: string;
+  status?: string;
   hunks: DiffHunk[];
   isBinary: boolean;
 }

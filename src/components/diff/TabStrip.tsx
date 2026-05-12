@@ -2,10 +2,15 @@ import { memo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { FileIcon } from "../shared/FileIcon";
 import { useDiffStore } from "../../stores/diff";
+import type { ActivityView } from "../../types/git";
 
 const DRAG_TYPE = "application/x-gitpulse-tab";
 
-export const TabStrip = memo(function TabStrip() {
+interface TabStripProps {
+  scope?: Extract<ActivityView, "source-control" | "graph">;
+}
+
+export const TabStrip = memo(function TabStrip({ scope }: TabStripProps) {
   const tabs = useDiffStore((state) => state.tabs);
   const activeTabKey = useDiffStore((state) => state.activeTabKey);
   const selectTab = useDiffStore((state) => state.selectTab);
@@ -16,15 +21,16 @@ export const TabStrip = memo(function TabStrip() {
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [hoverSide, setHoverSide] = useState<"before" | "after">("before");
+  const visibleTabs = scope ? tabs.filter((tab) => tab.scope === scope) : tabs;
 
-  if (tabs.length === 0) {
+  if (visibleTabs.length === 0) {
     return null;
   }
 
   return (
     <div className="tab-strip" role="tablist">
-      {tabs.map((tab) => {
-        const name = tab.change.path.split("/").pop() ?? tab.change.path;
+      {visibleTabs.map((tab) => {
+        const name = tab.filePath.split("/").pop() ?? tab.filePath;
         const isActive = tab.key === activeTabKey;
         const isHover = hoverKey === tab.key && dragKey !== null && dragKey !== tab.key;
         return (
@@ -85,11 +91,19 @@ export const TabStrip = memo(function TabStrip() {
                 void closeTab(tab.key);
               }
             }}
-            title={tab.change.path}
+            title={
+              tab.kind === "commit"
+                ? `${tab.filePath} (${tab.commit.shortSha})`
+                : tab.filePath
+            }
           >
-            <FileIcon path={tab.change.path} size={16} className="tab__icon" />
+            <FileIcon path={tab.filePath} size={16} className="tab__icon" />
             <span className="tab__name">{name}</span>
-            {tab.staged ? <span className="tab__badge">staged</span> : null}
+            {tab.kind === "commit" ? (
+              <span className="tab__badge">{tab.commit.shortSha}</span>
+            ) : tab.staged ? (
+              <span className="tab__badge">staged</span>
+            ) : null}
             <button
               className="tab__close"
               onClick={(event) => {
