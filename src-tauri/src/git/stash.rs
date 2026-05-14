@@ -16,10 +16,14 @@ pub async fn push(
     repo_path: &Path,
     message: Option<&str>,
     include_untracked: bool,
+    staged: bool,
 ) -> Result<OperationResult, GitError> {
     let mut args = vec!["stash", "push"];
     if include_untracked {
         args.push("--include-untracked");
+    }
+    if staged {
+        args.push("--staged");
     }
     if let Some(message) = message.filter(|value| !value.trim().is_empty()) {
         args.push("-m");

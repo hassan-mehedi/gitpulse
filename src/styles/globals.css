@@ -1045,11 +1045,36 @@ button:disabled {
   border-right: 0;
 }
 
+.commit-input__primary:disabled {
+  opacity: 0.45;
+}
+
+.commit-input__primary.is-dimmed,
+.commit-input__chevron.is-dimmed {
+  opacity: 0.55;
+}
+
 .commit-input__chevron {
   width: 26px;
   padding: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--vscode-button-foreground) 35%, transparent);
+}
+
+.commit-input__menu {
+  top: calc(100% + 4px);
+  right: 0;
+  bottom: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.commit-input__menu .dropdown-menu__item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .commit-input__output {
@@ -1102,6 +1127,59 @@ button:disabled {
 
 .scm-sync-prompt__button {
   width: 100%;
+}
+
+.stage-all-prompt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  min-width: min(560px, calc(100vw - 64px));
+}
+
+.stage-all-prompt .codicon {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.stage-all-prompt__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--vscode-foreground);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.stage-all-prompt__body p {
+  margin: 0;
+}
+
+.stage-all-prompt__actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin: 18px -16px -16px;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.stage-all-prompt__actions .vscode-button {
+  height: 34px;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+.stage-all-prompt__actions .vscode-button:last-child {
+  border-right: 0;
+}
+
+.confirm-modal__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
 }
 
 /* Legacy class names — keep working for unmigrated views, restyle to flat. */
@@ -1350,6 +1428,17 @@ body.is-resizing-sidebar * {
   display: flex;
   align-items: center;
   gap: 0;
+}
+
+.view-title__menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.view-title__dropdown {
+  top: calc(100% + 4px);
+  right: 0;
+  bottom: auto;
 }
 
 .view-action {

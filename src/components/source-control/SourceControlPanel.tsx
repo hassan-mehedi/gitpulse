@@ -1,10 +1,19 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { ContextMenu } from "../shared/ContextMenu";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
-import { gitAddToGitignore, gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
+import {
+  gitAddToGitignore,
+  gitDiscardFile,
+  gitStashApply,
+  gitStashClear,
+  gitStashPop,
+  gitStashPush,
+  gitStageFile,
+  gitUnstageFile
+} from "../../lib/git";
 import {
   openFileInExternalEditor,
   pickRepositoryDirectory,
@@ -35,6 +44,7 @@ export function SourceControlPanel({
   const addTarget = useWorkspaceStore((state) => state.addTarget);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
+  const activeRepoId = useWorkspaceStore((state) => state.activeRepoId);
   const openDiff = useWorkspaceStore((state) => state.openDiff);
   const activeChange = useDiffStore((state) => state.activeChange);
   const activeStaged = useDiffStore((state) => state.staged);
@@ -43,10 +53,35 @@ export function SourceControlPanel({
 
   const [viewMode, setViewMode] = useState<"tree" | "list">("list");
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
 
   const selectedKey = activeChange
     ? `${activeStaged ? "s" : "u"}:${activeDiffRepo?.id ?? "unknown"}:${activeChange.path}`
     : null;
+  const activeRepo =
+    repositories.find((repo) => repo.id === activeRepoId) ?? repositories[0] ?? null;
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!overflowRef.current?.contains(event.target as Node)) {
+        setOverflowOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOverflowOpen(false);
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [overflowOpen]);
 
   const handleSelect = useCallback(
     (repo: Repository, change: FileChange, staged: boolean) => {
@@ -130,6 +165,16 @@ export function SourceControlPanel({
     await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch(() => {});
   }
 
+  function withActiveRepo(operation: (repo: Repository) => Promise<unknown>) {
+    if (!activeRepo) return;
+    setOverflowOpen(false);
+    setActiveRepo(activeRepo.id);
+    runGit(async () => {
+      await operation(activeRepo);
+      await refreshRepo(activeRepo.path);
+    }).catch(() => {});
+  }
+
   if (activeView !== "source-control") {
     return (
       <div className="empty-state">
@@ -179,14 +224,107 @@ export function SourceControlPanel({
           >
             <Codicon name="refresh" size={16} />
           </button>
-          <button
-            className="view-action"
-            onClick={() => setViewMode((value) => (value === "list" ? "tree" : "list"))}
-            title={viewMode === "list" ? "View as Tree" : "View as List"}
-            type="button"
-          >
-            <Codicon name={viewMode === "list" ? "list-tree" : "list-flat"} size={16} />
-          </button>
+          <div className="view-title__menu" ref={overflowRef}>
+            <button
+              className="view-action"
+              onClick={() => setOverflowOpen((value) => !value)}
+              title="More Actions"
+              aria-haspopup="menu"
+              aria-expanded={overflowOpen}
+              type="button"
+            >
+              <Codicon name="ellipsis" size={16} />
+            </button>
+            {overflowOpen ? (
+              <div className="dropdown-menu view-title__dropdown" role="menu">
+                <button
+                  className="dropdown-menu__item"
+                  onClick={() => {
+                    setViewMode((value) => (value === "list" ? "tree" : "list"));
+                    setOverflowOpen(false);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  {viewMode === "list" ? "View as Tree" : "View as List"}
+                </button>
+                <button
+                  className="dropdown-menu__item"
+                  disabled={repositories.length === 0}
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    void handleRefreshAll();
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Refresh
+                </button>
+                <div className="dropdown-menu__separator" role="separator" />
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo}
+                  onClick={() =>
+                    withActiveRepo((repo) => gitStashPush(repo.path, undefined, false, false))
+                  }
+                  role="menuitem"
+                  type="button"
+                >
+                  Stash
+                </button>
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo}
+                  onClick={() =>
+                    withActiveRepo((repo) => gitStashPush(repo.path, undefined, true, false))
+                  }
+                  role="menuitem"
+                  type="button"
+                >
+                  Stash (Include Untracked)
+                </button>
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo}
+                  onClick={() =>
+                    withActiveRepo((repo) => gitStashPush(repo.path, undefined, false, true))
+                  }
+                  role="menuitem"
+                  type="button"
+                >
+                  Stash Staged
+                </button>
+                <div className="dropdown-menu__separator" role="separator" />
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo || activeRepo.stashCount === 0}
+                  onClick={() => withActiveRepo((repo) => gitStashApply(repo.path))}
+                  role="menuitem"
+                  type="button"
+                >
+                  Apply Latest Stash
+                </button>
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo || activeRepo.stashCount === 0}
+                  onClick={() => withActiveRepo((repo) => gitStashPop(repo.path))}
+                  role="menuitem"
+                  type="button"
+                >
+                  Pop Latest Stash
+                </button>
+                <button
+                  className="dropdown-menu__item"
+                  disabled={!activeRepo || activeRepo.stashCount === 0}
+                  onClick={() => withActiveRepo((repo) => gitStashClear(repo.path))}
+                  role="menuitem"
+                  type="button"
+                >
+                  Drop All Stashes
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

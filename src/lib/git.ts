@@ -515,9 +515,10 @@ export async function gitStashList(repoPath: string): Promise<StashEntry[]> {
 export async function gitStashPush(
   repoPath: string,
   message?: string,
-  includeUntracked = false
+  includeUntracked = false,
+  staged = false
 ): Promise<OperationResult> {
-  return gitInvoke("git_stash_push", { repoPath, message, includeUntracked });
+  return gitInvoke("git_stash_push", { repoPath, message, includeUntracked, staged });
 }
 
 export async function gitStashPop(repoPath: string, stashRef?: string): Promise<OperationResult> {

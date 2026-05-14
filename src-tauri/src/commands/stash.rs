@@ -14,11 +14,13 @@ pub async fn git_stash_push(
     repo_path: String,
     message: Option<String>,
     include_untracked: Option<bool>,
+    staged: Option<bool>,
 ) -> Result<OperationResult, GitError> {
     stash::push(
         Path::new(&repo_path),
         message.as_deref(),
         include_untracked.unwrap_or(false),
+        staged.unwrap_or(false),
     )
     .await
 }

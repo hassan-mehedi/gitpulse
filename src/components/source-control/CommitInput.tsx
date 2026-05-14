@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Codicon } from "../shared/Codicon";
+import { Modal } from "../shared/Modal";
 import {
   gitCommit,
   gitCommitAll,
   gitCommitAmend,
   gitPush,
   gitStageFiles,
-  gitStashPush,
   gitSync,
   gitUndoLastCommit
 } from "../../lib/git";
@@ -27,10 +27,7 @@ type CommitAction =
   | "commit-push"
   | "commit-sync"
   | "undo"
-  | "amend"
-  | "stash"
-  | "stash-untracked"
-  | "stash-all";
+  | "amend";
 
 interface MenuEntry {
   id: CommitAction;
@@ -41,15 +38,9 @@ interface MenuEntry {
 
 const MENU: MenuEntry[] = [
   { id: "commit", label: "Commit", needsMessage: true },
-  { id: "commit-staged", label: "Commit Staged", needsMessage: true },
-  { id: "commit-all", label: "Commit All", needsMessage: true },
+  { id: "amend", label: "Commit (Amend)" },
   { id: "commit-push", label: "Commit Staged & Push", needsMessage: true },
-  { id: "commit-sync", label: "Commit Staged & Sync", needsMessage: true },
-  { id: "undo", label: "Undo Last Commit", separatorBefore: true },
-  { id: "amend", label: "Amend Last Commit" },
-  { id: "stash", label: "Stash", separatorBefore: true },
-  { id: "stash-untracked", label: "Stash (Include Untracked)" },
-  { id: "stash-all", label: "Stash All" }
+  { id: "commit-sync", label: "Commit Staged & Sync", needsMessage: true }
 ];
 
 const HISTORY_LIMIT = 30;
@@ -61,6 +52,7 @@ export function CommitInput({ repo }: CommitInputProps) {
   const [history, setHistory] = useState<string[]>(() => readHistory(historyKey));
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [lastGitOutput, setLastGitOutput] = useState<string | null>(null);
+  const [stageAllPrompt, setStageAllPrompt] = useState<CommitAction | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const runGit = useGit();
@@ -77,6 +69,12 @@ export function CommitInput({ repo }: CommitInputProps) {
   );
   const commitIdentity =
     assignedIdentity.source === "gitpulse" ? assignedIdentity.identity : undefined;
+  const smartCommitChanges = repo.changes.filter(
+    (change) => change.status !== "?" && change.status !== "U"
+  );
+  const stageableChanges = repo.changes.filter((change) => change.status !== "U");
+  const hasStageableChanges = stageableChanges.length > 0;
+  const hasCommitMessage = message.trim().length > 0;
 
   useEffect(() => {
     setHistory(readHistory(historyKey));
@@ -119,13 +117,21 @@ export function CommitInput({ repo }: CommitInputProps) {
       return;
     }
 
+    await executeCommitAction(action, trimmed);
+  }
+
+  async function executeCommitAction(
+    action: CommitAction,
+    trimmed: string,
+    stageAllBeforeCommit = false
+  ) {
     setLastGitOutput(null);
     try {
       await runGit(async () => {
         switch (action) {
           case "commit":
           case "commit-staged":
-            await commitSmart(trimmed);
+            await commitSmart(trimmed, stageAllBeforeCommit);
             rememberMessage(trimmed);
             break;
           case "commit-all":
@@ -133,12 +139,12 @@ export function CommitInput({ repo }: CommitInputProps) {
             rememberMessage(trimmed);
             break;
           case "commit-push":
-            await commitSmart(trimmed);
+            await commitSmart(trimmed, stageAllBeforeCommit);
             rememberMessage(trimmed);
             await gitPush(repo.path);
             break;
           case "commit-sync":
-            await commitSmart(trimmed);
+            await commitSmart(trimmed, stageAllBeforeCommit);
             rememberMessage(trimmed);
             await gitSync(repo.path);
             break;
@@ -148,15 +154,6 @@ export function CommitInput({ repo }: CommitInputProps) {
             break;
           case "undo":
             await gitUndoLastCommit(repo.path);
-            break;
-          case "stash":
-            await gitStashPush(repo.path, trimmed || undefined, false);
-            break;
-          case "stash-untracked":
-            await gitStashPush(repo.path, trimmed || undefined, true);
-            break;
-          case "stash-all":
-            await gitStashPush(repo.path, trimmed || undefined, true);
             break;
         }
 
@@ -175,14 +172,16 @@ export function CommitInput({ repo }: CommitInputProps) {
     }
   }
 
-  async function commitSmart(trimmed: string) {
-    if (smartCommit && repo.staged.length === 0) {
-      const tracked = repo.changes
-        .filter((change) => change.status !== "?" && change.status !== "U")
-        .map((change) => change.path);
-      if (tracked.length > 0) {
-        await gitStageFiles(repo.path, tracked);
+  async function commitSmart(trimmed: string, stageAllBeforeCommit = false) {
+    if (repo.staged.length === 0) {
+      if ((!smartCommit && !stageAllBeforeCommit) || stageableChanges.length === 0) {
+        return;
       }
+      const nextChanges = stageAllBeforeCommit ? stageableChanges : smartCommitChanges;
+      if (nextChanges.length === 0) {
+        return;
+      }
+      await gitStageFiles(repo.path, nextChanges.map((change) => change.path));
     }
     await gitCommit(repo.path, trimmed, signCommits, commitIdentity);
   }
@@ -196,7 +195,23 @@ export function CommitInput({ repo }: CommitInputProps) {
 
   function runAction(action: CommitAction) {
     setMenuOpen(false);
+    const entry = MENU.find((item) => item.id === action);
+    if (entry?.needsMessage && !message.trim()) {
+      return;
+    }
+    if (isCommitAction(action) && repo.staged.length === 0 && hasStageableChanges) {
+      setStageAllPrompt(action);
+      return;
+    }
     void execute(action);
+  }
+
+  function confirmStageAndCommit() {
+    const action = stageAllPrompt;
+    setStageAllPrompt(null);
+    if (!action) return;
+    const trimmed = message.trim();
+    void executeCommitAction(action, trimmed, true);
   }
 
   function navigateHistory(direction: -1 | 1) {
@@ -209,9 +224,7 @@ export function CommitInput({ repo }: CommitInputProps) {
   }
 
   const placeholder = `Message (Ctrl+Enter to commit on '${repo.branch}')`;
-  const firstLineLength = message.split(/\r?\n/, 1)[0]?.length ?? 0;
-  const counterTone =
-    firstLineLength > 72 ? "error" : firstLineLength > 50 ? "warning" : "ok";
+  const commitToneDimmed = !hasCommitMessage;
 
   return (
     <div className="commit-input">
@@ -242,26 +255,22 @@ export function CommitInput({ repo }: CommitInputProps) {
         rows={1}
         value={message}
       />
-      <div className="commit-input__meta">
-        <span className={`commit-input__counter commit-input__counter--${counterTone}`}>
-          {firstLineLength}/72
-        </span>
-        <span className="commit-input__hint">Subject: 50 ideal, 72 max</span>
-        {history.length > 0 ? (
-          <span className="commit-input__hint">↑/↓ history</span>
-        ) : null}
-      </div>
       <div className="commit-input__actions" ref={menuRef}>
         <button
-          className="vscode-button vscode-button--primary commit-input__primary"
+          className={`vscode-button vscode-button--primary commit-input__primary${
+            commitToneDimmed ? " is-dimmed" : ""
+          }`}
           onClick={() => runAction("commit")}
+          title={!message.trim() ? "Enter a commit message" : "Commit"}
           type="button"
         >
           <Codicon name="check" size={14} />
           <span>Commit</span>
         </button>
         <button
-          className="vscode-button vscode-button--primary commit-input__chevron"
+          className={`vscode-button vscode-button--primary commit-input__chevron${
+            commitToneDimmed ? " is-dimmed" : ""
+          }`}
           onClick={() => setMenuOpen((value) => !value)}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
@@ -271,7 +280,7 @@ export function CommitInput({ repo }: CommitInputProps) {
           <Codicon name="chevron-down" size={14} />
         </button>
         {menuOpen ? (
-          <div className="dropdown-menu" role="menu">
+          <div className="dropdown-menu commit-input__menu" role="menu">
             {MENU.map((entry, index) => (
               <DropdownItem
                 key={entry.id}
@@ -289,7 +298,63 @@ export function CommitInput({ repo }: CommitInputProps) {
           <pre>{lastGitOutput}</pre>
         </details>
       ) : null}
+      <StageAllCommitPrompt
+        isOpen={stageAllPrompt !== null}
+        onAlways={confirmStageAndCommit}
+        onCancel={() => setStageAllPrompt(null)}
+        onNever={() => setStageAllPrompt(null)}
+        onYes={confirmStageAndCommit}
+      />
     </div>
+  );
+}
+
+function isCommitAction(action: CommitAction) {
+  return (
+    action === "commit" ||
+    action === "commit-staged" ||
+    action === "commit-push" ||
+    action === "commit-sync"
+  );
+}
+
+function StageAllCommitPrompt({
+  isOpen,
+  onAlways,
+  onCancel,
+  onNever,
+  onYes
+}: {
+  isOpen: boolean;
+  onAlways: () => void;
+  onCancel: () => void;
+  onNever: () => void;
+  onYes: () => void;
+}) {
+  return (
+    <Modal isOpen={isOpen} title="GitPulse" onClose={onCancel}>
+      <div className="stage-all-prompt">
+        <Codicon name="warning" size={44} />
+        <div className="stage-all-prompt__body">
+          <p>There are no staged changes to commit.</p>
+          <p>Would you like to stage all your changes and commit them directly?</p>
+        </div>
+      </div>
+      <div className="stage-all-prompt__actions">
+        <button className="vscode-button" onClick={onNever} type="button">
+          Never
+        </button>
+        <button className="vscode-button" onClick={onAlways} type="button">
+          Always
+        </button>
+        <button className="vscode-button" onClick={onCancel} type="button">
+          Cancel
+        </button>
+        <button className="vscode-button vscode-button--primary" onClick={onYes} type="button">
+          Yes
+        </button>
+      </div>
+    </Modal>
   );
 }
 

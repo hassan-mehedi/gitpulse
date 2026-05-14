@@ -15,6 +15,9 @@ export function SettingsPanel() {
   const smartCommit = useSettingsStore((state) => state.smartCommit);
   const signCommits = useSettingsStore((state) => state.signCommits);
   const externalEditorCommand = useSettingsStore((state) => state.externalEditorCommand);
+  const confirmSyncBeforeOperation = useSettingsStore(
+    (state) => state.confirmSyncBeforeOperation
+  );
   const commitIdentities = useSettingsStore((state) => state.commitIdentities);
   const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
   const setTheme = useSettingsStore((state) => state.setTheme);
@@ -25,6 +28,9 @@ export function SettingsPanel() {
   const setSmartCommit = useSettingsStore((state) => state.setSmartCommit);
   const setSignCommits = useSettingsStore((state) => state.setSignCommits);
   const setExternalEditorCommand = useSettingsStore((state) => state.setExternalEditorCommand);
+  const setConfirmSyncBeforeOperation = useSettingsStore(
+    (state) => state.setConfirmSyncBeforeOperation
+  );
   const addCommitIdentity = useSettingsStore((state) => state.addCommitIdentity);
   const removeCommitIdentity = useSettingsStore((state) => state.removeCommitIdentity);
   const assignRepoIdentity = useSettingsStore((state) => state.assignRepoIdentity);
@@ -185,6 +191,15 @@ export function SettingsPanel() {
               onChange={(event) => setExternalEditorCommand(event.target.value)}
               placeholder="Auto"
               value={externalEditorCommand}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Confirm sync"
+            hint="Ask before pushing/pulling from the SCM sync button."
+          >
+            <SettingsCheckbox
+              checked={confirmSyncBeforeOperation}
+              onChange={setConfirmSyncBeforeOperation}
             />
           </SettingRow>
         </section>

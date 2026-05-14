@@ -16,6 +16,7 @@ interface PersistedSettings {
   smartCommit: boolean;
   signCommits: boolean;
   externalEditorCommand: string;
+  confirmSyncBeforeOperation: boolean;
   commitIdentities: CommitIdentityProfile[];
   repoIdentityAssignments: Record<string, string>;
 }
@@ -29,6 +30,7 @@ interface SettingsStore {
   smartCommit: boolean;
   signCommits: boolean;
   externalEditorCommand: string;
+  confirmSyncBeforeOperation: boolean;
   commitIdentities: CommitIdentityProfile[];
   repoIdentityAssignments: Record<string, string>;
   hydrated: boolean;
@@ -39,6 +41,7 @@ interface SettingsStore {
   setSmartCommit: (value: boolean) => void;
   setSignCommits: (value: boolean) => void;
   setExternalEditorCommand: (value: string) => void;
+  setConfirmSyncBeforeOperation: (value: boolean) => void;
   addCommitIdentity: (identity: Omit<CommitIdentityProfile, "id">) => CommitIdentityProfile;
   updateCommitIdentity: (id: string, identity: Omit<CommitIdentityProfile, "id">) => void;
   removeCommitIdentity: (id: string) => void;
@@ -52,6 +55,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   smartCommit: true,
   signCommits: false,
   externalEditorCommand: "",
+  confirmSyncBeforeOperation: true,
   commitIdentities: [],
   repoIdentityAssignments: {}
 };
@@ -80,6 +84,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         smartCommit,
         signCommits,
         externalEditorCommand,
+        confirmSyncBeforeOperation,
         commitIdentities,
         repoIdentityAssignments
       ] =
@@ -90,6 +95,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           settingsStore.get<boolean>("smartCommit"),
           settingsStore.get<boolean>("signCommits"),
           settingsStore.get<string>("externalEditorCommand"),
+          settingsStore.get<boolean>("confirmSyncBeforeOperation"),
           settingsStore.get<CommitIdentityProfile[]>("commitIdentities"),
           settingsStore.get<Record<string, string>>("repoIdentityAssignments")
         ]);
@@ -103,6 +109,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         signCommits: signCommits ?? DEFAULT_SETTINGS.signCommits,
         externalEditorCommand:
           externalEditorCommand ?? DEFAULT_SETTINGS.externalEditorCommand,
+        confirmSyncBeforeOperation:
+          confirmSyncBeforeOperation ?? DEFAULT_SETTINGS.confirmSyncBeforeOperation,
         commitIdentities: sanitizeIdentities(
           commitIdentities ?? DEFAULT_SETTINGS.commitIdentities
         ),
@@ -125,6 +133,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         signCommits: nextSettings.signCommits ?? DEFAULT_SETTINGS.signCommits,
         externalEditorCommand:
           nextSettings.externalEditorCommand ?? DEFAULT_SETTINGS.externalEditorCommand,
+        confirmSyncBeforeOperation:
+          nextSettings.confirmSyncBeforeOperation ?? DEFAULT_SETTINGS.confirmSyncBeforeOperation,
         commitIdentities: sanitizeIdentities(
           nextSettings.commitIdentities ?? DEFAULT_SETTINGS.commitIdentities
         ),
@@ -160,6 +170,10 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   setExternalEditorCommand(value) {
     set({ externalEditorCommand: value });
     void persistSettings({ externalEditorCommand: value }).catch(() => {});
+  },
+  setConfirmSyncBeforeOperation(value) {
+    set({ confirmSyncBeforeOperation: value });
+    void persistSettings({ confirmSyncBeforeOperation: value }).catch(() => {});
   },
   addCommitIdentity(identity) {
     const nextIdentity = {

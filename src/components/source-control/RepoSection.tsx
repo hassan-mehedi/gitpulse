@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { ConfirmModal } from "../shared/ConfirmModal";
+import { Modal } from "../shared/Modal";
 import { useGit } from "../../hooks/useGit";
+import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { gitDiscardAll, gitFetchAll, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
 import { StashSection } from "./StashSection";
+import { SettingsCheckbox } from "../settings/SettingsPanel";
 import type { FileChange, Repository } from "../../types/git";
 
 interface RepoSectionProps {
@@ -38,10 +41,17 @@ export function RepoSection({
   onContextMenu
 }: RepoSectionProps) {
   const runGit = useGit();
+  const confirmSyncBeforeOperation = useSettingsStore(
+    (state) => state.confirmSyncBeforeOperation
+  );
+  const setConfirmSyncBeforeOperation = useSettingsStore(
+    (state) => state.setConfirmSyncBeforeOperation
+  );
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const [collapsed, setCollapsed] = useState(false);
   const [confirmForcePush, setConfirmForcePush] = useState(false);
+  const [confirmSync, setConfirmSync] = useState(false);
 
   const conflicted = repo.changes.filter((change) => change.status === "U");
   const regular = repo.changes.filter((change) => change.status !== "U");
@@ -58,6 +68,14 @@ export function RepoSection({
       await operation();
       await refreshRepo(repo.path);
     }).catch(() => {});
+  }
+
+  function requestSync() {
+    if (confirmSyncBeforeOperation) {
+      setConfirmSync(true);
+      return;
+    }
+    withRefresh(() => syncOperation(repo));
   }
 
   return (
@@ -167,11 +185,22 @@ export function RepoSection({
         onConfirm={() => withRefresh(() => gitPush(repo.path, undefined, undefined, true))}
         onClose={() => setConfirmForcePush(false)}
       />
+      <SyncConfirmModal
+        isOpen={confirmSync}
+        repo={repo}
+        onClose={() => setConfirmSync(false)}
+        onConfirm={(dontShowAgain) => {
+          if (dontShowAgain) {
+            setConfirmSyncBeforeOperation(false);
+          }
+          withRefresh(() => syncOperation(repo));
+        }}
+      />
 
       {!collapsed ? (
         <>
           {showSyncPrompt ? (
-            <SyncPrompt repo={repo} onSync={() => withRefresh(() => syncOperation(repo))} />
+            <SyncPrompt repo={repo} onSync={requestSync} />
           ) : (
             <CommitInput repo={repo} />
           )}
@@ -295,4 +324,48 @@ function syncLabel(repo: Repository) {
     return `Sync Changes ${repo.ahead}↑`;
   }
   return `Pull Changes ${repo.behind}↓`;
+}
+
+function SyncConfirmModal({
+  isOpen,
+  repo,
+  onClose,
+  onConfirm
+}: {
+  isOpen: boolean;
+  repo: Repository;
+  onClose: () => void;
+  onConfirm: (dontShowAgain: boolean) => void;
+}) {
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  const target = repo.upstream ?? repo.branch;
+
+  return (
+    <Modal isOpen={isOpen} title="Sync Changes" onClose={onClose}>
+      <div className="confirm-modal">
+        <div className="confirm-modal__body">
+          Do you want to sync changes to branch <strong>{target}</strong>?
+        </div>
+        <label className="confirm-modal__checkbox">
+          <SettingsCheckbox checked={dontShowAgain} onChange={setDontShowAgain} />
+          <span>Don't show again</span>
+        </label>
+        <div className="confirm-modal__actions">
+          <button className="vscode-button" onClick={onClose} type="button">
+            Cancel
+          </button>
+          <button
+            className="vscode-button vscode-button--primary"
+            onClick={() => {
+              onConfirm(dontShowAgain);
+              onClose();
+            }}
+            type="button"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
