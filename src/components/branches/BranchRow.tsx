@@ -6,9 +6,10 @@ interface BranchRowProps {
   branch: BranchInfo;
   onSelect: (branch: BranchInfo) => void;
   onContextMenu: (branch: BranchInfo, position: { x: number; y: number }) => void;
+  onPublish?: (branch: BranchInfo) => void;
 }
 
-function BranchRowImpl({ branch, onSelect, onContextMenu }: BranchRowProps) {
+function BranchRowImpl({ branch, onSelect, onContextMenu, onPublish }: BranchRowProps) {
   const shortName = branch.isRemote
     ? branch.name.split("/").slice(1).join("/") || branch.name
     : branch.name;
@@ -40,6 +41,20 @@ function BranchRowImpl({ branch, onSelect, onContextMenu }: BranchRowProps) {
         </span>
       ) : null}
       <span className="scm-row__actions">
+        {!branch.isRemote && !branch.upstream && onPublish ? (
+          <button
+            className="scm-row__action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPublish(branch);
+            }}
+            title="Publish Branch"
+            aria-label="Publish Branch"
+            type="button"
+          >
+            <Codicon name="rocket" size={14} />
+          </button>
+        ) : null}
         <button
           className="scm-row__action"
           onClick={(event) => {

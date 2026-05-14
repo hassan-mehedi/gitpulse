@@ -28,6 +28,18 @@ export function ToastViewport() {
         <div key={item.id} className={`toast toast--${item.tone}`}>
           <div className="toast__title">{item.title}</div>
           <div className="toast__message">{item.message}</div>
+          {item.actionLabel && item.onAction ? (
+            <button
+              className="toast__action"
+              onClick={() => {
+                item.onAction?.();
+                removeNotification(item.id);
+              }}
+              type="button"
+            >
+              {item.actionLabel}
+            </button>
+          ) : null}
         </div>
       ))}
     </div>

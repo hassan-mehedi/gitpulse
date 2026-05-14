@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ContextMenu } from "../shared/ContextMenu";
 import { InputModal } from "../shared/InputModal";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import { useGit } from "../../hooks/useGit";
 import { useGraphStore } from "../../stores/graph";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -9,10 +10,14 @@ import {
   gitCherryPick,
   gitCreateBranch,
   gitCreateTag,
+  gitPull,
+  gitPush,
+  gitRebaseInteractive,
   gitSwitchBranch
 } from "../../lib/git";
 import { GraphToolbar } from "./GraphToolbar";
-import type { GraphNode } from "../../types/git";
+import { InteractiveRebaseModal } from "../rebase/InteractiveRebaseModal";
+import type { ActivityView, GraphNode } from "../../types/git";
 
 // VS Code-style branch lane palette.
 const lanePalette = [
@@ -38,7 +43,11 @@ interface PendingInput {
   node: GraphNode;
 }
 
-export function CommitGraphList() {
+interface CommitGraphListProps {
+  onNavigateToView?: (view: ActivityView) => void;
+}
+
+export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
   const runGit = useGit();
   const repositories = useWorkspaceStore((state) => state.repositories);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
@@ -47,6 +56,11 @@ export function CommitGraphList() {
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [input, setInput] = useState<PendingInput | null>(null);
+  const [rebaseTarget, setRebaseTarget] = useState<GraphNode | null>(null);
+  const [confirmForcePush, setConfirmForcePush] = useState(false);
+  const [hiddenRefs, setHiddenRefs] = useState<string[]>([]);
+  const [dateMode, setDateMode] = useState<"relative" | "absolute">("relative");
+  const [draggedSha, setDraggedSha] = useState<string | null>(null);
   const {
     nodes,
     repoId,
@@ -79,22 +93,45 @@ export function CommitGraphList() {
     void runGit(() => loadGraph(selectedRepo)).catch(() => {});
   }, [loadGraph, runGit, selectedRepo, setActiveRepo]);
 
+  const availableRefs = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          nodes.flatMap((node) =>
+            node.refs.filter((ref) => !ref.startsWith("tag: ") && ref !== "HEAD")
+          )
+        )
+      ).sort((left, right) => left.localeCompare(right)),
+    [nodes]
+  );
+
   const visibleNodes = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return nodes;
     return nodes.filter((node) => {
+      const visibleByRef =
+        hiddenRefs.length === 0 ||
+        node.refs.length === 0 ||
+        node.refs.some((ref) => ref.startsWith("tag: ") || ref === "HEAD" || !hiddenRefs.includes(ref));
+      if (!visibleByRef) return false;
+      if (!needle) return true;
       const haystack = `${node.message} ${node.author} ${node.refs.join(" ")}`.toLowerCase();
       return haystack.includes(needle);
     });
-  }, [nodes, query]);
+  }, [hiddenRefs, nodes, query]);
 
   const maxLane = useMemo(() => visibleLaneCount(visibleNodes), [visibleNodes]);
-  const headColorId = useMemo(() => {
-    const head = visibleNodes.find((node) =>
-      node.refs.some((ref) => ref.startsWith("HEAD") || ref === "HEAD")
-    );
-    return head?.colorId ?? null;
-  }, [visibleNodes]);
+  const headNode = useMemo(
+    () =>
+      visibleNodes.find((node) =>
+        node.refs.some((ref) => ref.startsWith("HEAD") || ref === "HEAD")
+      ) ?? null,
+    [visibleNodes]
+  );
+  const headColorId = headNode?.colorId ?? null;
+  const headLane = headNode?.lane ?? 0;
+  const pendingCount =
+    (selectedRepo?.changes.length ?? 0) + (selectedRepo?.staged.length ?? 0);
+  const hasPending = pendingCount > 0;
   const rowVirtualizer = useVirtualizer({
     count: visibleNodes.length,
     estimateSize: () => ROW_HEIGHT,
@@ -132,6 +169,34 @@ export function CommitGraphList() {
     runGit(async () => {
       setActiveRepo(selectedRepo.id);
       await gitCherryPick(selectedRepo.path, node.sha);
+      await refreshRepo(selectedRepo.path);
+      await loadGraph(selectedRepo);
+    }).catch(() => {});
+  }
+
+  function toggleRef(ref: string) {
+    setHiddenRefs((current) =>
+      current.includes(ref) ? current.filter((item) => item !== ref) : [...current, ref]
+    );
+  }
+
+  function handleDropReorder(targetSha: string) {
+    if (!selectedRepo || !draggedSha || draggedSha === targetSha) return;
+    const fromIndex = visibleNodes.findIndex((node) => node.sha === draggedSha);
+    const toIndex = visibleNodes.findIndex((node) => node.sha === targetSha);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const start = Math.min(fromIndex, toIndex);
+    const end = Math.max(fromIndex, toIndex);
+    const range = visibleNodes.slice(start, end + 1);
+    const base = visibleNodes[end + 1];
+    if (!base || range.some((node) => node.isMerge)) return;
+    const reordered = range.slice();
+    const [moved] = reordered.splice(fromIndex - start, 1);
+    if (!moved) return;
+    reordered.splice(toIndex - start, 0, moved);
+    const todo = reordered.reverse().map((node) => `pick ${node.sha} ${node.message}`);
+    runGit(async () => {
+      await gitRebaseInteractive(selectedRepo.path, base.sha, todo);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
     }).catch(() => {});
@@ -175,6 +240,47 @@ export function CommitGraphList() {
           setIncludeAll(value);
           void runGit(() => loadGraph(selectedRepo)).catch(() => {});
         }}
+        activeRepo={selectedRepo}
+        onPull={() => {
+          void runGit(async () => {
+            await gitPull(selectedRepo.path);
+            await refreshRepo(selectedRepo.path);
+            await loadGraph(selectedRepo);
+          }).catch(() => {});
+        }}
+        onPush={() => {
+          void runGit(async () => {
+            await gitPush(selectedRepo.path);
+            await refreshRepo(selectedRepo.path);
+            await loadGraph(selectedRepo);
+          }).catch(() => {});
+        }}
+        onForcePush={() => setConfirmForcePush(true)}
+        availableRefs={availableRefs}
+        hiddenRefs={hiddenRefs}
+        onToggleRef={toggleRef}
+        dateMode={dateMode}
+        onDateModeChange={setDateMode}
+      />
+      <ConfirmModal
+        isOpen={confirmForcePush}
+        title="Force Push With Lease"
+        body={
+          <>
+            Force push <strong>{selectedRepo.branch}</strong> using{" "}
+            <strong>--force-with-lease</strong>?
+          </>
+        }
+        confirmLabel="Force Push"
+        danger
+        onConfirm={() => {
+          void runGit(async () => {
+            await gitPush(selectedRepo.path, undefined, undefined, true);
+            await refreshRepo(selectedRepo.path);
+            await loadGraph(selectedRepo);
+          }).catch(() => {});
+        }}
+        onClose={() => setConfirmForcePush(false)}
       />
 
       <section className="graph-list" ref={scrollRef}>
@@ -193,6 +299,16 @@ export function CommitGraphList() {
             aria-hidden
             className="graph-list__head-stripe"
             style={{ background: colorFor(headColorId) }}
+          />
+        ) : null}
+        {hasPending && headColorId !== null ? (
+          <WorkingTreeRow
+            colorId={headColorId}
+            lane={headLane}
+            laneWindow={getLaneWindow(maxLane)}
+            modifiedCount={selectedRepo?.changes.length ?? 0}
+            stagedCount={selectedRepo?.staged.length ?? 0}
+            onClick={() => onNavigateToView?.("source-control")}
           />
         ) : null}
         <div
@@ -243,12 +359,28 @@ export function CommitGraphList() {
                 }}
               >
                 <button
-                  className={`graph-row ${node.sha === selectedCommitSha ? "is-active" : ""}`}
+                  className={`graph-row ${node.sha === selectedCommitSha ? "is-active" : ""} ${draggedSha === node.sha ? "is-dragging" : ""}`}
                   onClick={() => void handleSelectCommit(node.sha)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setMenu({ x: event.clientX, y: event.clientY, node });
                   }}
+                  draggable={!node.isMerge}
+                  onDragStart={(event) => {
+                    setDraggedSha(node.sha);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(event) => {
+                    if (draggedSha && draggedSha !== node.sha) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleDropReorder(node.sha);
+                    setDraggedSha(null);
+                  }}
+                  onDragEnd={() => setDraggedSha(null)}
                   type="button"
                 >
                   <div className="graph-row__lane" style={{ width: `${svgWidth}px` }}>
@@ -321,9 +453,26 @@ export function CommitGraphList() {
                         stroke={laneColor}
                         strokeWidth={node.isMerge ? 2 : 2}
                       />
+                      {isSigned(node.signature) ? (
+                        <circle
+                          cx={laneX(node.lane, laneWindow) + 5}
+                          cy={centerY - 5}
+                          fill="var(--vscode-testing-iconPassed, #73c991)"
+                          r="2.4"
+                          stroke="var(--vscode-editor-background)"
+                          strokeWidth="1"
+                        />
+                      ) : null}
                     </svg>
                   </div>
                   <div className="graph-row__content">
+                    <span
+                      className="graph-row__avatar"
+                      title={node.authorEmail || node.author}
+                      style={{ background: avatarColor(node.authorEmail || node.author) }}
+                    >
+                      {avatarInitials(node.author)}
+                    </span>
                     <span className="graph-row__message" title={node.message}>
                       {node.message}
                     </span>
@@ -354,7 +503,7 @@ export function CommitGraphList() {
                       {node.author}
                     </span>
                     <span className="graph-row__date" title={node.date}>
-                      {formatRelativeTime(node.date)}
+                      {dateMode === "relative" ? formatRelativeTime(node.date) : formatAbsoluteTime(node.date)}
                     </span>
                   </div>
                 </button>
@@ -396,6 +545,10 @@ export function CommitGraphList() {
                   onSelect: () => handleCherryPick(menu.node)
                 },
                 {
+                  label: "Rebase Commits Onto Here…",
+                  onSelect: () => setRebaseTarget(menu.node)
+                },
+                {
                   label: "Copy SHA",
                   onSelect: () => {
                     void navigator.clipboard.writeText(menu.node.sha);
@@ -416,6 +569,23 @@ export function CommitGraphList() {
         onSubmit={handleInputSubmit}
         onClose={() => setInput(null)}
       />
+
+      {rebaseTarget && selectedRepo ? (
+        <InteractiveRebaseModal
+          isOpen
+          repoPath={selectedRepo.path}
+          baseSha={rebaseTarget.sha}
+          baseShortSha={rebaseTarget.shortSha}
+          onClose={() => setRebaseTarget(null)}
+          onComplete={() => {
+            setRebaseTarget(null);
+            void runGit(async () => {
+              await refreshRepo(selectedRepo.path);
+              await loadGraph(selectedRepo);
+            }).catch(() => {});
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -453,6 +623,35 @@ function formatRelativeTime(iso: string): string {
   return `${Math.floor(seconds / (86_400 * 365))}y`;
 }
 
+function formatAbsoluteTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, {
+    year: "2-digit",
+    month: "short",
+    day: "2-digit"
+  });
+}
+
+function isSigned(signature: string) {
+  return signature && signature !== "N";
+}
+
+function avatarInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function avatarColor(seed: string) {
+  let hash = 0;
+  for (const char of seed) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  const hue = hash % 360;
+  return `hsl(${hue} 48% 36%)`;
+}
+
 function visibleLaneCount(
   nodes: Array<{ lane: number; connections: Array<{ toLane: number }> }>
 ) {
@@ -463,6 +662,83 @@ function visibleLaneCount(
     );
     return Math.max(max, connectionMax);
   }, 0);
+}
+
+interface WorkingTreeRowProps {
+  colorId: number;
+  lane: number;
+  laneWindow: LaneWindow;
+  modifiedCount: number;
+  stagedCount: number;
+  onClick: () => void;
+}
+
+function WorkingTreeRow({
+  colorId,
+  lane,
+  laneWindow,
+  modifiedCount,
+  stagedCount,
+  onClick
+}: WorkingTreeRowProps) {
+  const color = colorFor(colorId);
+  const svgWidth = laneWindow.count * LANE_WIDTH;
+  const centerY = ROW_HEIGHT / 2;
+  const cx = laneX(lane, laneWindow);
+  return (
+    <button
+      className="graph-row graph-row--working-tree"
+      onClick={onClick}
+      type="button"
+      title="Open Source Control"
+    >
+      <div className="graph-row__lane" style={{ width: `${svgWidth}px` }}>
+        <svg
+          className="graph-row__svg"
+          height={ROW_HEIGHT}
+          viewBox={`0 0 ${svgWidth} ${ROW_HEIGHT}`}
+          width={svgWidth}
+        >
+          {/* Dashed line connecting the working-tree dot to HEAD below */}
+          <line
+            stroke={color}
+            strokeOpacity={0.7}
+            strokeWidth="2"
+            strokeDasharray="2 3"
+            x1={cx}
+            x2={cx}
+            y1={centerY}
+            y2={ROW_HEIGHT}
+          />
+          {/* Hollow dashed circle distinguishes uncommitted state */}
+          <circle
+            cx={cx}
+            cy={centerY}
+            fill="var(--vscode-editor-background)"
+            r={4.5}
+            stroke={color}
+            strokeWidth="2"
+            strokeDasharray="2 1.5"
+          />
+        </svg>
+      </div>
+      <div className="graph-row__content">
+        <span className="graph-row__message">Working Tree</span>
+        <div className="graph-row__refs">
+          {stagedCount > 0 ? (
+            <span className="graph-row__ref" title={`${stagedCount} staged`}>
+              {stagedCount} staged
+            </span>
+          ) : null}
+          {modifiedCount > 0 ? (
+            <span className="graph-row__ref" title={`${modifiedCount} changed`}>
+              {modifiedCount} changed
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
 }
 
 function inferCheckoutTarget(node: GraphNode) {

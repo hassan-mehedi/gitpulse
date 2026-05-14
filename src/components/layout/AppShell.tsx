@@ -11,10 +11,12 @@ import { SettingsPanel } from "../settings/SettingsPanel";
 import { CommitGraphList } from "../graph/CommitGraphList";
 import { CommitGraphDetail } from "../graph/CommitGraphDetail";
 import { BlameView } from "../blame/BlameView";
+import { MiscPanel } from "../misc/MiscPanel";
 import { TabStrip } from "../diff/TabStrip";
 import { Sash } from "./Sash";
 import { BranchPickerModal } from "../branches/BranchPickerModal";
 import { ShortcutReferenceModal } from "../shared/ShortcutReferenceModal";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import { useGit } from "../../hooks/useGit";
 import { useRepo } from "../../hooks/useRepo";
 import {
@@ -40,6 +42,7 @@ export function AppShell() {
   const [branchPickerCreateMode, setBranchPickerCreateMode] = useState(false);
   const [branchPickerRepoId, setBranchPickerRepoId] = useState<string | null>(null);
   const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(false);
+  const [forcePushRepoPath, setForcePushRepoPath] = useState<string | null>(null);
   const [awaitingShortcutChord, setAwaitingShortcutChord] = useState<number | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 300;
@@ -92,7 +95,7 @@ export function AppShell() {
       return state.repositories.find((repo) => repo.id === state.activeRepoId) ?? null;
     }
 
-    async function runRepoOperation(operation: "fetch" | "pull" | "push" | "undo") {
+    async function runRepoOperation(operation: "fetch" | "pull" | "push" | "force-push" | "undo") {
       const repo = getActiveRepo();
       if (!repo) {
         return;
@@ -105,6 +108,8 @@ export function AppShell() {
           await gitPull(repo.path);
         } else if (operation === "push") {
           await gitPush(repo.path);
+        } else if (operation === "force-push") {
+          await gitPush(repo.path, undefined, undefined, true);
         } else {
           await gitUndoLastCommit(repo.path);
         }
@@ -180,7 +185,12 @@ export function AppShell() {
         void runRepoOperation("pull");
       } else if (key === "p") {
         event.preventDefault();
-        void runRepoOperation("push");
+        if (event.altKey) {
+          const repo = getActiveRepo();
+          if (repo) setForcePushRepoPath(repo.path);
+        } else {
+          void runRepoOperation("push");
+        }
       } else if (key === "z") {
         event.preventDefault();
         void runRepoOperation("undo");
@@ -233,7 +243,9 @@ export function AppShell() {
               ) : activeView === "settings" ? (
                 <SettingsPanel />
               ) : activeView === "graph" ? (
-                <CommitGraphList />
+                <CommitGraphList onNavigateToView={setActiveView} />
+              ) : activeView === "misc" ? (
+                <MiscPanel />
               ) : (
                 <SourceControlPanel
                   activeView={activeView}
@@ -247,6 +259,8 @@ export function AppShell() {
         <section className="content-panel">
           {activeView === "graph" ? (
             <CommitGraphDetail />
+          ) : activeView === "misc" ? (
+            <div className="commit-detail-empty">Select an Advanced Git tool from the left.</div>
           ) : activeView === "blame" ? (
             <BlameView />
           ) : (
@@ -275,6 +289,21 @@ export function AppShell() {
       <ShortcutReferenceModal
         isOpen={isShortcutReferenceOpen}
         onClose={() => setIsShortcutReferenceOpen(false)}
+      />
+      <ConfirmModal
+        isOpen={forcePushRepoPath !== null}
+        title="Force Push With Lease"
+        body="Force push the active repository using --force-with-lease?"
+        confirmLabel="Force Push"
+        danger
+        onConfirm={() => {
+          if (!forcePushRepoPath) return;
+          void runGit(async () => {
+            await gitPush(forcePushRepoPath, undefined, undefined, true);
+            await refreshRepo(forcePushRepoPath);
+          }).catch(() => {});
+        }}
+        onClose={() => setForcePushRepoPath(null)}
       />
     </div>
   );

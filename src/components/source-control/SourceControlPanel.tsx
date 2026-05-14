@@ -4,7 +4,7 @@ import { ContextMenu } from "../shared/ContextMenu";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
-import { gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
+import { gitAddToGitignore, gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
 import { pickRepositoryDirectory, pickWorkspaceFile } from "../../lib/openTarget";
 import { RepoSection } from "./RepoSection";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
@@ -73,6 +73,17 @@ export function SourceControlPanel({
       setActiveRepo(repo.id);
       runGit(async () => {
         await gitDiscardFile(repo.path, change.path);
+        await refreshRepo(repo.path);
+      }).catch(() => {});
+    },
+    [refreshRepo, runGit, setActiveRepo]
+  );
+
+  const handleAddToGitignore = useCallback(
+    (repo: Repository, change: FileChange) => {
+      setActiveRepo(repo.id);
+      runGit(async () => {
+        await gitAddToGitignore(repo.path, change.path);
         await refreshRepo(repo.path);
       }).catch(() => {});
     },
@@ -226,6 +237,12 @@ export function SourceControlPanel({
                   label: menuTarget.staged ? "Unstage Changes" : "Stage Changes",
                   onSelect: () =>
                     handleStageToggle(menuTarget.repo, menuTarget.change, menuTarget.staged)
+                },
+                {
+                  disabled: menuTarget.staged,
+                  label: "Add to .gitignore",
+                  onSelect: () =>
+                    handleAddToGitignore(menuTarget.repo, menuTarget.change)
                 },
                 {
                   danger: true,

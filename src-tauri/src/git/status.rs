@@ -16,16 +16,25 @@ pub async fn status(repo_path: &Path) -> Result<RepoStatus, GitError> {
     parse_status(&output, stash_count)
 }
 
-pub async fn diff_file(repo_path: &Path, file: &str, staged: bool) -> Result<FileDiff, GitError> {
-    let args = if staged {
+pub async fn diff_file(
+    repo_path: &Path,
+    file: &str,
+    staged: bool,
+    ignore_whitespace: bool,
+) -> Result<FileDiff, GitError> {
+    let args = if staged && ignore_whitespace {
+        vec!["diff", "--ignore-all-space", "--cached", "--", file]
+    } else if staged {
         vec!["diff", "--cached", "--", file]
+    } else if ignore_whitespace {
+        vec!["diff", "--ignore-all-space", "--", file]
     } else {
         vec!["diff", "--", file]
     };
     let output = GitRunner::run(repo_path, &args).await?;
 
     if output.trim().is_empty() && !staged {
-        if let Some(untracked) = diff_untracked(repo_path, file).await? {
+        if let Some(untracked) = diff_untracked(repo_path, file, ignore_whitespace).await? {
             return parse_diff(&untracked);
         }
     }
@@ -33,10 +42,19 @@ pub async fn diff_file(repo_path: &Path, file: &str, staged: bool) -> Result<Fil
     parse_diff(&output)
 }
 
-async fn diff_untracked(repo_path: &Path, file: &str) -> Result<Option<String>, GitError> {
+async fn diff_untracked(
+    repo_path: &Path,
+    file: &str,
+    ignore_whitespace: bool,
+) -> Result<Option<String>, GitError> {
     let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let mut args = vec!["diff", "--no-index"];
+    if ignore_whitespace {
+        args.push("--ignore-all-space");
+    }
+    args.extend(["--", null_path, file]);
     let output = Command::new("git")
-        .args(["diff", "--no-index", "--", null_path, file])
+        .args(args)
         .current_dir(repo_path)
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("LC_ALL", "C")

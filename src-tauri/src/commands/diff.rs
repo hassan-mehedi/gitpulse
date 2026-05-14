@@ -31,3 +31,12 @@ pub async fn git_diff_merge_base(
 ) -> Result<Vec<FileDiff>, GitError> {
     diff::diff_merge_base(Path::new(&repo_path), &ref1, &ref2).await
 }
+
+#[tauri::command]
+pub async fn git_file_bytes(
+    repo_path: String,
+    file: String,
+    revision: Option<String>,
+) -> Result<Vec<u8>, GitError> {
+    diff::file_bytes(Path::new(&repo_path), &file, revision.as_deref()).await
+}

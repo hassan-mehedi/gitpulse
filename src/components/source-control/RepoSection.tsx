@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Codicon } from "../shared/Codicon";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { gitDiscardAll, gitFetchAll, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
@@ -40,6 +41,7 @@ export function RepoSection({
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const [collapsed, setCollapsed] = useState(false);
+  const [confirmForcePush, setConfirmForcePush] = useState(false);
 
   const conflicted = repo.changes.filter((change) => change.status === "U");
   const regular = repo.changes.filter((change) => change.status !== "U");
@@ -69,6 +71,9 @@ export function RepoSection({
           <span className="repo-section__meta">
             <span className="repo-section__name" title={repo.name}>
               {repo.name}
+            </span>
+            <span className="repo-section__path" title={repo.path}>
+              {repo.path}
             </span>
             <span className="repo-section__branch" title={repo.branch}>
               <Codicon name="git-branch" size={12} />
@@ -126,6 +131,15 @@ export function RepoSection({
             </button>
             <button
               className="repo-section__action"
+              onClick={() => setConfirmForcePush(true)}
+              title="Force Push With Lease"
+              aria-label={`Force push ${repo.name} with lease`}
+              type="button"
+            >
+              <Codicon name="warning" size={14} />
+            </button>
+            <button
+              className="repo-section__action"
               onClick={() => withRefresh(() => gitSync(repo.path))}
               title="Sync"
               aria-label={`Sync ${repo.name}`}
@@ -136,6 +150,21 @@ export function RepoSection({
           </span>
         </button>
       ) : null}
+      <ConfirmModal
+        isOpen={confirmForcePush}
+        title="Force Push With Lease"
+        body={
+          <>
+            Force push <strong>{repo.branch}</strong> using{" "}
+            <strong>--force-with-lease</strong>? Remote commits can be overwritten
+            if your local tracking ref is stale.
+          </>
+        }
+        confirmLabel="Force Push"
+        danger
+        onConfirm={() => withRefresh(() => gitPush(repo.path, undefined, undefined, true))}
+        onClose={() => setConfirmForcePush(false)}
+      />
 
       {!collapsed ? (
         <>

@@ -3,14 +3,13 @@ use std::path::Path;
 use crate::error::GitError;
 use crate::git::parser::{parse_branches, parse_status};
 use crate::git::runner::GitRunner;
-use crate::git::types::{BranchInfo, OperationResult};
+use crate::git::types::{BranchCompare, BranchInfo, OperationResult};
 
 pub async fn branches(repo_path: &Path) -> Result<Vec<BranchInfo>, GitError> {
     // %(refname) gives the FULL ref (`refs/heads/<name>` or `refs/remotes/<name>`)
     // so we can reliably classify local vs. remote branches. `%(refname:short)`
     // strips both prefixes, losing the local/remote distinction.
-    let format =
-        "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)";
+    let format = "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)%x1f%(authoremail)";
     let output = GitRunner::run(repo_path, &["branch", "-a", "--format", format]).await?;
     let mut branches = parse_branches(&output);
 
@@ -40,6 +39,7 @@ pub async fn branches(repo_path: &Path) -> Result<Vec<BranchInfo>, GitError> {
                     upstream: status.upstream,
                     last_commit_sha: String::new(),
                     last_commit_date: String::new(),
+                    last_commit_author_email: String::new(),
                 },
             );
         }
@@ -114,6 +114,35 @@ pub async fn delete_remote_branch(
 ) -> Result<(), GitError> {
     GitRunner::run(repo_path, &["push", remote, "--delete", branch]).await?;
     Ok(())
+}
+
+pub async fn set_upstream(repo_path: &Path, branch: &str, upstream: &str) -> Result<(), GitError> {
+    GitRunner::run(
+        repo_path,
+        &["branch", "--set-upstream-to", upstream, branch],
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn unset_upstream(repo_path: &Path, branch: &str) -> Result<(), GitError> {
+    GitRunner::run(repo_path, &["branch", "--unset-upstream", branch]).await?;
+    Ok(())
+}
+
+pub async fn compare(repo_path: &Path, left: &str, right: &str) -> Result<BranchCompare, GitError> {
+    let range = format!("{left}...{right}");
+    let output =
+        GitRunner::run(repo_path, &["rev-list", "--left-right", "--count", &range]).await?;
+    let mut parts = output.split_whitespace();
+    let left_ahead = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let right_ahead = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    Ok(BranchCompare {
+        left: left.to_string(),
+        right: right.to_string(),
+        left_ahead,
+        right_ahead,
+    })
 }
 
 fn is_named_branch(branch: &str) -> bool {

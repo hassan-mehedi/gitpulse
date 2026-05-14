@@ -72,6 +72,22 @@ pub async fn git_pull<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn git_pull_ff_only<R: Runtime>(
+    app_handle: AppHandle<R>,
+    repo_path: String,
+    remote: Option<String>,
+    branch: Option<String>,
+) -> Result<OperationResult, GitError> {
+    remote::pull_ff_only(
+        &app_handle,
+        Path::new(&repo_path),
+        remote.as_deref(),
+        branch.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn git_pull_rebase<R: Runtime>(
     app_handle: AppHandle<R>,
     repo_path: String,

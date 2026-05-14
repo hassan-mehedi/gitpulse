@@ -6,6 +6,8 @@ pub mod conflict;
 pub mod diff;
 pub mod discard;
 pub mod graph;
+pub mod misc;
+pub mod rebase;
 pub mod remote;
 pub mod repo;
 pub mod staging;

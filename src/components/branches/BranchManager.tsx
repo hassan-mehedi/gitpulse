@@ -3,25 +3,34 @@ import { Codicon } from "../shared/Codicon";
 import { ConfirmModal } from "../shared/ConfirmModal";
 import { ContextMenu, type ContextMenuItem } from "../shared/ContextMenu";
 import { InputModal } from "../shared/InputModal";
+import { Modal } from "../shared/Modal";
 import {
   gitBranches,
+  gitCompareBranches,
   gitCreateBranch,
   gitDeleteBranch,
   gitDeleteRemoteBranch,
+  gitDiffRefs,
   gitFetch,
+  gitGetUserInfo,
   gitMerge,
   gitPull,
+  gitPullFfOnly,
   gitPush,
   gitPushSetUpstream,
   gitRebase,
   gitRenameBranch,
+  gitSetUpstream,
   gitSwitchBranch,
-  gitSync
+  gitSync,
+  gitUnsetUpstream
 } from "../../lib/git";
+import { DiffHunk } from "../diff/DiffHunk";
+import { useSettingsStore } from "../../stores/settings";
 import { findTrackedLocalBranch, inferLocalBranchName } from "../../lib/branches";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
-import type { BranchInfo, Repository } from "../../types/git";
+import type { BranchCompare, BranchInfo, FileDiff, Repository, UserInfo } from "../../types/git";
 import { BranchRow } from "./BranchRow";
 
 interface RepoBranchState {
@@ -39,12 +48,22 @@ interface BranchMenuTarget {
 
 interface InputModalState {
   repo: Repository;
-  kind: "create" | "create-from" | "rename" | "publish";
+  kind: "create" | "create-from" | "rename" | "publish" | "set-upstream";
   title: string;
   label: string;
   initialValue?: string;
   placeholder?: string;
   context?: BranchInfo;
+}
+
+interface CompareState {
+  repo: Repository;
+  left: BranchInfo;
+  right: BranchInfo;
+  summary: BranchCompare | null;
+  diffs: FileDiff[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 interface ConfirmModalState {
@@ -70,11 +89,16 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const runGit = useGit();
+  const theme = useSettingsStore((state) => state.theme);
   const [branchStateByRepo, setBranchStateByRepo] = useState<Record<string, RepoBranchState>>({});
+  const [userInfoByRepo, setUserInfoByRepo] = useState<Record<string, UserInfo>>({});
   const [query, setQuery] = useState("");
+  const [showOnlyMine, setShowOnlyMine] = useState(false);
   const [menu, setMenu] = useState<BranchMenuTarget | null>(null);
   const [inputModal, setInputModal] = useState<InputModalState | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
+  const [compareBase, setCompareBase] = useState<BranchMenuTarget | null>(null);
+  const [compareState, setCompareState] = useState<CompareState | null>(null);
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
 
   const setRepoState = useCallback((repoPath: string, next: Partial<RepoBranchState>) => {
@@ -97,6 +121,8 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
           isLoading: false,
           loadError: null
         });
+        const userInfo = await gitGetUserInfo(repo.path).catch(() => ({}));
+        setUserInfoByRepo((state) => ({ ...state, [repo.path]: userInfo }));
       } catch (error) {
         const detail =
           (error as { message?: string; stderr?: string })?.message ??
@@ -264,12 +290,46 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
           );
         }
         break;
+      case "set-upstream":
+        if (inputModal.context) {
+          withRepoRefresh(repo, () =>
+            gitSetUpstream(repoPath, inputModal.context!.name, value)
+          );
+        }
+        break;
     }
   }
 
   function fetchForBranch(repo: Repository, branch: BranchInfo) {
     const remote = branch.isRemote ? branch.name.split("/")[0] : branch.upstream?.split("/")[0];
     withRepoRefresh(repo, () => gitFetch(repo.path, remote));
+  }
+
+  function publishBranch(repo: Repository, branch: BranchInfo) {
+    openInput("publish", {
+      repo,
+      title: "Publish Branch",
+      label: `Push "${branch.name}" to remote:`,
+      initialValue: "origin",
+      context: branch
+    });
+  }
+
+  function compareBranches(repo: Repository, left: BranchInfo, right: BranchInfo) {
+    setCompareState({ repo, left, right, summary: null, diffs: [], isLoading: true, error: null });
+    void runGit(async () => {
+      const [summary, diffs] = await Promise.all([
+        gitCompareBranches(repo.path, left.name, right.name),
+        gitDiffRefs(repo.path, left.name, right.name)
+      ]);
+      setCompareState({ repo, left, right, summary, diffs, isLoading: false, error: null });
+    }).catch((error) => {
+      const detail =
+        (error as { message?: string; stderr?: string })?.message ??
+        (error as { stderr?: string })?.stderr ??
+        String(error);
+      setCompareState({ repo, left, right, summary: null, diffs: [], isLoading: false, error: detail });
+    });
   }
 
   function buildMenuItems(
@@ -289,7 +349,25 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
 
     if (branch.isCurrent) {
       items.push({ label: "Pull", onSelect: () => withRepoRefresh(repo, () => gitPull(repo.path)) });
+      items.push({ label: "Pull (Fast-Forward Only)", onSelect: () => withRepoRefresh(repo, () => gitPullFfOnly(repo.path)) });
       items.push({ label: "Push", onSelect: () => withRepoRefresh(repo, () => gitPush(repo.path)) });
+      items.push({
+        label: "Force Push With Lease…",
+        onSelect: () =>
+          setConfirmModal({
+            title: "Force Push With Lease",
+            body: (
+              <>
+                Force push <strong>{branch.name}</strong> to its upstream using
+                <strong> --force-with-lease</strong>? Remote commits can be overwritten
+                if your local tracking ref is stale.
+              </>
+            ),
+            confirmLabel: "Force Push",
+            danger: true,
+            onConfirm: () => withRepoRefresh(repo, () => gitPush(repo.path, undefined, undefined, true))
+          })
+      });
       items.push({ label: "Sync (Pull, then Push)", onSelect: () => withRepoRefresh(repo, () => gitSync(repo.path)) });
     }
 
@@ -299,6 +377,19 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
     });
 
     if (!branch.isCurrent) {
+      const current = branches.find((candidate) => candidate.isCurrent && !candidate.isRemote);
+      if (current) {
+        items.push({
+          label: `Compare with "${current.name}"`,
+          onSelect: () => compareBranches(repo, current, branch)
+        });
+      }
+      if (compareBase && compareBase.repo.path === repo.path && compareBase.branch.name !== branch.name) {
+        items.push({
+          label: `Compare with selected "${compareBase.branch.name}"`,
+          onSelect: () => compareBranches(repo, compareBase.branch, branch)
+        });
+      }
       items.push({
         label: `Merge "${branch.name}" into current`,
         onSelect: () => mergeFrom(repo, branch)
@@ -308,6 +399,11 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
         onSelect: () => rebaseOnto(repo, branch)
       });
     }
+
+    items.push({
+      label: "Select for Compare",
+      onSelect: () => setCompareBase({ repo, branches, branch, position: { x: 0, y: 0 } })
+    });
 
     items.push({
       label: "Create Branch From…",
@@ -322,6 +418,24 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
     });
 
     if (!branch.isRemote) {
+      if (branch.upstream) {
+        items.push({
+          label: "Unset Upstream",
+          onSelect: () => withRepoRefresh(repo, () => gitUnsetUpstream(repo.path, branch.name))
+        });
+      } else {
+        items.push({
+          label: "Set Upstream…",
+          onSelect: () =>
+            openInput("set-upstream", {
+              repo,
+              title: "Set Upstream",
+              label: `Set upstream for "${branch.name}" to:`,
+              initialValue: `origin/${branch.name}`,
+              context: branch
+            })
+        });
+      }
       items.push({
         label: "Rename Branch…",
         onSelect: () =>
@@ -338,14 +452,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
     if (!branch.isRemote && !branch.upstream) {
       items.push({
         label: "Publish Branch…",
-        onSelect: () =>
-          openInput("publish", {
-            repo,
-            title: "Publish Branch",
-            label: `Push "${branch.name}" to remote:`,
-            initialValue: "origin",
-            context: branch
-          })
+        onSelect: () => publishBranch(repo, branch)
       });
     }
 
@@ -422,11 +529,24 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
                 placeholder="Filter branches"
                 value={query}
               />
+              <button
+                className={`branches-filter__toggle${showOnlyMine ? " is-active" : ""}`}
+                onClick={() => setShowOnlyMine((value) => !value)}
+                type="button"
+                title="Show only my branches"
+                aria-pressed={showOnlyMine}
+              >
+                Mine
+              </button>
             </div>
 
             {repositories.map((repo) => {
               const repoState = branchStateByRepo[repo.path] ?? EMPTY_REPO_STATE;
-              const filteredBranches = filterBranches(repoState.branches, query);
+              const filteredBranches = filterBranches(
+                repoState.branches,
+                query,
+                showOnlyMine ? userInfoByRepo[repo.path]?.email : undefined
+              );
               const localBranches = filteredBranches.filter((branch) => !branch.isRemote);
               const remoteGroups = groupRemoteBranches(filteredBranches);
               const repoKey = `repo:${repo.id}`;
@@ -520,6 +640,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
                             onContextMenu={(selectedBranch, position) =>
                               openBranchMenu(repo, repoState.branches, selectedBranch, position)
                             }
+                            onPublish={(selectedBranch) => publishBranch(repo, selectedBranch)}
                           />
                         ))}
                       </BranchSection>
@@ -548,6 +669,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
                                   position
                                 )
                               }
+                              onPublish={(selectedBranch) => publishBranch(repo, selectedBranch)}
                             />
                           ))}
                         </BranchSection>
@@ -586,17 +708,30 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
         onConfirm={() => confirmModal?.onConfirm()}
         onClose={() => setConfirmModal(null)}
       />
+
+      <CompareModal
+        compareState={compareState}
+        onClose={() => setCompareState(null)}
+        theme={theme}
+      />
     </>
   );
 }
 
-function filterBranches(branches: BranchInfo[], query: string) {
+function filterBranches(branches: BranchInfo[], query: string, mineEmail?: string) {
   const needle = query.trim().toLowerCase();
-  if (!needle) {
-    return branches;
-  }
+  return branches.filter((branch) => {
+    const matchesQuery = !needle || branch.name.toLowerCase().includes(needle);
+    const matchesMine =
+      !mineEmail ||
+      !branch.lastCommitAuthorEmail ||
+      normalizeEmail(branch.lastCommitAuthorEmail) === normalizeEmail(mineEmail);
+    return matchesQuery && matchesMine;
+  });
+}
 
-  return branches.filter((branch) => branch.name.toLowerCase().includes(needle));
+function normalizeEmail(value: string) {
+  return value.trim().replace(/^<|>$/g, "").toLowerCase();
 }
 
 function groupRemoteBranches(branches: BranchInfo[]) {
@@ -659,5 +794,84 @@ function BranchSection({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CompareModal({
+  compareState,
+  onClose,
+  theme
+}: {
+  compareState: CompareState | null;
+  onClose: () => void;
+  theme: ReturnType<typeof useSettingsStore.getState>["theme"];
+}) {
+  return (
+    <Modal
+      isOpen={compareState !== null}
+      title={
+        compareState
+          ? `Compare ${compareState.left.name} <-> ${compareState.right.name}`
+          : "Compare Branches"
+      }
+      onClose={onClose}
+      className="branch-compare-modal"
+      bodyClassName="branch-compare-modal__body"
+    >
+      {!compareState ? null : compareState.isLoading ? (
+        <div className="branch-compare__empty">Loading comparison…</div>
+      ) : compareState.error ? (
+        <div className="branch-compare__error">{compareState.error}</div>
+      ) : (
+        <>
+          <div className="branch-compare__summary">
+            <span>
+              <strong>{compareState.left.name}</strong> is{" "}
+              {compareState.summary?.leftAhead ?? 0} commit
+              {(compareState.summary?.leftAhead ?? 0) === 1 ? "" : "s"} ahead
+            </span>
+            <span>
+              <strong>{compareState.right.name}</strong> is{" "}
+              {compareState.summary?.rightAhead ?? 0} commit
+              {(compareState.summary?.rightAhead ?? 0) === 1 ? "" : "s"} ahead
+            </span>
+          </div>
+          {compareState.diffs.length === 0 ? (
+            <div className="branch-compare__empty">No file changes between these branches.</div>
+          ) : (
+            <div className="branch-compare__files">
+              {compareState.diffs.map((diff) => (
+                <details className="branch-compare__file" key={diff.file} open>
+                  <summary>
+                    <span>{diff.file}</span>
+                    <span>{diff.isBinary ? "binary" : `${diff.hunks.length} hunks`}</span>
+                  </summary>
+                  {diff.isBinary || diff.hunks.length === 0 ? (
+                    <div className="branch-compare__empty">No textual diff.</div>
+                  ) : (
+                    diff.hunks.map((hunk, index) => (
+                      <DiffHunk
+                        key={`${diff.file}:${hunk.header}:${index}`}
+                        filePath={diff.file}
+                        hunk={hunk}
+                        hunkIndex={index}
+                        isActive={false}
+                        mode="inline"
+                        theme={theme}
+                        enableBlame={false}
+                        allowLineSelection={false}
+                        selectedLineIndices={[]}
+                        onFocus={() => {}}
+                        onToggleLine={() => {}}
+                      />
+                    ))
+                  )}
+                </details>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }

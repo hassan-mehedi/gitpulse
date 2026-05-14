@@ -7,10 +7,32 @@ use tokio::process::Command;
 use crate::error::GitError;
 use crate::git::types::ProgressPayload;
 
+fn emit_output(repo_path: &Path, args: &[&str], message: String, status: &str) {
+    let payload = ProgressPayload {
+        repo_path: repo_path.display().to_string(),
+        operation: args.first().copied().unwrap_or("git").to_string(),
+        command: args.iter().map(|arg| (*arg).to_string()).collect(),
+        message,
+        percent: if status == "completed" {
+            Some(100)
+        } else {
+            None
+        },
+        status: status.to_string(),
+    };
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        println!(
+            "gitpulse-output:{}",
+            serde_json::to_string(&payload).unwrap_or_default()
+        );
+    });
+}
+
 pub struct GitRunner;
 
 impl GitRunner {
     pub async fn run(repo_path: &Path, args: &[&str]) -> Result<String, GitError> {
+        emit_output(repo_path, args, "Started".to_string(), "started");
         let output = Command::new("git")
             .args(args)
             .current_dir(repo_path)
@@ -20,9 +42,21 @@ impl GitRunner {
             .await?;
 
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            emit_output(
+                repo_path,
+                args,
+                if stdout.trim().is_empty() {
+                    "Completed".to_string()
+                } else {
+                    stdout.trim().to_string()
+                },
+                "completed",
+            );
+            Ok(stdout)
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            emit_output(repo_path, args, stderr.clone(), "failed");
             if stderr.contains("Authentication failed")
                 || stderr.contains("could not read Username")
             {
@@ -47,6 +81,7 @@ impl GitRunner {
         use tokio::io::AsyncWriteExt;
         use tokio::process::Command;
 
+        emit_output(repo_path, args, "Started".to_string(), "started");
         let mut child = Command::new("git")
             .args(args)
             .current_dir(repo_path)
@@ -63,11 +98,24 @@ impl GitRunner {
 
         let output = child.wait_with_output().await?;
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            emit_output(
+                repo_path,
+                args,
+                if stdout.trim().is_empty() {
+                    "Completed".to_string()
+                } else {
+                    stdout.trim().to_string()
+                },
+                "completed",
+            );
+            Ok(stdout)
         } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            emit_output(repo_path, args, stderr.clone(), "failed");
             Err(GitError::CommandFailed {
                 args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                stderr,
                 code: output.status.code(),
             })
         }
@@ -100,6 +148,7 @@ impl GitRunner {
         let payload = ProgressPayload {
             repo_path: repo_path.display().to_string(),
             operation: operation.to_string(),
+            command: args.iter().map(|arg| (*arg).to_string()).collect(),
             message: "Started".to_string(),
             percent: None,
             status: "started".to_string(),
@@ -150,6 +199,7 @@ impl GitRunner {
                     ProgressPayload {
                         repo_path: repo_path_for_stderr.clone(),
                         operation: operation_for_stderr.clone(),
+                        command: Vec::new(),
                         message: trimmed.to_string(),
                         percent: extract_percent(trimmed),
                         status: "running".to_string(),
@@ -175,6 +225,7 @@ impl GitRunner {
                 ProgressPayload {
                     repo_path: repo_path.display().to_string(),
                     operation: operation.to_string(),
+                    command: args.iter().map(|arg| (*arg).to_string()).collect(),
                     message: "Completed".to_string(),
                     percent: Some(100),
                     status: "completed".to_string(),
@@ -187,6 +238,7 @@ impl GitRunner {
                 ProgressPayload {
                     repo_path: repo_path.display().to_string(),
                     operation: operation.to_string(),
+                    command: args.iter().map(|arg| (*arg).to_string()).collect(),
                     message: if stderr_output.is_empty() {
                         "Failed".to_string()
                     } else {

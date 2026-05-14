@@ -68,6 +68,13 @@ function FileChangeRowImpl({
       style={indent > 0 ? { paddingLeft: `${22 + indent * 12}px` } : undefined}
       role="treeitem"
     >
+      <span
+        className="scm-row__gutter-status"
+        style={{ color: STATUS_COLOR[change.status] ?? "var(--vscode-foreground)" }}
+        title={STATUS_TITLE[change.status] ?? change.status}
+      >
+        {change.status}
+      </span>
       <FileIcon path={change.path} size={16} className="scm-row__icon" />
       <span className="scm-row__name" title={change.path}>
         {name}

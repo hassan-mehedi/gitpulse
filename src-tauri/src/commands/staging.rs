@@ -52,3 +52,8 @@ pub async fn git_unstage_lines(
     let _ = file;
     staging::unstage_lines(Path::new(&repo_path), &patch).await
 }
+
+#[tauri::command]
+pub async fn git_add_to_gitignore(repo_path: String, file: String) -> Result<(), GitError> {
+    staging::add_to_gitignore(Path::new(&repo_path), &file).await
+}

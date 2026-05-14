@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 
 use crate::error::GitError;
@@ -55,5 +56,31 @@ pub async fn unstage_lines(repo_path: &Path, patch: &str) -> Result<(), GitError
         patch,
     )
     .await?;
+    Ok(())
+}
+
+pub async fn add_to_gitignore(repo_path: &Path, file: &str) -> Result<(), GitError> {
+    let mut ignore_path = repo_path.to_path_buf();
+    ignore_path.push(".gitignore");
+    let entry = file.trim().trim_start_matches("./");
+    if entry.is_empty() {
+        return Ok(());
+    }
+
+    let current = std::fs::read_to_string(&ignore_path).unwrap_or_default();
+    if current.lines().any(|line| line.trim() == entry) {
+        return Ok(());
+    }
+
+    let needs_newline = !current.is_empty() && !current.ends_with('\n');
+    let mut file_handle = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&ignore_path)
+        .map_err(|err| GitError::Io(err.to_string()))?;
+    if needs_newline {
+        writeln!(file_handle).map_err(|err| GitError::Io(err.to_string()))?;
+    }
+    writeln!(file_handle, "{entry}").map_err(|err| GitError::Io(err.to_string()))?;
     Ok(())
 }

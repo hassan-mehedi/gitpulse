@@ -65,7 +65,11 @@ export type CodiconName =
   | "remote"
   | "circle-slash"
   | "file"
-  | "file-code";
+  | "file-code"
+  | "calendar"
+  | "verified"
+  | "whitespace"
+  | "tools";
 
 interface CodiconProps extends Omit<HTMLAttributes<HTMLElement>, "children"> {
   name: CodiconName;

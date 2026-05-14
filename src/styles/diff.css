@@ -283,6 +283,35 @@
   font-size: 13px;
 }
 
+.binary-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 220px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.binary-preview img {
+  max-width: min(100%, 760px);
+  max-height: 60vh;
+  object-fit: contain;
+  border: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-editor-background);
+}
+
+.conflict-quickfix {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
 /* Welcome-state keybinding hints (UX-SPEC §4.5). Mirrors VS Code's
    "no editor open" surface: a faint right-aligned column of label + keys. */
 .welcome-hints {
@@ -641,6 +670,11 @@
   font: inherit !important;
 }
 
+.diff-line__word-highlight {
+  background: color-mix(in srgb, var(--vscode-editor-wordHighlightStrongBackground, #ffcc00) 35%, transparent);
+  border-radius: 2px;
+}
+
 .diff-line--context {
   background: transparent;
 }
@@ -667,9 +701,64 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  overflow-y: auto;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
+  overflow: hidden;
+}
+
+.merge-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  flex: 0 0 auto;
+}
+
+.merge-editor__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.merge-editor__filename {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.merge-editor__dir {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.merge-editor__meta {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 11px;
+}
+
+.merge-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.merge-editor__divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--vscode-editorGroup-border);
 }
 
 .merge-editor__loading {
@@ -682,15 +771,15 @@
 .merge-editor__panes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  border-bottom: 1px solid var(--vscode-editorGroup-border);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .merge-pane {
   display: flex;
   flex-direction: column;
-  min-height: 200px;
-  max-height: 380px;
+  min-height: 0;
   background: var(--vscode-editor-background);
   border-right: 1px solid var(--vscode-editorGroup-border);
   overflow: hidden;
@@ -701,6 +790,7 @@
 }
 
 .merge-pane__title {
+  flex: 0 0 auto;
   padding: 6px 12px;
   height: 26px;
   display: flex;
@@ -714,108 +804,239 @@
   letter-spacing: 0.04em;
 }
 
+.merge-pane__title-status {
+  margin-left: auto;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .merge-pane--ours .merge-pane__title {
-  border-bottom-color: var(--vscode-diffEditor-removedLineBackground);
+  border-bottom: 2px solid #e06c75;
 }
 
 .merge-pane--theirs .merge-pane__title {
-  border-bottom-color: var(--vscode-diffEditor-insertedLineBackground);
+  border-bottom: 2px solid #56b6c2;
 }
 
 .merge-pane--result .merge-pane__title {
-  border-bottom-color: var(--vscode-focusBorder);
+  border-bottom: 2px solid var(--vscode-focusBorder);
 }
 
-.merge-pane__code {
-  margin: 0;
-  padding: 8px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
+.merge-pane__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
   font-size: 12px;
   line-height: 1.5;
-  overflow-y: auto;
-  flex: 1;
+}
+
+.merge-pane__body--result {
+  display: flex;
+  flex-direction: column;
+}
+
+.merge-pane__context,
+.merge-pane__code {
+  margin: 0;
+  padding: 2px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
   color: var(--vscode-editor-foreground);
 }
 
+.merge-pane__context {
+  color: var(--vscode-descriptionForeground);
+}
+
+.merge-pane__textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 8px 12px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* Conflict block — shared across panes */
+.merge-conflict {
+  position: relative;
+  border-left: 3px solid transparent;
+  margin: 4px 0;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.merge-conflict__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 2px 8px;
+  padding: 1px 6px;
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+  border-radius: 8px;
+}
+
+.merge-conflict.is-active {
+  border-left-color: var(--vscode-focusBorder);
+}
+
+.merge-conflict.is-rejected {
+  opacity: 0.35;
+}
+
+.merge-conflict.is-accepted .merge-conflict__label {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.merge-conflict--ours pre.merge-pane__code,
+.merge-pane__code--ours {
+  background: rgba(224, 108, 117, 0.16);
+  border-left: 3px solid rgba(224, 108, 117, 0.55);
+}
+
+.merge-conflict--theirs pre.merge-pane__code,
+.merge-pane__code--theirs {
+  background: rgba(86, 182, 194, 0.16);
+  border-left: 3px solid rgba(86, 182, 194, 0.55);
+}
+
+/* Result pane — codelens-style action bar */
+.merge-conflict--result {
+  border: 1px solid var(--vscode-editorGroup-border);
+  border-radius: 4px;
+  margin: 6px 8px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.merge-conflict--result.is-unresolved {
+  border-color: rgba(255, 184, 108, 0.55);
+}
+
+.merge-conflict--result.is-resolved {
+  border-color: rgba(80, 250, 123, 0.55);
+}
+
+.merge-conflict--result.is-active {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.merge-conflict__codelens {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  border-bottom: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+}
+
+.merge-conflict__codelens--result {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.merge-codelens-action {
+  background: transparent;
+  border: 0;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.merge-codelens-action:hover {
+  text-decoration: underline;
+}
+
+.merge-codelens-action.is-selected {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.merge-codelens-sep {
+  color: var(--vscode-editorGroup-border);
+}
+
+.merge-codelens-label {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.merge-conflict__marker {
+  padding: 1px 12px;
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .merge-editor__base {
-  margin: 0 16px 16px;
+  margin: 0 12px 12px;
   padding: 8px 12px;
   border: 1px solid var(--vscode-editorGroup-border);
   border-radius: 4px;
   background: var(--vscode-sideBar-background);
+  flex: 0 0 auto;
 }
 
 .merge-editor__base summary {
   cursor: pointer;
   font-size: 12px;
   color: var(--vscode-descriptionForeground);
-  margin-bottom: 8px;
-}
-
-.merge-editor__regions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.merge-region {
-  border: 1px solid var(--vscode-editorGroup-border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--vscode-sideBar-background);
-}
-
-.merge-region__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
-  background: var(--vscode-editorGroupHeader-tabsBackground);
-  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
-}
-
-.merge-region__title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vscode-foreground);
-}
-
-.merge-region__actions {
-  display: flex;
-  gap: 4px;
-}
-
-.merge-region__panes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-}
-
-.merge-region__panes .merge-pane__code {
-  max-height: 240px;
-  padding: 8px 12px;
-}
-
-.merge-pane__code--ours {
-  background: var(--vscode-diffEditor-removedLineBackground);
-  border-right: 1px solid var(--vscode-editorGroup-border);
-}
-
-.merge-pane__code--theirs {
-  background: var(--vscode-diffEditor-insertedLineBackground);
 }
 
 .merge-editor__footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-top: 1px solid var(--vscode-editorGroup-border);
   background: var(--vscode-editorGroupHeader-tabsBackground);
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
+}
+
+.merge-editor__footer-spacer {
+  flex: 1;
+}
+
+.vscode-button--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.vscode-button--ghost:hover:not(:disabled) {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.vscode-button--danger {
+  background: var(--vscode-statusBarItem-errorBackground, #c74e39);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.vscode-button--danger:hover:not(:disabled) {
+  filter: brightness(1.1);
 }

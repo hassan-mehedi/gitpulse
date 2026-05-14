@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { addRepositoryTarget, gitDiffFile, gitStatus, openRepositoryTarget } from "../lib/git";
+import { addRepositoryTarget, gitDiffFile, gitStatus, gitSync, openRepositoryTarget } from "../lib/git";
 import { createId } from "../lib/ids";
 import type { FileDiff, FileChange, GitError, Repository, WorkspaceState } from "../types/git";
 import { useDiffStore } from "./diff";
@@ -43,6 +43,7 @@ function notifyWorkspaceError(title: string, error: unknown) {
 // scheduled for after it completes.
 const refreshInFlight = new Map<string, Promise<void>>();
 const refreshPending = new Set<string>();
+const lastSyncToastByRepo = new Map<string, string>();
 
 function statusEqual(prev: Repository, nextStatus: Awaited<ReturnType<typeof gitStatus>>) {
   if (
@@ -72,6 +73,42 @@ function statusEqual(prev: Repository, nextStatus: Awaited<ReturnType<typeof git
     }
   }
   return true;
+}
+
+function maybeNotifySyncStatus(repo: Repository, nextStatus: Awaited<ReturnType<typeof gitStatus>>) {
+  const key = `${nextStatus.ahead}/${nextStatus.behind}`;
+  if (nextStatus.ahead === 0 && nextStatus.behind === 0) {
+    lastSyncToastByRepo.delete(repo.path);
+    return;
+  }
+  if (
+    repo.ahead === nextStatus.ahead &&
+    repo.behind === nextStatus.behind &&
+    lastSyncToastByRepo.get(repo.path) === key
+  ) {
+    return;
+  }
+
+  lastSyncToastByRepo.set(repo.path, key);
+  const parts = [];
+  if (nextStatus.ahead > 0) {
+    parts.push(`${nextStatus.ahead} commit${nextStatus.ahead === 1 ? "" : "s"} ahead`);
+  }
+  if (nextStatus.behind > 0) {
+    parts.push(`${nextStatus.behind} commit${nextStatus.behind === 1 ? "" : "s"} behind`);
+  }
+  useNotificationStore.getState().pushNotification({
+    id: createId(),
+    tone: "info",
+    title: `${repo.name} is out of sync`,
+    message: `${parts.join(" / ")}${nextStatus.upstream ? ` of ${nextStatus.upstream}` : ""} — sync?`,
+    actionLabel: "Sync",
+    onAction: () => {
+      void gitSync(repo.path)
+        .then(() => useWorkspaceStore.getState().refreshRepo(repo.path))
+        .catch((error) => notifyWorkspaceError("Sync failed", error));
+    }
+  });
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
@@ -136,6 +173,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           // repositories array (and re-rendering every subscriber) for no reason.
           if (existingRepo && statusEqual(existingRepo, nextStatus)) {
             return state;
+          }
+          if (existingRepo) {
+            maybeNotifySyncStatus(existingRepo, nextStatus);
           }
           const repositories = state.repositories.map((repo) =>
             repo.path === repoPath

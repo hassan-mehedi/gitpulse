@@ -1,4 +1,5 @@
 use std::path::Path;
+use tokio::process::Command;
 
 use crate::error::GitError;
 use crate::git::commit::show_commit_header;
@@ -47,4 +48,34 @@ pub fn parse_multi_file_diff(output: &str) -> Result<Vec<FileDiff>, GitError> {
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(file_diffs)
+}
+
+pub async fn file_bytes(
+    repo_path: &Path,
+    file: &str,
+    revision: Option<&str>,
+) -> Result<Vec<u8>, GitError> {
+    if let Some(revision) = revision {
+        let spec = format!("{revision}:{file}");
+        let output = Command::new("git")
+            .args(["show", &spec])
+            .current_dir(repo_path)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("LC_ALL", "C")
+            .output()
+            .await
+            .map_err(|err| GitError::Io(err.to_string()))?;
+        if output.status.success() {
+            return Ok(output.stdout);
+        }
+        return Err(GitError::CommandFailed {
+            args: vec!["show".to_string(), spec],
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            code: output.status.code(),
+        });
+    }
+
+    let mut path = repo_path.to_path_buf();
+    path.push(file);
+    std::fs::read(path).map_err(|err| GitError::Io(err.to_string()))
 }

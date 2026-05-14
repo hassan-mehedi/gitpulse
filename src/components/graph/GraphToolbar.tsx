@@ -11,6 +11,15 @@ interface GraphToolbarProps {
   onReload: () => void;
   includeAll: boolean;
   onIncludeAllChange: (value: boolean) => void;
+  activeRepo: Repository | null;
+  onPull?: () => void;
+  onPush?: () => void;
+  onForcePush?: () => void;
+  availableRefs: string[];
+  hiddenRefs: string[];
+  onToggleRef: (ref: string) => void;
+  dateMode: "relative" | "absolute";
+  onDateModeChange: (mode: "relative" | "absolute") => void;
 }
 
 export function GraphToolbar({
@@ -21,17 +30,28 @@ export function GraphToolbar({
   onQueryChange,
   onReload,
   includeAll,
-  onIncludeAllChange
+  onIncludeAllChange,
+  activeRepo,
+  onPull,
+  onPush,
+  onForcePush,
+  availableRefs,
+  hiddenRefs,
+  onToggleRef,
+  dateMode,
+  onDateModeChange
 }: GraphToolbarProps) {
   const [isRepoMenuOpen, setIsRepoMenuOpen] = useState(false);
+  const [isRefMenuOpen, setIsRefMenuOpen] = useState(false);
   const repoMenuRef = useRef<HTMLDivElement | null>(null);
+  const refMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedRepo = useMemo(
     () => repositories.find((repo) => repo.id === selectedRepoId) ?? repositories[0] ?? null,
     [repositories, selectedRepoId]
   );
 
   useEffect(() => {
-    if (!isRepoMenuOpen) {
+    if (!isRepoMenuOpen && !isRefMenuOpen) {
       return;
     }
 
@@ -39,11 +59,15 @@ export function GraphToolbar({
       if (!repoMenuRef.current?.contains(event.target as Node)) {
         setIsRepoMenuOpen(false);
       }
+      if (!refMenuRef.current?.contains(event.target as Node)) {
+        setIsRefMenuOpen(false);
+      }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsRepoMenuOpen(false);
+        setIsRefMenuOpen(false);
       }
     }
 
@@ -53,7 +77,7 @@ export function GraphToolbar({
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [isRepoMenuOpen]);
+  }, [isRepoMenuOpen, isRefMenuOpen]);
 
   return (
     <div className="graph-toolbar">
@@ -103,6 +127,44 @@ export function GraphToolbar({
           value={query}
         />
       </div>
+      {activeRepo?.upstream &&
+      (activeRepo.ahead > 0 || activeRepo.behind > 0) ? (
+        <div
+          className="graph-toolbar__sync"
+          title={`${activeRepo.behind} behind / ${activeRepo.ahead} ahead of ${activeRepo.upstream}`}
+        >
+          {activeRepo.behind > 0 ? (
+            <button
+              className="graph-toolbar__sync-button"
+              onClick={onPull}
+              type="button"
+              title={`Pull ${activeRepo.behind} commit${activeRepo.behind === 1 ? "" : "s"}`}
+            >
+              <Codicon name="arrow-down" size={12} />
+              <span>{activeRepo.behind}</span>
+            </button>
+          ) : null}
+          {activeRepo.ahead > 0 ? (
+            <button
+              className="graph-toolbar__sync-button"
+              onClick={onPush}
+              type="button"
+              title={`Push ${activeRepo.ahead} commit${activeRepo.ahead === 1 ? "" : "s"}`}
+            >
+              <Codicon name="arrow-up" size={12} />
+              <span>{activeRepo.ahead}</span>
+            </button>
+          ) : null}
+          <button
+            className="graph-toolbar__sync-button graph-toolbar__sync-button--danger"
+            onClick={onForcePush}
+            type="button"
+            title="Force Push With Lease"
+          >
+            <Codicon name="warning" size={12} />
+          </button>
+        </div>
+      ) : null}
       <button
         className={`view-action${includeAll ? " is-active" : ""}`}
         onClick={() => onIncludeAllChange(!includeAll)}
@@ -111,6 +173,42 @@ export function GraphToolbar({
         aria-pressed={includeAll}
       >
         <Codicon name="git-branch" size={16} />
+      </button>
+      <div className="graph-toolbar__ref-filter" ref={refMenuRef}>
+        <button
+          className={`view-action${hiddenRefs.length > 0 ? " is-active" : ""}`}
+          onClick={() => setIsRefMenuOpen((value) => !value)}
+          title="Show/hide branch refs"
+          type="button"
+        >
+          <Codicon name="filter" size={16} />
+        </button>
+        {isRefMenuOpen ? (
+          <div className="graph-toolbar__ref-menu">
+            {availableRefs.length === 0 ? (
+              <div className="graph-toolbar__ref-empty">No refs loaded</div>
+            ) : (
+              availableRefs.map((ref) => (
+                <label className="graph-toolbar__ref-option" key={ref}>
+                  <input
+                    type="checkbox"
+                    checked={!hiddenRefs.includes(ref)}
+                    onChange={() => onToggleRef(ref)}
+                  />
+                  <span>{ref.replace(/^HEAD -> /, "")}</span>
+                </label>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
+      <button
+        className="view-action"
+        onClick={() => onDateModeChange(dateMode === "relative" ? "absolute" : "relative")}
+        title={dateMode === "relative" ? "Show absolute dates" : "Show relative dates"}
+        type="button"
+      >
+        <Codicon name="calendar" size={16} />
       </button>
       <button
         className="view-action"

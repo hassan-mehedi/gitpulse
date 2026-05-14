@@ -256,7 +256,7 @@ pub fn parse_log(output: &str) -> Vec<CommitInfo> {
         .lines()
         .filter_map(|line| {
             let parts: Vec<&str> = line.split('\x1f').collect();
-            if parts.len() != 7 {
+            if parts.len() < 7 {
                 return None;
             }
             let sha = parts[0].to_string();
@@ -277,6 +277,7 @@ pub fn parse_log(output: &str) -> Vec<CommitInfo> {
                 author: parts[4].to_string(),
                 author_email: parts[5].to_string(),
                 date: parts[6].to_string(),
+                signature: parts.get(7).copied().unwrap_or("N").to_string(),
             })
         })
         .collect()
@@ -365,7 +366,7 @@ pub fn parse_branches(output: &str) -> Vec<BranchInfo> {
         .lines()
         .filter_map(|line| {
             let parts: Vec<&str> = line.split('\x1f').collect();
-            if parts.len() < 5 {
+            if parts.len() < 6 {
                 return None;
             }
 
@@ -396,6 +397,7 @@ pub fn parse_branches(output: &str) -> Vec<BranchInfo> {
                 },
                 last_commit_sha: parts[3].to_string(),
                 last_commit_date: parts[4].to_string(),
+                last_commit_author_email: parts[5].to_string(),
             })
         })
         .collect()

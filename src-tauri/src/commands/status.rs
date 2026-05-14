@@ -14,8 +14,15 @@ pub async fn git_diff_file(
     repo_path: String,
     file: String,
     staged: bool,
+    ignore_whitespace: Option<bool>,
 ) -> Result<FileDiff, GitError> {
-    status::diff_file(Path::new(&repo_path), &file, staged).await
+    status::diff_file(
+        Path::new(&repo_path),
+        &file,
+        staged,
+        ignore_whitespace.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]

@@ -5,6 +5,8 @@ export interface NotificationItem {
   title: string;
   message: string;
   tone: "info" | "error";
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface NotificationStore {

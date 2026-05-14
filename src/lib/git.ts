@@ -11,12 +11,17 @@ import type {
   FileDiff,
   GitError,
   OperationResult,
+  PrRemoteInfo,
   ProgressPayload,
   ReflogEntry,
   RepoStatus,
   RemoteInfo,
   Repository,
+  GitHookInfo,
+  LfsLockInfo,
+  LfsStatus,
   StashEntry,
+  SubmoduleInfo,
   TagInfo,
   UserInfo,
   WorktreeInfo,
@@ -35,11 +40,62 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
     } satisfies GitError;
   }
 
+  const payloadBase = {
+    repoPath: typeof args.repoPath === "string" ? args.repoPath : "",
+    operation: command.replace(/^git_/, "").replaceAll("_", " "),
+    command: [command]
+  };
+  window.dispatchEvent(
+    new CustomEvent<ProgressPayload>("gitpulse:output", {
+      detail: {
+        ...payloadBase,
+        message: "Started",
+        status: "started"
+      }
+    })
+  );
+
   try {
-    return await invoke<T>(command, args);
+    const result = await invoke<T>(command, args);
+    window.dispatchEvent(
+      new CustomEvent<ProgressPayload>("gitpulse:output", {
+        detail: {
+          ...payloadBase,
+          message: outputMessage(result),
+          percent: 100,
+          status: "completed"
+        }
+      })
+    );
+    return result;
   } catch (error) {
+    const gitError = error as GitError;
+    window.dispatchEvent(
+      new CustomEvent<ProgressPayload>("gitpulse:output", {
+        detail: {
+          ...payloadBase,
+          message: gitError.stderr ?? gitError.message ?? String(error),
+          status: "failed"
+        }
+      })
+    );
     throw error as GitError;
   }
+}
+
+function outputMessage(result: unknown) {
+  if (typeof result === "string") {
+    return result.trim() || "Completed";
+  }
+  if (
+    result &&
+    typeof result === "object" &&
+    "summary" in result &&
+    typeof (result as { summary?: unknown }).summary === "string"
+  ) {
+    return (result as { summary: string }).summary;
+  }
+  return "Completed";
 }
 
 export async function openRepositoryTarget(path: string): Promise<WorkspaceState> {
@@ -58,8 +114,13 @@ export async function gitStatus(repoPath: string): Promise<RepoStatus> {
   return gitInvoke("git_status", { repoPath });
 }
 
-export async function gitDiffFile(repoPath: string, file: string, staged = false): Promise<FileDiff> {
-  return gitInvoke("git_diff_file", { repoPath, file, staged });
+export async function gitDiffFile(
+  repoPath: string,
+  file: string,
+  staged = false,
+  ignoreWhitespace = false
+): Promise<FileDiff> {
+  return gitInvoke("git_diff_file", { repoPath, file, staged, ignoreWhitespace });
 }
 
 export async function gitBlameLine(
@@ -82,6 +143,10 @@ export async function gitStageFile(repoPath: string, file: string): Promise<void
   return gitInvoke("git_stage_file", { repoPath, file });
 }
 
+export async function gitStageFiles(repoPath: string, files: string[]): Promise<void> {
+  return gitInvoke("git_stage_files", { repoPath, files });
+}
+
 export async function gitStageAll(repoPath: string): Promise<void> {
   return gitInvoke("git_stage_all", { repoPath });
 }
@@ -102,8 +167,16 @@ export async function gitUnstageLines(repoPath: string, file: string, patch: str
   return gitInvoke("git_unstage_lines", { repoPath, file, patch });
 }
 
-export async function gitCommit(repoPath: string, message: string): Promise<CommitResult> {
-  return gitInvoke("git_commit", { repoPath, message });
+export async function gitAddToGitignore(repoPath: string, file: string): Promise<void> {
+  return gitInvoke("git_add_to_gitignore", { repoPath, file });
+}
+
+export async function gitCommit(
+  repoPath: string,
+  message: string,
+  sign = false
+): Promise<CommitResult> {
+  return gitInvoke("git_commit", { repoPath, message, sign });
 }
 
 export async function gitBranches(repoPath: string): Promise<BranchInfo[]> {
@@ -154,6 +227,18 @@ export async function gitDeleteRemoteBranch(
   return gitInvoke("git_delete_remote_branch", { repoPath, remote, branch });
 }
 
+export async function gitSetUpstream(
+  repoPath: string,
+  branchName: string,
+  upstream: string
+): Promise<void> {
+  return gitInvoke("git_set_upstream", { repoPath, branchName, upstream });
+}
+
+export async function gitUnsetUpstream(repoPath: string, branchName: string): Promise<void> {
+  return gitInvoke("git_unset_upstream", { repoPath, branchName });
+}
+
 export async function gitRebase(repoPath: string, onto: string): Promise<OperationResult> {
   return gitInvoke("git_rebase", { repoPath, onto });
 }
@@ -164,6 +249,34 @@ export async function gitAbortMerge(repoPath: string): Promise<void> {
 
 export async function gitAbortRebase(repoPath: string): Promise<void> {
   return gitInvoke("git_abort_rebase", { repoPath });
+}
+
+export interface RebaseCandidate {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  author: string;
+  date: string;
+}
+
+export async function gitListRebaseCandidates(
+  repoPath: string,
+  baseSha: string
+): Promise<RebaseCandidate[]> {
+  return gitInvoke("git_list_rebase_candidates", { repoPath, baseSha });
+}
+
+export async function gitRebaseInteractive(
+  repoPath: string,
+  baseSha: string,
+  todo: string[],
+  messages: string[] = []
+): Promise<OperationResult> {
+  return gitInvoke("git_rebase_interactive", { repoPath, baseSha, todo, messages });
+}
+
+export async function gitRebaseContinue(repoPath: string): Promise<void> {
+  return gitInvoke("git_rebase_continue", { repoPath });
 }
 
 export async function gitCherryPick(repoPath: string, sha: string): Promise<CherryPickResult> {
@@ -249,6 +362,14 @@ export async function gitPull(
   return gitInvoke("git_pull", { repoPath, remote, branch });
 }
 
+export async function gitPullFfOnly(
+  repoPath: string,
+  remote?: string,
+  branch?: string
+): Promise<OperationResult> {
+  return gitInvoke("git_pull_ff_only", { repoPath, remote, branch });
+}
+
 export async function gitPullRebase(
   repoPath: string,
   remote?: string,
@@ -322,12 +443,20 @@ export async function gitPruneWorktrees(repoPath: string): Promise<OperationResu
   return gitInvoke("git_prune_worktrees", { repoPath });
 }
 
-export async function gitCommitAll(repoPath: string, message: string): Promise<CommitResult> {
-  return gitInvoke("git_commit_all", { repoPath, message });
+export async function gitCommitAll(
+  repoPath: string,
+  message: string,
+  sign = false
+): Promise<CommitResult> {
+  return gitInvoke("git_commit_all", { repoPath, message, sign });
 }
 
-export async function gitCommitAmend(repoPath: string, message?: string): Promise<CommitResult> {
-  return gitInvoke("git_commit_amend", { repoPath, message });
+export async function gitCommitAmend(
+  repoPath: string,
+  message?: string,
+  sign = false
+): Promise<CommitResult> {
+  return gitInvoke("git_commit_amend", { repoPath, message, sign });
 }
 
 export async function gitUndoLastCommit(repoPath: string): Promise<void> {
@@ -428,6 +557,22 @@ export async function gitDiffMergeBase(
   return gitInvoke("git_diff_merge_base", { repoPath, ref1, ref2 });
 }
 
+export async function gitFileBytes(
+  repoPath: string,
+  file: string,
+  revision?: string
+): Promise<number[]> {
+  return gitInvoke("git_file_bytes", { repoPath, file, revision });
+}
+
+export async function gitCompareBranches(
+  repoPath: string,
+  left: string,
+  right: string
+): Promise<import("../types/git").BranchCompare> {
+  return gitInvoke("git_compare_branches", { repoPath, left, right });
+}
+
 export async function gitDiscardLines(repoPath: string, file: string, patch: string): Promise<void> {
   return gitInvoke("git_discard_lines", { repoPath, file, patch });
 }
@@ -446,6 +591,83 @@ export async function gitGetUserInfo(repoPath: string): Promise<UserInfo> {
 
 export async function gitVersion(): Promise<string> {
   return gitInvoke("git_version", {});
+}
+
+export async function gitBisect(
+  repoPath: string,
+  action: "start" | "good" | "bad" | "reset",
+  rev?: string
+): Promise<OperationResult> {
+  return gitInvoke("git_bisect", { repoPath, action, rev });
+}
+
+export async function gitSubmoduleStatus(repoPath: string): Promise<SubmoduleInfo[]> {
+  return gitInvoke("git_submodule_status", { repoPath });
+}
+
+export async function gitSubmoduleInit(repoPath: string): Promise<OperationResult> {
+  return gitInvoke("git_submodule_init", { repoPath });
+}
+
+export async function gitSubmoduleUpdate(repoPath: string): Promise<OperationResult> {
+  return gitInvoke("git_submodule_update", { repoPath });
+}
+
+export async function gitSparseList(repoPath: string): Promise<string[]> {
+  return gitInvoke("git_sparse_list", { repoPath });
+}
+
+export async function gitSparseSet(repoPath: string, patterns: string[]): Promise<OperationResult> {
+  return gitInvoke("git_sparse_set", { repoPath, patterns });
+}
+
+export async function gitSparseDisable(repoPath: string): Promise<OperationResult> {
+  return gitInvoke("git_sparse_disable", { repoPath });
+}
+
+export async function gitLfsStatus(repoPath: string): Promise<LfsStatus> {
+  return gitInvoke("git_lfs_status", { repoPath });
+}
+
+export async function gitLfsLocks(repoPath: string): Promise<LfsLockInfo[]> {
+  return gitInvoke("git_lfs_locks", { repoPath });
+}
+
+export async function gitLfsLock(repoPath: string, file: string): Promise<OperationResult> {
+  return gitInvoke("git_lfs_lock", { repoPath, file });
+}
+
+export async function gitLfsUnlock(repoPath: string, file: string): Promise<OperationResult> {
+  return gitInvoke("git_lfs_unlock", { repoPath, file });
+}
+
+export async function gitHooks(repoPath: string): Promise<GitHookInfo[]> {
+  return gitInvoke("git_hooks", { repoPath });
+}
+
+export async function gitHookRead(repoPath: string, name: string): Promise<string> {
+  return gitInvoke("git_hook_read", { repoPath, name });
+}
+
+export async function gitPatchCreate(repoPath: string, staged: boolean): Promise<string> {
+  return gitInvoke("git_patch_create", { repoPath, staged });
+}
+
+export async function gitPatchApply(repoPath: string, patch: string): Promise<OperationResult> {
+  return gitInvoke("git_patch_apply", { repoPath, patch });
+}
+
+export async function gitRemoteSetUrl(
+  repoPath: string,
+  remote: string,
+  url: string,
+  push = false
+): Promise<OperationResult> {
+  return gitInvoke("git_remote_set_url", { repoPath, remote, url, push });
+}
+
+export async function gitPrRemotes(repoPath: string): Promise<PrRemoteInfo[]> {
+  return gitInvoke("git_pr_remotes", { repoPath });
 }
 
 export async function listenGitProgress(

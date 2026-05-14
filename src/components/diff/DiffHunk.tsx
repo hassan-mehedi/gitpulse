@@ -39,6 +39,7 @@ export function DiffHunk({
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => line.lineType !== "remove");
   const selected = new Set(selectedLineIndices);
+  const comparisons = buildLineComparisons(hunk.lines);
 
   return (
     <section className={`diff-hunk ${isActive ? "is-active" : ""}`} onMouseEnter={onFocus}>
@@ -62,6 +63,7 @@ export function DiffHunk({
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
+                  compareContent={comparisons.get(index)}
                 />
               ))}
             </pre>
@@ -81,6 +83,7 @@ export function DiffHunk({
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
+                  compareContent={comparisons.get(index)}
                 />
               ))}
             </pre>
@@ -100,10 +103,31 @@ export function DiffHunk({
               selectable={allowLineSelection && line.lineType !== "context"}
               selected={selected.has(index)}
               theme={theme}
+              compareContent={comparisons.get(index)}
             />
           ))}
         </pre>
       )}
     </section>
   );
+}
+
+function buildLineComparisons(lines: DiffHunkType["lines"]) {
+  const comparisons = new Map<number, string>();
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    if (!line || line.lineType === "context") continue;
+    const code = line.content.slice(1);
+    if (line.lineType === "remove") {
+      const next = lines[index + 1];
+      if (next?.lineType === "add") comparisons.set(index, next.content.slice(1));
+    } else if (line.lineType === "add") {
+      const prev = lines[index - 1];
+      if (prev?.lineType === "remove") comparisons.set(index, prev.content.slice(1));
+    }
+    if (comparisons.get(index) === code) {
+      comparisons.delete(index);
+    }
+  }
+  return comparisons;
 }

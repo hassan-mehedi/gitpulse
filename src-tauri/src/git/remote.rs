@@ -88,6 +88,25 @@ pub async fn pull<R: Runtime>(
     })
 }
 
+pub async fn pull_ff_only<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    repo_path: &Path,
+    remote: Option<&str>,
+    branch: Option<&str>,
+) -> Result<OperationResult, GitError> {
+    let mut args = vec!["pull", "--ff-only", "--progress"];
+    if let Some(remote) = remote {
+        args.push(remote);
+    }
+    if let Some(branch) = branch {
+        args.push(branch);
+    }
+    GitRunner::run_with_progress(app_handle, repo_path, "pull", &args).await?;
+    Ok(OperationResult {
+        summary: "Fast-forward pull completed".to_string(),
+    })
+}
+
 pub async fn pull_rebase<R: Runtime>(
     app_handle: &AppHandle<R>,
     repo_path: &Path,

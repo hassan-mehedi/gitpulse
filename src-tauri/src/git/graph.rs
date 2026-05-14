@@ -17,7 +17,7 @@ pub async fn graph(
     }
     args.extend_from_slice(&[
         "--date-order",
-        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI",
+        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%G?",
         "-n",
         &limit,
     ]);

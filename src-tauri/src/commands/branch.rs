@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::error::GitError;
 use crate::git::branch;
-use crate::git::types::{BranchInfo, OperationResult};
+use crate::git::types::{BranchCompare, BranchInfo, OperationResult};
 
 #[tauri::command]
 pub async fn git_branches(repo_path: String) -> Result<Vec<BranchInfo>, GitError> {
@@ -73,4 +73,27 @@ pub async fn git_delete_remote_branch(
     branch: String,
 ) -> Result<(), GitError> {
     branch::delete_remote_branch(Path::new(&repo_path), &remote, &branch).await
+}
+
+#[tauri::command]
+pub async fn git_set_upstream(
+    repo_path: String,
+    branch_name: String,
+    upstream: String,
+) -> Result<(), GitError> {
+    branch::set_upstream(Path::new(&repo_path), &branch_name, &upstream).await
+}
+
+#[tauri::command]
+pub async fn git_unset_upstream(repo_path: String, branch_name: String) -> Result<(), GitError> {
+    branch::unset_upstream(Path::new(&repo_path), &branch_name).await
+}
+
+#[tauri::command]
+pub async fn git_compare_branches(
+    repo_path: String,
+    left: String,
+    right: String,
+) -> Result<BranchCompare, GitError> {
+    branch::compare(Path::new(&repo_path), &left, &right).await
 }

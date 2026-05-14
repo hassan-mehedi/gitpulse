@@ -1003,6 +1003,52 @@ button:disabled {
   outline-offset: -1px;
 }
 
+.commit-input__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 14px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.commit-input__counter {
+  font-variant-numeric: tabular-nums;
+}
+
+.commit-input__counter--warning {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.commit-input__counter--error {
+  color: var(--vscode-errorForeground);
+}
+
+.commit-input__hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-input__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.commit-input__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.commit-input__toggle input {
+  margin: 0;
+}
+
 .commit-input__actions {
   position: relative;
   display: flex;
@@ -1023,6 +1069,30 @@ button:disabled {
   padding: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+
+.commit-input__output {
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  border-radius: 3px;
+  background: rgba(244, 135, 113, 0.08);
+  color: var(--vscode-foreground);
+  font-size: 12px;
+}
+
+.commit-input__output summary {
+  cursor: pointer;
+  padding: 5px 8px;
+  color: var(--vscode-errorForeground);
+}
+
+.commit-input__output pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
 }
 
 /* Legacy class names — keep working for unmigrated views, restyle to flat. */
@@ -1365,6 +1435,16 @@ body.is-resizing-sidebar * {
   white-space: nowrap;
 }
 
+.repo-section__path {
+  flex: 1;
+  min-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
 .repo-section__branch {
   display: inline-flex;
   align-items: center;
@@ -1593,6 +1673,78 @@ body.is-resizing-sidebar * {
   outline-offset: -1px;
 }
 
+.branches-filter__toggle {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-border, var(--vscode-input-border));
+  border-radius: 2px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.branches-filter__toggle.is-active {
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+}
+
+.branch-compare-modal {
+  width: min(980px, 100%);
+}
+
+.branch-compare-modal__body {
+  max-height: 72vh;
+}
+
+.branch-compare__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background);
+  font-size: 13px;
+}
+
+.branch-compare__files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-compare__file {
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+}
+
+.branch-compare__file summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  font-size: 12px;
+}
+
+.branch-compare__empty,
+.branch-compare__error {
+  padding: 16px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+}
+
+.branch-compare__error {
+  color: var(--vscode-errorForeground);
+  white-space: pre-wrap;
+}
+
 .scm-row--placeholder {
   color: var(--vscode-descriptionForeground);
   cursor: default;
@@ -1647,6 +1799,17 @@ body.is-resizing-sidebar * {
 .scm-row__icon {
   flex: 0 0 auto;
   color: var(--vscode-icon-foreground);
+}
+
+.scm-row__gutter-status {
+  position: absolute;
+  left: 4px;
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.95;
 }
 
 .scm-row.is-selected .scm-row__icon {
@@ -1990,6 +2153,122 @@ body.is-resizing-sidebar * {
   cursor: not-allowed;
 }
 
+.misc-panel {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.misc-panel__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-right: 1px solid var(--vscode-sideBar-border);
+  background: var(--vscode-sideBar-background);
+}
+
+.misc-panel__nav-item {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-sideBar-foreground);
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.misc-panel__nav-item:hover,
+.misc-panel__nav-item.is-active {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.misc-panel__body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.misc-panel__repo,
+.misc-panel__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.misc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background);
+}
+
+.misc-card h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.misc-panel__textarea {
+  min-height: 110px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+}
+
+.misc-panel__result {
+  margin: 10px 0 0;
+  min-height: 180px;
+  max-height: 44vh;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-foreground);
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+}
+
+.misc-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.misc-panel__list-item {
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.misc-panel__list-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.misc-panel__hint {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
 /* Toasts (UX-SPEC §5.4) */
 .toast-viewport {
   position: fixed;
@@ -2031,6 +2310,22 @@ body.is-resizing-sidebar * {
 .toast__message {
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
+}
+
+.toast__action {
+  margin-top: 8px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toast__action:hover {
+  background: var(--vscode-button-hoverBackground);
 }
 
 /* Modal (UX-SPEC §5.1): flat, 4px radius, modal shadow */
@@ -2077,6 +2372,149 @@ body.is-resizing-sidebar * {
   gap: 12px;
   padding: 12px;
   overflow-y: auto;
+}
+
+/* Interactive rebase modal */
+.rebase-modal {
+  width: min(820px, 100%);
+}
+
+.rebase-modal__body {
+  gap: 8px;
+}
+
+.rebase-modal__loading {
+  padding: 24px;
+  color: var(--vscode-descriptionForeground);
+  text-align: center;
+  font-size: 13px;
+}
+
+.rebase-modal__hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rebase-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  overflow: hidden;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.rebase-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--vscode-widget-border);
+  font-size: 12px;
+}
+
+.rebase-row--reword,
+.rebase-row--squash {
+  align-items: start;
+}
+
+.rebase-row:last-child {
+  border-bottom: 0;
+}
+
+.rebase-row--drop {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.rebase-row--fixup .rebase-row__subject {
+  color: var(--vscode-descriptionForeground);
+}
+
+.rebase-row__handle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rebase-row__action {
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 11px;
+}
+
+.rebase-row__sha {
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.rebase-row__subject {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-foreground);
+}
+
+.rebase-row__author {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rebase-row__message {
+  grid-column: 4 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.rebase-row__message textarea {
+  width: 100%;
+  min-height: 54px;
+  resize: vertical;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 8px;
+}
+
+.rebase-modal__counts {
+  flex: 1;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.rebase-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.rebase-modal__error {
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: rgba(244, 135, 113, 0.12);
+  color: var(--vscode-errorForeground);
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 
 /* Confirm modal */

@@ -82,6 +82,7 @@ export interface CommitInfo {
   date: string;
   parents: string[];
   refs: string[];
+  signature: string;
 }
 
 export interface CommitFileStat {
@@ -103,12 +104,49 @@ export interface BranchInfo {
   upstream?: string;
   lastCommitSha: string;
   lastCommitDate: string;
+  lastCommitAuthorEmail: string;
+}
+
+export interface BranchCompare {
+  left: string;
+  right: string;
+  leftAhead: number;
+  rightAhead: number;
 }
 
 export interface RemoteInfo {
   name: string;
   fetchUrl: string;
   pushUrl: string;
+}
+
+export interface SubmoduleInfo {
+  path: string;
+  sha: string;
+  status: string;
+  description: string;
+}
+
+export interface LfsStatus {
+  output: string;
+}
+
+export interface LfsLockInfo {
+  path: string;
+  owner: string;
+  id: string;
+}
+
+export interface GitHookInfo {
+  name: string;
+  path: string;
+  executable: boolean;
+}
+
+export interface PrRemoteInfo {
+  remote: string;
+  url: string;
+  provider: string;
 }
 
 export interface OperationResult {
@@ -118,6 +156,7 @@ export interface OperationResult {
 export interface ProgressPayload {
   repoPath: string;
   operation: string;
+  command: string[];
   message: string;
   percent?: number;
   status: "started" | "running" | "completed" | "failed";
@@ -147,7 +186,9 @@ export interface GraphNode {
   refs: string[];
   message: string;
   author: string;
+  authorEmail: string;
   date: string;
+  signature: string;
   lane: number;
   /** Color group id this commit belongs to (stable across lane recycles). */
   colorId: number;
@@ -236,4 +277,4 @@ export interface GitError {
   path?: string;
 }
 
-export type ActivityView = "source-control" | "branches" | "graph" | "blame" | "settings";
+export type ActivityView = "source-control" | "branches" | "graph" | "misc" | "blame" | "settings";

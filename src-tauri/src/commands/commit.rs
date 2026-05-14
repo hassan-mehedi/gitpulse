@@ -5,21 +5,41 @@ use crate::git::commit;
 use crate::git::types::{CommitInfo, CommitResult};
 
 #[tauri::command]
-pub async fn git_commit(repo_path: String, message: String) -> Result<CommitResult, GitError> {
-    commit::commit(Path::new(&repo_path), &message, false).await
+pub async fn git_commit(
+    repo_path: String,
+    message: String,
+    sign: Option<bool>,
+) -> Result<CommitResult, GitError> {
+    commit::commit(
+        Path::new(&repo_path),
+        &message,
+        false,
+        sign.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]
-pub async fn git_commit_all(repo_path: String, message: String) -> Result<CommitResult, GitError> {
-    commit::commit(Path::new(&repo_path), &message, true).await
+pub async fn git_commit_all(
+    repo_path: String,
+    message: String,
+    sign: Option<bool>,
+) -> Result<CommitResult, GitError> {
+    commit::commit(Path::new(&repo_path), &message, true, sign.unwrap_or(false)).await
 }
 
 #[tauri::command]
 pub async fn git_commit_amend(
     repo_path: String,
     message: Option<String>,
+    sign: Option<bool>,
 ) -> Result<CommitResult, GitError> {
-    commit::amend(Path::new(&repo_path), message.as_deref()).await
+    commit::amend(
+        Path::new(&repo_path),
+        message.as_deref(),
+        sign.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]

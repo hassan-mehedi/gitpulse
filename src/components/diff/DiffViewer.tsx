@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
-import { gitDiscardLines, gitStageLines, gitUnstageLines } from "../../lib/git";
+import {
+  gitDiffFile,
+  gitDiscardLines,
+  gitFileBytes,
+  gitGetConflictContent,
+  gitMarkResolved,
+  gitSetConflictContent,
+  gitStageLines,
+  gitUnstageLines
+} from "../../lib/git";
+import {
+  buildResolvedConflictContent,
+  parseConflictSegments,
+  type ConflictChoice
+} from "../../lib/conflicts";
 import { buildPatch, buildPatchFromSelectedLines } from "../../lib/patch";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -10,7 +24,7 @@ import { FileHistoryPanel } from "../source-control/FileHistoryPanel";
 import { MergeEditor } from "../merge/MergeEditor";
 import { DiffGutter } from "./DiffGutter";
 import { DiffHunk } from "./DiffHunk";
-import type { ActivityView } from "../../types/git";
+import type { ActivityView, FileDiff } from "../../types/git";
 
 interface DiffViewerProps {
   activeView: ActivityView;
@@ -36,7 +50,10 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
   const [surface, setSurface] = useState<"diff" | "history">("diff");
   const [showOutline, setShowOutline] = useState(false);
-  const diffState = activeDiff;
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+  const [whitespaceDiff, setWhitespaceDiff] = useState<FileDiff | null>(null);
+  const [binaryPreview, setBinaryPreview] = useState<{ url: string; kind: "image" | "binary"; size: number } | null>(null);
+  const diffState = ignoreWhitespace ? whitespaceDiff ?? activeDiff : activeDiff;
   const repoState = activeRepo;
   const isReadOnly = activeSourceKind === "commit";
   const activeHunk = diffState?.hunks[activeHunkIndex] ?? null;
@@ -53,6 +70,25 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
 
     setSelectedLinesByHunk({});
   }, [diffState, repoState, staged]);
+
+  useEffect(() => {
+    setIgnoreWhitespace(false);
+    setWhitespaceDiff(null);
+    setBinaryPreview(null);
+  }, [activeFilePath, activeRepo?.path, staged]);
+
+  useEffect(() => {
+    if (!ignoreWhitespace || !activeChange || !repoState) return;
+    let cancelled = false;
+    void runGit(() => gitDiffFile(repoState.path, activeChange.path, staged, true))
+      .then((nextDiff) => {
+        if (!cancelled) setWhitespaceDiff(nextDiff);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChange, ignoreWhitespace, repoState, runGit, staged]);
 
   useEffect(() => {
     if (!activeFilePath || !repoState) {
@@ -117,7 +153,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     return activeView === "graph" ? <GraphDiffPlaceholder /> : <WelcomeHints />;
   }
 
-  const diff = activeDiff;
+  const diff = diffState ?? activeDiff;
   const repo = activeRepo;
   const filePath = activeFilePath;
 
@@ -210,6 +246,14 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     setActiveHunkIndex((activeHunkIndex + 1) % diff.hunks.length);
   }
 
+  function revealActiveHunk() {
+    const line = activeHunk?.newStart ?? activeHunk?.oldStart ?? 1;
+    const target = document.querySelector<HTMLElement>(
+      `[data-diff-line="${filePath}:${line}"]`
+    );
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   const segments = filePath.split("/");
   const fileName = segments.pop() ?? filePath;
   const fileDir = segments.join("/");
@@ -218,6 +262,43 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     : staged
       ? "staged"
       : "working tree";
+
+  async function loadBinaryPreview() {
+    if (!repoState || !filePath) return;
+    const revision = isReadOnly ? activeCommit?.sha : staged ? "HEAD" : undefined;
+    const bytes = await runGit(() => gitFileBytes(repoState.path, filePath, revision));
+    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+    const mime = imageMime(ext);
+    if (!mime) {
+      setBinaryPreview({ url: "", kind: "binary", size: bytes.length });
+      return;
+    }
+    const blob = new Blob([new Uint8Array(bytes)], { type: mime });
+    setBinaryPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return { url: URL.createObjectURL(blob), kind: "image", size: bytes.length };
+    });
+  }
+
+  async function applyConflictQuickFix(choice: ConflictChoice) {
+    if (!activeChange || !repoState) return;
+    await runGit(async () => {
+      const content = await gitGetConflictContent(repoState.path, activeChange.path);
+      const segments = parseConflictSegments(content.raw);
+      const choices: Record<number, ConflictChoice> = {};
+      for (const segment of segments) {
+        if (segment.type === "conflict") {
+          choices[segment.region.id] = choice;
+        }
+      }
+      const resolved = buildResolvedConflictContent(segments, choices);
+      if (!resolved) return;
+      await gitSetConflictContent(repoState.path, activeChange.path, resolved);
+      await gitMarkResolved(repoState.path, activeChange.path);
+      await refreshRepo(repoState.path);
+      await refreshActiveDiff();
+    });
+  }
 
   return (
     <div className="diff-viewer">
@@ -304,6 +385,25 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
               >
                 <Codicon name="list-tree" size={16} />
               </button>
+              <button
+                className={`view-action${ignoreWhitespace ? " is-active" : ""}`}
+                onClick={() => setIgnoreWhitespace((value) => !value)}
+                title="Toggle whitespace changes"
+                aria-label="Toggle whitespace changes"
+                type="button"
+              >
+                <Codicon name="whitespace" size={16} />
+              </button>
+              <button
+                className="view-action"
+                onClick={revealActiveHunk}
+                title="Reveal active line"
+                aria-label="Reveal active line"
+                disabled={!activeHunk}
+                type="button"
+              >
+                <Codicon name="go-to-file" size={16} />
+              </button>
             </>
           ) : null}
         </div>
@@ -312,7 +412,21 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
       {surface === "history" ? (
         <FileHistoryPanel filePath={filePath} repo={repo} />
       ) : activeChange?.status === "U" ? (
-        <MergeEditor filePath={activeChange.path} repoPath={repo.path} />
+        <>
+          <div className="conflict-quickfix">
+            <span>Conflict quick fixes</span>
+            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("ours")} type="button">
+              Accept All Current
+            </button>
+            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("theirs")} type="button">
+              Accept All Incoming
+            </button>
+            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("both")} type="button">
+              Accept All Both
+            </button>
+          </div>
+          <MergeEditor filePath={activeChange.path} repoPath={repo.path} />
+        </>
       ) : (
         <div
           className={`diff-viewer__body${showOutline ? "" : " diff-viewer__body--no-outline"}`}
@@ -350,7 +464,15 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
           <div className="diff-viewer__content">
             {diff.hunks.length === 0 ? (
               <div className="diff-viewer__placeholder">
-                {diff.isBinary ? "Binary file — no textual diff." : "No textual changes to display."}
+                {diff.isBinary ? (
+                  <BinaryPreview
+                    preview={binaryPreview}
+                    onLoad={() => void loadBinaryPreview()}
+                    fileName={fileName}
+                  />
+                ) : (
+                  "No textual changes to display."
+                )}
               </div>
             ) : (
               diff.hunks.map((hunk, index) => (
@@ -417,4 +539,54 @@ function GraphDiffPlaceholder() {
       Select a file on the left to view its diff.
     </div>
   );
+}
+
+function BinaryPreview({
+  preview,
+  onLoad,
+  fileName
+}: {
+  preview: { url: string; kind: "image" | "binary"; size: number } | null;
+  onLoad: () => void;
+  fileName: string;
+}) {
+  if (!preview) {
+    return (
+      <div className="binary-preview">
+        <div>Binary file - no textual diff.</div>
+        <button className="vscode-button" onClick={onLoad} type="button">
+          Preview
+        </button>
+      </div>
+    );
+  }
+  if (preview.kind === "image") {
+    return (
+      <div className="binary-preview">
+        <img src={preview.url} alt={fileName} />
+        <span>{formatBytes(preview.size)}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="binary-preview">
+      <div>Binary preview is not available for this file type.</div>
+      <span>{formatBytes(preview.size)}</span>
+    </div>
+  );
+}
+
+function imageMime(ext: string) {
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "gif") return "image/gif";
+  if (ext === "webp") return "image/webp";
+  if (ext === "svg") return "image/svg+xml";
+  return null;
+}
+
+function formatBytes(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }

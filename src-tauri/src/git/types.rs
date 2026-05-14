@@ -96,6 +96,7 @@ pub struct CommitInfo {
     pub date: String,
     pub parents: Vec<String>,
     pub refs: Vec<String>,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +142,55 @@ pub struct BranchInfo {
     pub upstream: Option<String>,
     pub last_commit_sha: String,
     pub last_commit_date: String,
+    pub last_commit_author_email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchCompare {
+    pub left: String,
+    pub right: String,
+    pub left_ahead: usize,
+    pub right_ahead: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmoduleInfo {
+    pub path: String,
+    pub sha: String,
+    pub status: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LfsStatus {
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LfsLockInfo {
+    pub path: String,
+    pub owner: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHookInfo {
+    pub name: String,
+    pub path: String,
+    pub executable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrRemoteInfo {
+    pub remote: String,
+    pub url: String,
+    pub provider: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,6 +241,7 @@ pub struct OperationResult {
 pub struct ProgressPayload {
     pub repo_path: String,
     pub operation: String,
+    pub command: Vec<String>,
     pub message: String,
     pub percent: Option<u8>,
     pub status: String,
