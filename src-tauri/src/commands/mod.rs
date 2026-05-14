@@ -5,6 +5,7 @@ pub mod commit;
 pub mod conflict;
 pub mod diff;
 pub mod discard;
+pub mod external;
 pub mod graph;
 pub mod misc;
 pub mod rebase;

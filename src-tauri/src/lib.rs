@@ -133,6 +133,8 @@ pub fn run() {
             commands::discard::git_discard_all,
             commands::discard::git_discard_lines,
             commands::discard::git_clean_untracked,
+            commands::external::open_file_in_editor,
+            commands::external::reveal_file_in_manager,
             commands::workspace::open_workspace_file,
             commands::workspace::open_repository_target,
             commands::workspace::add_repository_target

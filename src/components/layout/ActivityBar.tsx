@@ -14,7 +14,7 @@ const items: Item[] = [
   { key: "source-control", icon: "source-control", label: "Source Control", position: "top", badgeFrom: "scm-changes" },
   { key: "branches", icon: "repo-forked", label: "Branches", position: "top" },
   { key: "graph", icon: "git-commit", label: "Commit Graph", position: "top" },
-  { key: "misc", icon: "tools", label: "Advanced Git", position: "top" },
+  { key: "misc", icon: "tools", label: "Git Tools", position: "top" },
   { key: "settings", icon: "settings-gear", label: "Settings", position: "bottom" }
 ];
 

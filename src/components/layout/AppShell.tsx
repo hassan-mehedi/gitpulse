@@ -8,6 +8,7 @@ import { ToastViewport } from "../shared/ToastViewport";
 import type { ActivityView } from "../../types/git";
 import { BranchManager } from "../branches/BranchManager";
 import { SettingsPanel } from "../settings/SettingsPanel";
+import { CommitIdentityOnboarding } from "../settings/CommitIdentityOnboarding";
 import { CommitGraphList } from "../graph/CommitGraphList";
 import { CommitGraphDetail } from "../graph/CommitGraphDetail";
 import { BlameView } from "../blame/BlameView";
@@ -50,6 +51,7 @@ export function AppShell() {
     const parsed = stored ? Number(stored) : 300;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
   });
+  const fullPageView = activeView === "blame" || activeView === "misc" || activeView === "settings";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -224,10 +226,10 @@ export function AppShell() {
       <TitleBar />
       <div
         className={`main-layout${
-          activeView === "blame" ? " main-layout--no-sidebar" : ""
+          fullPageView ? " main-layout--no-sidebar" : ""
         }`}
         style={
-          activeView === "blame"
+          fullPageView
             ? undefined
             : ({
                 "--sidebar-width": `${sidebarWidth}px`
@@ -235,17 +237,13 @@ export function AppShell() {
         }
       >
         <ActivityBar activeView={activeView} onNavigate={setActiveView} />
-        {activeView === "blame" ? null : (
+        {fullPageView ? null : (
           <>
             <section className="left-panel">
               {activeView === "branches" ? (
                 <BranchManager onOpenBranchPicker={(repo) => openBranchPickerForRepo(repo.id)} />
-              ) : activeView === "settings" ? (
-                <SettingsPanel />
               ) : activeView === "graph" ? (
                 <CommitGraphList onNavigateToView={setActiveView} />
-              ) : activeView === "misc" ? (
-                <MiscPanel />
               ) : (
                 <SourceControlPanel
                   activeView={activeView}
@@ -259,8 +257,10 @@ export function AppShell() {
         <section className="content-panel">
           {activeView === "graph" ? (
             <CommitGraphDetail />
+          ) : activeView === "settings" ? (
+            <SettingsPanel />
           ) : activeView === "misc" ? (
-            <div className="commit-detail-empty">Select an Advanced Git tool from the left.</div>
+            <MiscPanel />
           ) : activeView === "blame" ? (
             <BlameView />
           ) : (
@@ -276,6 +276,7 @@ export function AppShell() {
           openBranchPickerForRepo(null, false);
         }}
       />
+      <CommitIdentityOnboarding />
       <ToastViewport />
       <BranchPickerModal
         initialCreateMode={branchPickerCreateMode}

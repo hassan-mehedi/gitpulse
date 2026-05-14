@@ -5,7 +5,12 @@ import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
 import { gitAddToGitignore, gitDiscardFile, gitStageFile, gitUnstageFile } from "../../lib/git";
-import { pickRepositoryDirectory, pickWorkspaceFile } from "../../lib/openTarget";
+import {
+  openFileInExternalEditor,
+  pickRepositoryDirectory,
+  pickWorkspaceFile,
+  revealFileInManager
+} from "../../lib/openTarget";
 import { RepoSection } from "./RepoSection";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
 
@@ -232,6 +237,19 @@ export function SourceControlPanel({
                   label: "Open Diff",
                   onSelect: () =>
                     handleSelect(menuTarget.repo, menuTarget.change, menuTarget.staged)
+                },
+                {
+                  label: "Open File in Editor",
+                  onSelect: () =>
+                    void openFileInExternalEditor(
+                      menuTarget.repo.path,
+                      menuTarget.change.path
+                    )
+                },
+                {
+                  label: "Reveal in File Manager",
+                  onSelect: () =>
+                    void revealFileInManager(menuTarget.repo.path, menuTarget.change.path)
                 },
                 {
                   label: menuTarget.staged ? "Unstage Changes" : "Stage Changes",

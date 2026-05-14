@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::error::GitError;
 use crate::git::parser::{parse_commit_result, parse_log};
 use crate::git::runner::GitRunner;
-use crate::git::types::{CommitInfo, CommitResult};
+use crate::git::types::{CommitIdentity, CommitInfo, CommitResult};
 
 const LOG_FORMAT: &str = "%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%G?";
 
@@ -12,16 +12,18 @@ pub async fn commit(
     message: &str,
     all: bool,
     sign: bool,
+    identity: Option<&CommitIdentity>,
 ) -> Result<CommitResult, GitError> {
-    let mut args = vec!["commit"];
+    let mut args: Vec<String> = identity_args(identity);
+    args.push("commit".to_string());
     if all {
-        args.push("-a");
+        args.push("-a".to_string());
     }
     if sign {
-        args.push("-S");
+        args.push("-S".to_string());
     }
-    args.extend(["-m", message]);
-    GitRunner::run(repo_path, &args).await?;
+    args.extend(["-m".to_string(), message.to_string()]);
+    run_dynamic(repo_path, &args).await?;
     let output = GitRunner::run(repo_path, &["rev-parse", "HEAD"]).await?;
     parse_commit_result(&output)
 }
@@ -30,17 +32,19 @@ pub async fn amend(
     repo_path: &Path,
     message: Option<&str>,
     sign: bool,
+    identity: Option<&CommitIdentity>,
 ) -> Result<CommitResult, GitError> {
-    let mut args = vec!["commit", "--amend"];
+    let mut args: Vec<String> = identity_args(identity);
+    args.extend(["commit".to_string(), "--amend".to_string()]);
     if sign {
-        args.push("-S");
+        args.push("-S".to_string());
     }
     if let Some(message) = message {
-        args.extend(["-m", message]);
+        args.extend(["-m".to_string(), message.to_string()]);
     } else {
-        args.push("--no-edit");
+        args.push("--no-edit".to_string());
     }
-    GitRunner::run(repo_path, &args).await?;
+    run_dynamic(repo_path, &args).await?;
     let output = GitRunner::run(repo_path, &["rev-parse", "HEAD"]).await?;
     parse_commit_result(&output)
 }
@@ -79,4 +83,21 @@ pub async fn log(
 pub async fn show_commit_header(repo_path: &Path, sha: &str) -> Result<String, GitError> {
     let format = format!("--format={LOG_FORMAT}");
     GitRunner::run(repo_path, &["show", "--stat", &format, "--summary", sha]).await
+}
+
+fn identity_args(identity: Option<&CommitIdentity>) -> Vec<String> {
+    match identity {
+        Some(identity) => vec![
+            "-c".to_string(),
+            format!("user.name={}", identity.name),
+            "-c".to_string(),
+            format!("user.email={}", identity.email),
+        ],
+        None => Vec::new(),
+    }
+}
+
+async fn run_dynamic(repo_path: &Path, args: &[String]) -> Result<String, GitError> {
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    GitRunner::run(repo_path, &arg_refs).await
 }

@@ -16,6 +16,7 @@ interface DiffLineProps {
   theme: ThemeMode;
   compareContent?: string;
   onToggle?: () => void;
+  onOpenLine?: (lineNumber: number) => void;
 }
 
 function DiffLineImpl({
@@ -28,7 +29,8 @@ function DiffLineImpl({
   selectable,
   theme,
   compareContent,
-  onToggle
+  onToggle,
+  onOpenLine
 }: DiffLineProps) {
   const setBlameTarget = useInlineBlameStore((state) => state.setTarget);
   const marker = line.content.slice(0, 1);
@@ -47,6 +49,9 @@ function DiffLineImpl({
     <button
       className={`diff-line diff-line--${line.lineType} ${selected ? "is-selected" : ""} ${selectable ? "is-selectable" : ""}`}
       onClick={onToggle}
+      onDoubleClick={() => {
+        if (lineNumber) onOpenLine?.(lineNumber);
+      }}
       onMouseEnter={handleEnter}
       data-diff-line={lineNumber ? `${filePath}:${lineNumber}` : undefined}
       type="button"

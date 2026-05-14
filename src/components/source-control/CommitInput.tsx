@@ -11,7 +11,9 @@ import {
   gitUndoLastCommit
 } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
+import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { resolveCommitIdentity } from "../../lib/commitIdentity";
 import type { Repository } from "../../types/git";
 
 interface CommitInputProps {
@@ -54,36 +56,33 @@ const HISTORY_LIMIT = 30;
 
 export function CommitInput({ repo }: CommitInputProps) {
   const historyKey = `gitpulse:commitHistory:${repo.path}`;
-  const smartKey = `gitpulse:smartCommit:${repo.path}`;
-  const signKey = `gitpulse:signCommits:${repo.path}`;
   const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [smartCommit, setSmartCommit] = useState(() => readBoolean(smartKey, true));
-  const [signCommits, setSignCommits] = useState(() => readBoolean(signKey, false));
   const [history, setHistory] = useState<string[]>(() => readHistory(historyKey));
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [lastGitOutput, setLastGitOutput] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const runGit = useGit();
+  const smartCommit = useSettingsStore((state) => state.smartCommit);
+  const signCommits = useSettingsStore((state) => state.signCommits);
+  const commitIdentities = useSettingsStore((state) => state.commitIdentities);
+  const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
+  const assignedIdentity = resolveCommitIdentity(
+    repo.path,
+    commitIdentities,
+    repoIdentityAssignments
+  );
+  const commitIdentity =
+    assignedIdentity.source === "gitpulse" ? assignedIdentity.identity : undefined;
 
   useEffect(() => {
-    setSmartCommit(readBoolean(smartKey, true));
-    setSignCommits(readBoolean(signKey, false));
     setHistory(readHistory(historyKey));
     setHistoryCursor(null);
     setLastGitOutput(null);
-  }, [historyKey, signKey, smartKey]);
-
-  useEffect(() => {
-    writeBoolean(smartKey, smartCommit);
-  }, [smartCommit, smartKey]);
-
-  useEffect(() => {
-    writeBoolean(signKey, signCommits);
-  }, [signCommits, signKey]);
+  }, [historyKey]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -130,7 +129,7 @@ export function CommitInput({ repo }: CommitInputProps) {
             rememberMessage(trimmed);
             break;
           case "commit-all":
-            await gitCommitAll(repo.path, trimmed, signCommits);
+            await gitCommitAll(repo.path, trimmed, signCommits, commitIdentity);
             rememberMessage(trimmed);
             break;
           case "commit-push":
@@ -144,7 +143,7 @@ export function CommitInput({ repo }: CommitInputProps) {
             await gitSync(repo.path);
             break;
           case "amend":
-            await gitCommitAmend(repo.path, trimmed || undefined, signCommits);
+            await gitCommitAmend(repo.path, trimmed || undefined, signCommits, commitIdentity);
             if (trimmed) rememberMessage(trimmed);
             break;
           case "undo":
@@ -185,7 +184,7 @@ export function CommitInput({ repo }: CommitInputProps) {
         await gitStageFiles(repo.path, tracked);
       }
     }
-    await gitCommit(repo.path, trimmed, signCommits);
+    await gitCommit(repo.path, trimmed, signCommits, commitIdentity);
   }
 
   function rememberMessage(value: string) {
@@ -252,24 +251,6 @@ export function CommitInput({ repo }: CommitInputProps) {
           <span className="commit-input__hint">↑/↓ history</span>
         ) : null}
       </div>
-      <div className="commit-input__toggles">
-        <label className="commit-input__toggle">
-          <input
-            type="checkbox"
-            checked={smartCommit}
-            onChange={(event) => setSmartCommit(event.target.checked)}
-          />
-          <span>Smart Commit</span>
-        </label>
-        <label className="commit-input__toggle">
-          <input
-            type="checkbox"
-            checked={signCommits}
-            onChange={(event) => setSignCommits(event.target.checked)}
-          />
-          <span>Sign commits (-S)</span>
-        </label>
-      </div>
       <div className="commit-input__actions" ref={menuRef}>
         <button
           className="vscode-button vscode-button--primary commit-input__primary"
@@ -334,22 +315,6 @@ function DropdownItem({
       </button>
     </>
   );
-}
-
-function readBoolean(key: string, fallback: boolean) {
-  if (typeof window === "undefined") return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === null) return fallback;
-  return value === "true";
-}
-
-function writeBoolean(key: string, value: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, String(value));
-  } catch {
-    // Ignore storage failures; the control still works for this session.
-  }
 }
 
 function readHistory(key: string) {

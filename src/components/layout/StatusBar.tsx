@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
 import { useRepo } from "../../hooks/useRepo";
 import { useGit } from "../../hooks/useGit";
@@ -6,7 +6,10 @@ import { useProgressStore } from "../../stores/progress";
 import { useNotificationStore } from "../../stores/notifications";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useInlineBlameStore } from "../../stores/inlineBlame";
-import { gitFetchAll, gitSync } from "../../lib/git";
+import { useSettingsStore } from "../../stores/settings";
+import { resolveCommitIdentity } from "../../lib/commitIdentity";
+import { gitFetchAll, gitGetUserInfo, gitSync } from "../../lib/git";
+import type { UserInfo } from "../../types/git";
 
 interface StatusBarProps {
   onOpenBranchPicker?: () => void;
@@ -37,11 +40,32 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
   const progressItems = useProgressStore((state) => state.items);
   const notifications = useNotificationStore((state) => state.items);
   const blame = useInlineBlameStore((state) => state.result);
+  const commitIdentities = useSettingsStore((state) => state.commitIdentities);
+  const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
+  const [gitUser, setGitUser] = useState<UserInfo | null>(null);
 
   const activeProgress = useMemo(
     () => [...progressItems].sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null,
     [progressItems]
   );
+
+  useEffect(() => {
+    if (!activeRepo) {
+      setGitUser(null);
+      return;
+    }
+    let cancelled = false;
+    void gitGetUserInfo(activeRepo.path)
+      .then((user) => {
+        if (!cancelled) setGitUser(user);
+      })
+      .catch(() => {
+        if (!cancelled) setGitUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo]);
 
   async function handleSync() {
     if (!activeRepo) {
@@ -68,6 +92,12 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
   const behind = activeRepo?.behind ?? 0;
   const isOperationActive =
     activeProgress?.status === "started" || activeProgress?.status === "running";
+  const effectiveIdentity = resolveCommitIdentity(
+    activeRepo?.path,
+    commitIdentities,
+    repoIdentityAssignments,
+    gitUser
+  );
 
   return (
     <footer className="status-bar" role="status">
@@ -118,6 +148,21 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
       </div>
 
       <div className="status-bar__cluster status-bar__cluster--right">
+        {hasRepo ? (
+          <span
+            className="status-bar__item status-bar__item--static status-bar__identity"
+            title={
+              effectiveIdentity.source === "gitpulse"
+                ? "GitPulse commit identity for this repository"
+                : effectiveIdentity.source === "git-config"
+                  ? "Git config commit identity"
+                  : "No commit identity configured"
+            }
+          >
+            <Codicon name="account" size={13} />
+            <span>{effectiveIdentity.label}</span>
+          </span>
+        ) : null}
         {blame ? (
           <span
             className="status-bar__item status-bar__item--static status-bar__blame"

@@ -24,6 +24,7 @@ import { FileHistoryPanel } from "../source-control/FileHistoryPanel";
 import { MergeEditor } from "../merge/MergeEditor";
 import { DiffGutter } from "./DiffGutter";
 import { DiffHunk } from "./DiffHunk";
+import { openFileInExternalEditor, revealFileInManager } from "../../lib/openTarget";
 import type { ActivityView, FileDiff } from "../../types/git";
 
 interface DiffViewerProps {
@@ -254,6 +255,18 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function activeHunkLine() {
+    return activeHunk?.newStart ?? activeHunk?.oldStart ?? 1;
+  }
+
+  function openActiveFile(line = activeHunkLine()) {
+    void openFileInExternalEditor(repo.path, filePath, line);
+  }
+
+  function revealActiveFile() {
+    void revealFileInManager(repo.path, filePath);
+  }
+
   const segments = filePath.split("/");
   const fileName = segments.pop() ?? filePath;
   const fileDir = segments.join("/");
@@ -397,12 +410,30 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
               <button
                 className="view-action"
                 onClick={revealActiveHunk}
-                title="Reveal active line"
-                aria-label="Reveal active line"
+                title="Reveal active line in diff"
+                aria-label="Reveal active line in diff"
                 disabled={!activeHunk}
                 type="button"
               >
                 <Codicon name="go-to-file" size={16} />
+              </button>
+              <button
+                className="view-action"
+                onClick={() => openActiveFile()}
+                title="Open active line in external editor"
+                aria-label="Open active line in external editor"
+                type="button"
+              >
+                <Codicon name="file-code" size={16} />
+              </button>
+              <button
+                className="view-action"
+                onClick={revealActiveFile}
+                title="Reveal file in file manager"
+                aria-label="Reveal file in file manager"
+                type="button"
+              >
+                <Codicon name="folder-opened" size={16} />
               </button>
             </>
           ) : null}
@@ -488,6 +519,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
                   theme={theme}
                   onFocus={() => setActiveHunkIndex(index)}
                   onToggleLine={toggleLineSelection}
+                  onOpenLine={openActiveFile}
                   allowLineSelection={!isReadOnly}
                   selectedLineIndices={isReadOnly ? [] : selectedLinesByHunk[index] ?? []}
                 />
@@ -504,30 +536,36 @@ function WelcomeHints() {
   return (
     <div className="welcome-hints">
       <div className="welcome-hints__row">
-        <span>Show Source Control</span>
-        <kbd>Ctrl</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>Shift</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>G</kbd>
+        <span className="welcome-hints__label">Show Source Control</span>
+        <span className="welcome-hints__keys">
+          <kbd>Ctrl</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>Shift</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>G</kbd>
+        </span>
       </div>
       <div className="welcome-hints__row">
-        <span>Switch Branch</span>
-        <kbd>Ctrl</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>Shift</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>B</kbd>
+        <span className="welcome-hints__label">Switch Branch</span>
+        <span className="welcome-hints__keys">
+          <kbd>Ctrl</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>Shift</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>B</kbd>
+        </span>
       </div>
       <div className="welcome-hints__row">
-        <span>Show All Shortcuts</span>
-        <kbd>Ctrl</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>K</kbd>
-        <span className="welcome-hints__plus">,</span>
-        <kbd>Ctrl</kbd>
-        <span className="welcome-hints__plus">+</span>
-        <kbd>S</kbd>
+        <span className="welcome-hints__label">Show All Shortcuts</span>
+        <span className="welcome-hints__keys">
+          <kbd>Ctrl</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>K</kbd>
+          <span className="welcome-hints__plus">,</span>
+          <kbd>Ctrl</kbd>
+          <span className="welcome-hints__plus">+</span>
+          <kbd>S</kbd>
+        </span>
       </div>
     </div>
   );

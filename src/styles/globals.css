@@ -1030,25 +1030,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.commit-input__toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-}
-
-.commit-input__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.commit-input__toggle input {
-  margin: 0;
-}
-
 .commit-input__actions {
   position: relative;
   display: flex;
@@ -1185,8 +1166,8 @@ button:disabled {
   overflow: hidden;
 }
 
-/* For full-bleed views (graph / blame) we drop the SCM sidebar so the editor
-   surface uses the entire window width. */
+/* For full-page views we drop the SCM sidebar so the surface uses the entire
+   window width. */
 .main-layout--no-sidebar {
   grid-template-columns: 48px minmax(0, 1fr);
 }
@@ -1778,7 +1759,7 @@ body.is-resizing-sidebar * {
   align-items: center;
   gap: 6px;
   height: 22px;
-  padding: 0 8px 0 22px;
+  padding: 0 8px;
   color: var(--vscode-sideBar-foreground);
   font-size: 13px;
   cursor: pointer;
@@ -1799,17 +1780,6 @@ body.is-resizing-sidebar * {
 .scm-row__icon {
   flex: 0 0 auto;
   color: var(--vscode-icon-foreground);
-}
-
-.scm-row__gutter-status {
-  position: absolute;
-  left: 4px;
-  width: 14px;
-  text-align: center;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  opacity: 0.95;
 }
 
 .scm-row.is-selected .scm-row__icon {
@@ -2020,7 +1990,11 @@ body.is-resizing-sidebar * {
 
 /* Settings view (UX-SPEC §3.5) */
 .settings-panel {
+  flex: 1;
   padding: 8px 0;
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .settings-section {
@@ -2037,10 +2011,10 @@ body.is-resizing-sidebar * {
 }
 
 .settings-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
   padding: 8px 16px;
 }
 
@@ -2064,11 +2038,13 @@ body.is-resizing-sidebar * {
 .settings-row__control {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
 .settings-control {
   height: 26px;
+  width: 100%;
   padding: 0 8px;
   border: 1px solid var(--vscode-settings-dropdownBorder, var(--vscode-input-border));
   border-radius: 2px;
@@ -2091,6 +2067,9 @@ body.is-resizing-sidebar * {
   font-size: 13px;
   color: var(--vscode-descriptionForeground);
   font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-checkbox {
@@ -2153,11 +2132,85 @@ body.is-resizing-sidebar * {
   cursor: not-allowed;
 }
 
+.identity-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 16px 16px;
+}
+
+.identity-manager__empty,
+.identity-onboarding__detected {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.identity-manager__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.identity-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.identity-card__label {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.identity-card__meta {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  font-size: 12px;
+}
+
+.identity-form,
+.identity-onboarding__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.identity-form__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.identity-form__error {
+  color: var(--vscode-errorForeground);
+  font-size: 12px;
+}
+
+.identity-onboarding {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.identity-onboarding .modal-card__header .icon-button {
+  display: none;
+}
+
+.identity-onboarding__content p {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.45;
+}
+
 .misc-panel {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
+  flex: 1;
   min-height: 0;
-  height: 100%;
 }
 
 .misc-panel__nav {
@@ -2857,6 +2910,58 @@ body.is-resizing-sidebar * {
   line-height: 1.5;
 }
 
+.welcome-hints {
+  display: grid;
+  grid-template-columns: 170px 210px;
+  align-content: center;
+  justify-content: center;
+  column-gap: 20px;
+  row-gap: 14px;
+  height: 100%;
+  padding: 24px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.welcome-hints__row {
+  display: contents;
+}
+
+.welcome-hints__label {
+  justify-self: stretch;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.welcome-hints__keys {
+  display: inline-flex;
+  align-items: center;
+  justify-self: stretch;
+  gap: 6px;
+  width: 100%;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.welcome-hints kbd {
+  min-width: 20px;
+  padding: 3px 7px;
+  border: 1px solid var(--vscode-keybindingLabel-border, var(--vscode-panel-border));
+  border-bottom-color: var(--vscode-keybindingLabel-bottomBorder, var(--vscode-panel-border));
+  border-radius: 3px;
+  background: var(--vscode-keybindingLabel-background, var(--vscode-editorWidget-background));
+  color: var(--vscode-keybindingLabel-foreground, var(--vscode-foreground));
+  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+}
+
+.welcome-hints__plus {
+  opacity: 0.55;
+}
+
 /* Status bar (UX-SPEC §1.3): 22px tall, flat, left/right clusters */
 .status-bar {
   display: flex;
@@ -2919,6 +3024,12 @@ body.is-resizing-sidebar * {
 .status-bar__item .codicon {
   font-size: 13px;
   line-height: 1;
+}
+
+.status-bar__identity span {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Legacy compatibility shim */

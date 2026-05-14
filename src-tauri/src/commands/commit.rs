@@ -2,19 +2,21 @@ use std::path::Path;
 
 use crate::error::GitError;
 use crate::git::commit;
-use crate::git::types::{CommitInfo, CommitResult};
+use crate::git::types::{CommitIdentity, CommitInfo, CommitResult};
 
 #[tauri::command]
 pub async fn git_commit(
     repo_path: String,
     message: String,
     sign: Option<bool>,
+    identity: Option<CommitIdentity>,
 ) -> Result<CommitResult, GitError> {
     commit::commit(
         Path::new(&repo_path),
         &message,
         false,
         sign.unwrap_or(false),
+        identity.as_ref(),
     )
     .await
 }
@@ -24,8 +26,16 @@ pub async fn git_commit_all(
     repo_path: String,
     message: String,
     sign: Option<bool>,
+    identity: Option<CommitIdentity>,
 ) -> Result<CommitResult, GitError> {
-    commit::commit(Path::new(&repo_path), &message, true, sign.unwrap_or(false)).await
+    commit::commit(
+        Path::new(&repo_path),
+        &message,
+        true,
+        sign.unwrap_or(false),
+        identity.as_ref(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -33,11 +43,13 @@ pub async fn git_commit_amend(
     repo_path: String,
     message: Option<String>,
     sign: Option<bool>,
+    identity: Option<CommitIdentity>,
 ) -> Result<CommitResult, GitError> {
     commit::amend(
         Path::new(&repo_path),
         message.as_deref(),
         sign.unwrap_or(false),
+        identity.as_ref(),
     )
     .await
 }

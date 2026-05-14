@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Repository } from "../../types/git";
 import { Codicon } from "../shared/Codicon";
+import { SettingsCheckbox } from "../settings/SettingsPanel";
 
 interface GraphToolbarProps {
   repositories: Repository[];
@@ -189,14 +190,13 @@ export function GraphToolbar({
               <div className="graph-toolbar__ref-empty">No refs loaded</div>
             ) : (
               availableRefs.map((ref) => (
-                <label className="graph-toolbar__ref-option" key={ref}>
-                  <input
-                    type="checkbox"
+                <div className="graph-toolbar__ref-option" key={ref}>
+                  <SettingsCheckbox
                     checked={!hiddenRefs.includes(ref)}
                     onChange={() => onToggleRef(ref)}
                   />
                   <span>{ref.replace(/^HEAD -> /, "")}</span>
-                </label>
+                </div>
               ))
             )}
           </div>

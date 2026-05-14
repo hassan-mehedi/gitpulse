@@ -10,7 +10,6 @@ import {
   gitLfsUnlock,
   gitPatchApply,
   gitPatchCreate,
-  gitPrRemotes,
   gitRemoteSetUrl,
   gitSparseDisable,
   gitSparseList,
@@ -34,20 +33,18 @@ type Section =
   | "remotes"
   | "hooks"
   | "patches"
-  | "prs"
   | "timeline";
 
-const sections: Array<{ id: Section; label: string }> = [
-  { id: "output", label: "Git Output" },
-  { id: "bisect", label: "Bisect" },
-  { id: "submodules", label: "Submodules" },
-  { id: "sparse", label: "Sparse Checkout" },
-  { id: "lfs", label: "LFS" },
-  { id: "remotes", label: "Remotes" },
-  { id: "hooks", label: "Hooks" },
-  { id: "patches", label: "Patches" },
-  { id: "prs", label: "Pull Requests" },
-  { id: "timeline", label: "Timeline" }
+const sections: Array<{ id: Section; label: string; description: string }> = [
+  { id: "output", label: "Git Output", description: "Recent command output and progress." },
+  { id: "bisect", label: "Bisect", description: "Find the commit that introduced a regression." },
+  { id: "submodules", label: "Submodules", description: "Initialize, update, and inspect nested repositories." },
+  { id: "sparse", label: "Sparse Checkout", description: "Limit the working tree to selected paths." },
+  { id: "lfs", label: "LFS", description: "Inspect Git LFS status and manage file locks." },
+  { id: "remotes", label: "Remotes", description: "Edit fetch and push URLs for a remote." },
+  { id: "hooks", label: "Hooks", description: "List installed Git hooks and view hook scripts." },
+  { id: "patches", label: "Patches", description: "Create or apply patch text." },
+  { id: "timeline", label: "Timeline", description: "Load commit history, optionally for one file." }
 ];
 
 export function MiscPanel() {
@@ -65,6 +62,7 @@ export function MiscPanel() {
     () => repositories.find((item) => item.id === activeRepoId) ?? repositories[0] ?? null,
     [activeRepoId, repositories]
   );
+  const activeSection = sections.find((item) => item.id === section) ?? sections[0];
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
@@ -98,7 +96,7 @@ export function MiscPanel() {
   return (
     <>
       <div className="view-title">
-        <h2 className="view-title__label">Advanced Git</h2>
+        <h2 className="view-title__label">Git Tools</h2>
       </div>
       <div className="misc-panel">
         <aside className="misc-panel__nav">
@@ -123,6 +121,7 @@ export function MiscPanel() {
               <div className="misc-panel__repo">
                 <Codicon name="repo" size={14} /> {repo.name}
               </div>
+              <p className="misc-panel__hint">{activeSection.description}</p>
               {section === "bisect" ? (
                 <ToolCard title="Bisect">
                   <input className="settings-control" placeholder="revision (optional)" value={text} onChange={(e) => setText(e.target.value)} />
@@ -187,11 +186,6 @@ export function MiscPanel() {
                     <button className="vscode-button" onClick={() => run(() => gitPatchCreate(repo.path, true))} type="button">Create Staged Patch</button>
                     <button className="vscode-button" onClick={() => run(() => gitPatchApply(repo.path, text))} type="button">Apply Patch</button>
                   </div>
-                </ToolCard>
-              ) : section === "prs" ? (
-                <ToolCard title="PR Integration">
-                  <p className="misc-panel__hint">Provider auth is not configured. This lists GitHub/GitLab remotes and gives you the target remote context for external PR creation.</p>
-                  <button className="vscode-button" onClick={() => run(() => gitPrRemotes(repo.path))} type="button">Detect PR Remotes</button>
                 </ToolCard>
               ) : (
                 <ToolCard title="Timeline">

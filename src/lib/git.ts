@@ -4,6 +4,7 @@ import type {
   BranchInfo,
   CherryPickResult,
   CommitDetail,
+  CommitIdentity,
   CommitInfo,
   CommitResult,
   ConflictContent,
@@ -32,6 +33,8 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+const quietCommands = new Set(["git_status"]);
+
 async function gitInvoke<T>(command: string, args: Record<string, unknown>): Promise<T> {
   if (!isTauriRuntime()) {
     throw {
@@ -40,33 +43,38 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
     } satisfies GitError;
   }
 
+  const shouldLogRoutineOutput = !quietCommands.has(command);
   const payloadBase = {
     repoPath: typeof args.repoPath === "string" ? args.repoPath : "",
     operation: command.replace(/^git_/, "").replaceAll("_", " "),
     command: [command]
   };
-  window.dispatchEvent(
-    new CustomEvent<ProgressPayload>("gitpulse:output", {
-      detail: {
-        ...payloadBase,
-        message: "Started",
-        status: "started"
-      }
-    })
-  );
-
-  try {
-    const result = await invoke<T>(command, args);
+  if (shouldLogRoutineOutput) {
     window.dispatchEvent(
       new CustomEvent<ProgressPayload>("gitpulse:output", {
         detail: {
           ...payloadBase,
-          message: outputMessage(result),
-          percent: 100,
-          status: "completed"
+          message: "Started",
+          status: "started"
         }
       })
     );
+  }
+
+  try {
+    const result = await invoke<T>(command, args);
+    if (shouldLogRoutineOutput) {
+      window.dispatchEvent(
+        new CustomEvent<ProgressPayload>("gitpulse:output", {
+          detail: {
+            ...payloadBase,
+            message: outputMessage(result),
+            percent: 100,
+            status: "completed"
+          }
+        })
+      );
+    }
     return result;
   } catch (error) {
     const gitError = error as GitError;
@@ -174,9 +182,10 @@ export async function gitAddToGitignore(repoPath: string, file: string): Promise
 export async function gitCommit(
   repoPath: string,
   message: string,
-  sign = false
+  sign = false,
+  identity?: CommitIdentity
 ): Promise<CommitResult> {
-  return gitInvoke("git_commit", { repoPath, message, sign });
+  return gitInvoke("git_commit", { repoPath, message, sign, identity });
 }
 
 export async function gitBranches(repoPath: string): Promise<BranchInfo[]> {
@@ -446,17 +455,19 @@ export async function gitPruneWorktrees(repoPath: string): Promise<OperationResu
 export async function gitCommitAll(
   repoPath: string,
   message: string,
-  sign = false
+  sign = false,
+  identity?: CommitIdentity
 ): Promise<CommitResult> {
-  return gitInvoke("git_commit_all", { repoPath, message, sign });
+  return gitInvoke("git_commit_all", { repoPath, message, sign, identity });
 }
 
 export async function gitCommitAmend(
   repoPath: string,
   message?: string,
-  sign = false
+  sign = false,
+  identity?: CommitIdentity
 ): Promise<CommitResult> {
-  return gitInvoke("git_commit_amend", { repoPath, message, sign });
+  return gitInvoke("git_commit_amend", { repoPath, message, sign, identity });
 }
 
 export async function gitUndoLastCommit(repoPath: string): Promise<void> {

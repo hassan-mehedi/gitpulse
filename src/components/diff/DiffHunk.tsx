@@ -16,6 +16,7 @@ interface DiffHunkProps {
   allowLineSelection?: boolean;
   selectedLineIndices: number[];
   onToggleLine: (hunkIndex: number, lineIndex: number) => void;
+  onOpenLine?: (lineNumber: number) => void;
 }
 
 export function DiffHunk({
@@ -30,7 +31,8 @@ export function DiffHunk({
   onFocus,
   allowLineSelection = true,
   selectedLineIndices,
-  onToggleLine
+  onToggleLine,
+  onOpenLine
 }: DiffHunkProps) {
   const oldLines = hunk.lines
     .map((line, index) => ({ line, index }))
@@ -60,6 +62,7 @@ export function DiffHunk({
                   line={line}
                   lineNumber={line.oldLineno}
                   onToggle={() => onToggleLine(hunkIndex, index)}
+                  onOpenLine={onOpenLine}
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
@@ -80,6 +83,7 @@ export function DiffHunk({
                   line={line}
                   lineNumber={line.newLineno}
                   onToggle={() => onToggleLine(hunkIndex, index)}
+                  onOpenLine={onOpenLine}
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
@@ -100,6 +104,7 @@ export function DiffHunk({
               line={line}
               lineNumber={line.newLineno ?? line.oldLineno}
               onToggle={() => onToggleLine(hunkIndex, index)}
+              onOpenLine={onOpenLine}
               selectable={allowLineSelection && line.lineType !== "context"}
               selected={selected.has(index)}
               theme={theme}

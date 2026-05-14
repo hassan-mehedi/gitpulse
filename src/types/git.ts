@@ -270,6 +270,11 @@ export interface UserInfo {
   email?: string;
 }
 
+export interface CommitIdentity {
+  name: string;
+  email: string;
+}
+
 export interface GitError {
   kind: string;
   message?: string;
