@@ -49,6 +49,8 @@ export function RepoSection({
   const hasConflicts = conflicted.length > 0 || repo.hasConflicts;
   const hasChanges = regular.length > 0;
   const hasStashes = repo.stashCount > 0;
+  const isWorkingTreeClean = !hasConflicts && !hasStaged && !hasChanges;
+  const showSyncPrompt = isWorkingTreeClean && (repo.ahead > 0 || repo.behind > 0);
 
   function withRefresh(operation: () => Promise<unknown>) {
     runGit(async () => {
@@ -168,7 +170,11 @@ export function RepoSection({
 
       {!collapsed ? (
         <>
-          <CommitInput repo={repo} />
+          {showSyncPrompt ? (
+            <SyncPrompt repo={repo} onSync={() => withRefresh(() => syncOperation(repo))} />
+          ) : (
+            <CommitInput repo={repo} />
+          )}
 
           {hasConflicts ? (
             <FileChangeList
@@ -242,4 +248,51 @@ export function RepoSection({
       ) : null}
     </article>
   );
+}
+
+function syncOperation(repo: Repository) {
+  if (repo.ahead > 0 && repo.behind === 0) {
+    return gitPush(repo.path);
+  }
+  if (repo.behind > 0 && repo.ahead === 0) {
+    return gitPull(repo.path);
+  }
+  return gitSync(repo.path);
+}
+
+function SyncPrompt({ repo, onSync }: { repo: Repository; onSync: () => void }) {
+  const label = syncLabel(repo);
+  const title = repo.upstream
+    ? `${label} with ${repo.upstream}`
+    : `${label}. No upstream tracking branch is configured.`;
+
+  return (
+    <div className="scm-sync-prompt">
+      <input
+        className="scm-sync-prompt__input"
+        disabled
+        placeholder={`Message (Ctrl+Enter to commit on '${repo.branch}')`}
+      />
+      <button
+        className="vscode-button vscode-button--primary scm-sync-prompt__button"
+        disabled={!repo.upstream}
+        onClick={onSync}
+        title={title}
+        type="button"
+      >
+        <Codicon name="sync" size={14} />
+        <span>{label}</span>
+      </button>
+    </div>
+  );
+}
+
+function syncLabel(repo: Repository) {
+  if (repo.ahead > 0 && repo.behind > 0) {
+    return `Sync Changes ${repo.behind}↓ ${repo.ahead}↑`;
+  }
+  if (repo.ahead > 0) {
+    return `Sync Changes ${repo.ahead}↑`;
+  }
+  return `Pull Changes ${repo.behind}↓`;
 }
