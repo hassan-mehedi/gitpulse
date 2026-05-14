@@ -8,20 +8,20 @@ use crate::git::types::{CommitInfo, ReflogEntry};
 pub async fn graph(
     repo_path: &Path,
     max_count: Option<usize>,
+    include_all: Option<bool>,
 ) -> Result<Vec<CommitInfo>, GitError> {
-    let limit = max_count.unwrap_or(120).to_string();
-    let output = GitRunner::run(
-        repo_path,
-        &[
-            "log",
-            "--all",
-            "--topo-order",
-            "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI",
-            "-n",
-            &limit,
-        ],
-    )
-    .await?;
+    let limit = max_count.unwrap_or(500).to_string();
+    let mut args: Vec<&str> = vec!["log"];
+    if include_all.unwrap_or(false) {
+        args.push("--all");
+    }
+    args.extend_from_slice(&[
+        "--date-order",
+        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI",
+        "-n",
+        &limit,
+    ]);
+    let output = GitRunner::run(repo_path, &args).await?;
     Ok(parse_log(&output))
 }
 

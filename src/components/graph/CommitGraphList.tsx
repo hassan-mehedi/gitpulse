@@ -27,8 +27,8 @@ const lanePalette = [
 ];
 
 const ROW_HEIGHT = 24;
-const LANE_WIDTH = 12;
-const MAX_VISIBLE_LANES = 7;
+const LANE_WIDTH = 18;
+const MAX_VISIBLE_LANES = 8;
 
 interface PendingInput {
   kind: "create-branch" | "create-tag";
@@ -52,9 +52,11 @@ export function CommitGraphList() {
     repoId,
     selectedCommitSha,
     isLoading,
+    includeAll,
     loadGraph,
     selectCommit,
-    setRepoId
+    setRepoId,
+    setIncludeAll
   } = useGraphStore();
 
   const selectedRepo =
@@ -87,6 +89,12 @@ export function CommitGraphList() {
   }, [nodes, query]);
 
   const maxLane = useMemo(() => visibleLaneCount(visibleNodes), [visibleNodes]);
+  const headColorId = useMemo(() => {
+    const head = visibleNodes.find((node) =>
+      node.refs.some((ref) => ref.startsWith("HEAD") || ref === "HEAD")
+    );
+    return head?.colorId ?? null;
+  }, [visibleNodes]);
   const rowVirtualizer = useVirtualizer({
     count: visibleNodes.length,
     estimateSize: () => ROW_HEIGHT,
@@ -162,6 +170,11 @@ export function CommitGraphList() {
           void runGit(() => loadGraph(selectedRepo)).catch(() => {});
         }}
         query={query}
+        includeAll={includeAll}
+        onIncludeAllChange={(value) => {
+          setIncludeAll(value);
+          void runGit(() => loadGraph(selectedRepo)).catch(() => {});
+        }}
       />
 
       <section className="graph-list" ref={scrollRef}>
@@ -174,6 +187,13 @@ export function CommitGraphList() {
           <div className="scm-row scm-row--placeholder">
             <span className="scm-row__path">No matching commits</span>
           </div>
+        ) : null}
+        {headColorId !== null ? (
+          <div
+            aria-hidden
+            className="graph-list__head-stripe"
+            style={{ background: colorFor(headColorId) }}
+          />
         ) : null}
         <div
           className="graph-list__canvas"
@@ -188,10 +208,29 @@ export function CommitGraphList() {
             );
             const branchRefs = node.refs.filter((ref) => !ref.startsWith("tag: "));
             const tagRefs = node.refs.filter((ref) => ref.startsWith("tag: "));
-            const laneColor = lanePalette[node.lane % lanePalette.length];
-            const laneWindow = getLaneWindow(node, maxLane);
+            const laneColor = colorFor(node.colorId);
+            const laneWindow = getLaneWindow(maxLane);
             const svgWidth = laneWindow.count * LANE_WIDTH;
             const centerY = ROW_HEIGHT / 2;
+            // Lane occupancy ON this row: union of lanes coming in from above
+            // and lanes going out to below. This gives us the actual "live"
+            // lanes — both passing-through and ones starting/ending here.
+            const laneOccupancy = new Map<number, { topColor?: number; bottomColor?: number }>();
+            for (const pass of node.lanesIn) {
+              const entry = laneOccupancy.get(pass.lane) ?? {};
+              entry.topColor = pass.colorId;
+              laneOccupancy.set(pass.lane, entry);
+            }
+            for (const pass of node.lanesOut) {
+              const entry = laneOccupancy.get(pass.lane) ?? {};
+              entry.bottomColor = pass.colorId;
+              laneOccupancy.set(pass.lane, entry);
+            }
+            // The commit's own lane is always present (the dot lives there).
+            const ownEntry = laneOccupancy.get(node.lane) ?? {};
+            if (ownEntry.topColor === undefined) ownEntry.topColor = node.colorId;
+            if (ownEntry.bottomColor === undefined) ownEntry.bottomColor = node.colorId;
+            laneOccupancy.set(node.lane, ownEntry);
 
             return (
               <div
@@ -219,59 +258,68 @@ export function CommitGraphList() {
                       viewBox={`0 0 ${svgWidth} ${ROW_HEIGHT}`}
                       width={svgWidth}
                     >
-                      {Array.from({ length: laneWindow.count }).map((_, laneOffset) => {
-                        const lane = laneWindow.start + laneOffset;
-                        return (
-                        <line
-                          key={`${node.sha}-lane-${lane}`}
-                          stroke={
-                            lane === node.lane
-                              ? laneColor
-                              : "var(--vscode-editorGroup-border)"
-                          }
-                          strokeOpacity={lane === node.lane ? 0.6 : 0.45}
-                          strokeWidth="1.5"
-                          x1={laneOffset * LANE_WIDTH + LANE_WIDTH / 2}
-                          x2={laneOffset * LANE_WIDTH + LANE_WIDTH / 2}
-                          y1={0}
-                          y2={ROW_HEIGHT}
-                        />
-                        );
-                      })}
-                      {node.connections.map((connection, index) => {
-                        const fromX =
-                          clampLane(connection.fromLane - laneWindow.start, laneWindow.count) *
-                            LANE_WIDTH +
-                          LANE_WIDTH / 2;
-                        const toX =
-                          clampLane(connection.toLane - laneWindow.start, laneWindow.count) *
-                            LANE_WIDTH +
-                          LANE_WIDTH / 2;
-                        const stroke = lanePalette[connection.fromLane % lanePalette.length];
-                        const d =
-                          fromX === toX
-                            ? `M ${fromX} ${centerY} L ${fromX} ${ROW_HEIGHT}`
-                            : `M ${fromX} ${centerY} C ${fromX} ${ROW_HEIGHT - 4}, ${toX} ${centerY + 4}, ${toX} ${ROW_HEIGHT}`;
-                        return (
-                          <path
-                            d={d}
-                            fill="none"
-                            key={`${node.sha}-edge-${index}`}
-                            stroke={stroke}
-                            strokeLinecap="round"
-                            strokeWidth="2"
-                          />
-                        );
-                      })}
-                      <circle
-                        cx={
-                          (node.lane - laneWindow.start) * LANE_WIDTH + LANE_WIDTH / 2
+                      {/* Continuous colored lane lines for every live lane on
+                          this row. Drawn first so edges and dot sit on top. */}
+                      {Array.from(laneOccupancy.entries()).map(([lane, entry]) => {
+                        const x = laneX(lane, laneWindow);
+                        const lines: JSX.Element[] = [];
+                        if (entry.topColor !== undefined) {
+                          lines.push(
+                            <line
+                              key={`${node.sha}-lane-${lane}-top`}
+                              stroke={colorFor(entry.topColor)}
+                              strokeOpacity={0.95}
+                              strokeWidth="2"
+                              x1={x}
+                              x2={x}
+                              y1={0}
+                              y2={centerY}
+                            />
+                          );
                         }
+                        if (entry.bottomColor !== undefined) {
+                          lines.push(
+                            <line
+                              key={`${node.sha}-lane-${lane}-bot`}
+                              stroke={colorFor(entry.bottomColor)}
+                              strokeOpacity={0.95}
+                              strokeWidth="2"
+                              x1={x}
+                              x2={x}
+                              y1={centerY}
+                              y2={ROW_HEIGHT}
+                            />
+                          );
+                        }
+                        return <g key={`${node.sha}-lane-${lane}`}>{lines}</g>;
+                      })}
+                      {/* Curves to non-trunk parents (fork / merge edges) */}
+                      {node.connections
+                        .filter((c) => c.fromLane !== c.toLane)
+                        .map((connection, index) => {
+                          const fromX = laneX(connection.fromLane, laneWindow);
+                          const toX = laneX(connection.toLane, laneWindow);
+                          const stroke = colorFor(connection.colorId);
+                          const d = `M ${fromX} ${centerY} C ${fromX} ${ROW_HEIGHT - 2}, ${toX} ${centerY + 2}, ${toX} ${ROW_HEIGHT}`;
+                          return (
+                            <path
+                              d={d}
+                              fill="none"
+                              key={`${node.sha}-edge-${index}`}
+                              stroke={stroke}
+                              strokeLinecap="round"
+                              strokeWidth={connection.isFirstParent ? 2.25 : 2}
+                            />
+                          );
+                        })}
+                      {/* Commit dot — ring for merges, filled for regular */}
+                      <circle
+                        cx={laneX(node.lane, laneWindow)}
                         cy={centerY}
-                        fill={laneColor}
-                        r="4.5"
-                        stroke="var(--vscode-editor-background)"
-                        strokeWidth="2"
+                        fill={node.isMerge ? "var(--vscode-editor-background)" : laneColor}
+                        r={isHead ? 5 : 4.5}
+                        stroke={laneColor}
+                        strokeWidth={node.isMerge ? 2 : 2}
                       />
                     </svg>
                   </div>
@@ -372,15 +420,23 @@ export function CommitGraphList() {
   );
 }
 
-function getLaneWindow(node: GraphNode, maxLane: number) {
-  const count = Math.min(maxLane + 1, MAX_VISIBLE_LANES);
-  const maxStart = Math.max(0, maxLane + 1 - count);
-  const start = Math.max(0, Math.min(node.lane - 1, maxStart));
-  return { start, count };
+interface LaneWindow {
+  start: number;
+  count: number;
 }
 
-function clampLane(relativeLane: number, count: number) {
-  return Math.max(0, Math.min(relativeLane, count - 1));
+function getLaneWindow(maxLane: number): LaneWindow {
+  const count = Math.min(maxLane + 1, MAX_VISIBLE_LANES);
+  return { start: 0, count };
+}
+
+function laneX(lane: number, window: LaneWindow) {
+  const relative = Math.max(0, Math.min(lane - window.start, window.count - 1));
+  return relative * LANE_WIDTH + LANE_WIDTH / 2;
+}
+
+function colorFor(colorId: number) {
+  return lanePalette[colorId % lanePalette.length];
 }
 
 /** Shows "5m", "2d", "3w", "1y" etc. given an ISO 8601 timestamp. */

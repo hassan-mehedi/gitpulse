@@ -8,8 +8,9 @@ use crate::git::types::{CommitInfo, ReflogEntry};
 pub async fn git_graph(
     repo_path: String,
     max_count: Option<usize>,
+    include_all: Option<bool>,
 ) -> Result<Vec<CommitInfo>, GitError> {
-    graph::graph(Path::new(&repo_path), max_count).await
+    graph::graph(Path::new(&repo_path), max_count, include_all).await
 }
 
 #[tauri::command]

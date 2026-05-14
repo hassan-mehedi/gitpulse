@@ -4,6 +4,7 @@ import { buildGraphNodes } from "../lib/graphLayout";
 import type { CommitDetail, CommitInfo, GraphNode, Repository } from "../types/git";
 
 const GRAPH_REPO_STORAGE_KEY = "gitpulse:graphRepoId";
+const GRAPH_INCLUDE_ALL_STORAGE_KEY = "gitpulse:graphIncludeAll";
 
 interface GraphStore {
   repoId: string | null;
@@ -13,7 +14,9 @@ interface GraphStore {
   selectedCommitSha: string | null;
   selectedCommitDetail: CommitDetail | null;
   isLoading: boolean;
+  includeAll: boolean;
   setRepoId: (repoId: string | null) => void;
+  setIncludeAll: (value: boolean) => void;
   loadGraph: (repo: Repository) => Promise<void>;
   selectCommit: (repo: Repository, sha: string) => Promise<void>;
   clear: () => void;
@@ -47,7 +50,29 @@ function persistRepoId(repoId: string | null) {
   }
 }
 
-export const useGraphStore = create<GraphStore>((set) => ({
+function readStoredIncludeAll() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(GRAPH_INCLUDE_ALL_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistIncludeAll(value: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(GRAPH_INCLUDE_ALL_STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    // localStorage may be unavailable.
+  }
+}
+
+export const useGraphStore = create<GraphStore>((set, get) => ({
   repoId: readStoredRepoId(),
   repoPath: null,
   commits: [],
@@ -55,6 +80,11 @@ export const useGraphStore = create<GraphStore>((set) => ({
   selectedCommitSha: null,
   selectedCommitDetail: null,
   isLoading: false,
+  includeAll: readStoredIncludeAll(),
+  setIncludeAll(value) {
+    persistIncludeAll(value);
+    set({ includeAll: value });
+  },
   setRepoId(repoId) {
     persistRepoId(repoId);
     set((state) => {
@@ -84,7 +114,7 @@ export const useGraphStore = create<GraphStore>((set) => ({
     });
 
     try {
-      const commits = await gitGraph(repo.path);
+      const commits = await gitGraph(repo.path, 500, get().includeAll);
       const nodes = buildGraphNodes(commits);
       set({
         repoId: repo.id,

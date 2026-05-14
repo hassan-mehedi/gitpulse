@@ -127,6 +127,17 @@ export interface GraphEdge {
   fromLane: number;
   toLane: number;
   type: "straight" | "merge" | "fork";
+  /** Color group id for the edge; matches the source lane's branch chain. */
+  colorId: number;
+  /** True for first-parent edges (the "trunk" of a branch). */
+  isFirstParent: boolean;
+}
+
+/** Lanes that are alive while this row is being drawn. */
+export interface LanePass {
+  lane: number;
+  /** Color group id of the branch occupying this lane on this row. */
+  colorId: number;
 }
 
 export interface GraphNode {
@@ -138,7 +149,16 @@ export interface GraphNode {
   author: string;
   date: string;
   lane: number;
+  /** Color group id this commit belongs to (stable across lane recycles). */
+  colorId: number;
+  /** Edges going OUT of this commit (to its parents), drawn bottom half of row. */
   connections: GraphEdge[];
+  /** Lanes alive on entry to this row (continuation from previous row). */
+  lanesIn: LanePass[];
+  /** Lanes alive on exit from this row (continuation to next row). */
+  lanesOut: LanePass[];
+  /** True if this commit is a merge (>=2 parents). */
+  isMerge: boolean;
 }
 
 export interface BlameLine {

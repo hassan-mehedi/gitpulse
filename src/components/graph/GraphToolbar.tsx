@@ -9,6 +9,8 @@ interface GraphToolbarProps {
   query: string;
   onQueryChange: (value: string) => void;
   onReload: () => void;
+  includeAll: boolean;
+  onIncludeAllChange: (value: boolean) => void;
 }
 
 export function GraphToolbar({
@@ -17,7 +19,9 @@ export function GraphToolbar({
   onRepoChange,
   query,
   onQueryChange,
-  onReload
+  onReload,
+  includeAll,
+  onIncludeAllChange
 }: GraphToolbarProps) {
   const [isRepoMenuOpen, setIsRepoMenuOpen] = useState(false);
   const repoMenuRef = useRef<HTMLDivElement | null>(null);
@@ -99,6 +103,15 @@ export function GraphToolbar({
           value={query}
         />
       </div>
+      <button
+        className={`view-action${includeAll ? " is-active" : ""}`}
+        onClick={() => onIncludeAllChange(!includeAll)}
+        title={includeAll ? "Showing all branches" : "Showing current branch"}
+        type="button"
+        aria-pressed={includeAll}
+      >
+        <Codicon name="git-branch" size={16} />
+      </button>
       <button
         className="view-action"
         onClick={onReload}

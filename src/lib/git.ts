@@ -343,8 +343,12 @@ export async function gitLog(
   return gitInvoke("git_log", { repoPath, n, skip, file });
 }
 
-export async function gitGraph(repoPath: string, maxCount = 120): Promise<CommitInfo[]> {
-  return gitInvoke("git_graph", { repoPath, maxCount });
+export async function gitGraph(
+  repoPath: string,
+  maxCount = 500,
+  includeAll = false
+): Promise<CommitInfo[]> {
+  return gitInvoke("git_graph", { repoPath, maxCount, includeAll });
 }
 
 export async function gitRefLog(repoPath: string, n = 50): Promise<ReflogEntry[]> {

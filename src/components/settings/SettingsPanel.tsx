@@ -1,5 +1,6 @@
 import { useSettingsStore } from "../../stores/settings";
 import { useRuntimeStore } from "../../stores/runtime";
+import { THEME_OPTIONS, type ThemeMode } from "../../lib/theme";
 
 export function SettingsPanel() {
   const theme = useSettingsStore((state) => state.theme);
@@ -21,14 +22,17 @@ export function SettingsPanel() {
       <div className="scm-body settings-panel">
         <section className="settings-section">
           <div className="settings-section__title">Application</div>
-          <SettingRow label="Theme" hint="Dark or Light Modern color palette.">
+          <SettingRow label="Theme" hint="Color palette used across the UI.">
             <select
               className="settings-control"
-              onChange={(event) => setTheme(event.target.value as "dark" | "light")}
+              onChange={(event) => setTheme(event.target.value as ThemeMode)}
               value={theme}
             >
-              <option value="dark">Dark Modern</option>
-              <option value="light">Light Modern</option>
+              {THEME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </SettingRow>
         </section>
@@ -39,11 +43,30 @@ export function SettingsPanel() {
             label="Enable background fetch"
             hint="Periodically run `git fetch --all` for every open repository."
           >
-            <input
-              checked={autoFetch}
-              onChange={(event) => setAutoFetch(event.target.checked)}
-              type="checkbox"
-            />
+            <label className="settings-checkbox">
+              <input
+                checked={autoFetch}
+                onChange={(event) => setAutoFetch(event.target.checked)}
+                type="checkbox"
+              />
+              <span className="settings-checkbox__box" aria-hidden>
+                <svg
+                  className="settings-checkbox__check"
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                >
+                  <path
+                    d="M3.5 8.5L6.5 11.5L12.5 5.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+            </label>
           </SettingRow>
           <SettingRow
             label="Fetch interval"
