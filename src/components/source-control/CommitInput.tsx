@@ -15,7 +15,7 @@ import { useGit } from "../../hooks/useGit";
 import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { resolveCommitIdentity } from "../../lib/commitIdentity";
-import { generateCommitMessage } from "../../lib/aiCommit";
+import { generateCommitMessage, prepareAiDiffContext } from "../../lib/aiCommit";
 import { createId } from "../../lib/ids";
 import { useNotificationStore } from "../../stores/notifications";
 import { progressId, useProgressStore } from "../../stores/progress";
@@ -258,12 +258,10 @@ export function CommitInput({ repo }: CommitInputProps) {
       if (!patch.trim()) {
         throw new Error("Stage changes before generating a commit message.");
       }
+      const preparedDiff = prepareAiDiffContext(patch, aiCommitMaxDiffChars);
       emitAiOutput({
         ...generationProgress,
-        message: `Prepared staged diff: ${patch.length.toLocaleString()} chars, sending ${Math.min(
-          patch.length,
-          aiCommitMaxDiffChars
-        ).toLocaleString()} chars to ${formatAiProvider(aiCommitProvider)} model ${aiCommitModel || "(unset)"}`,
+        message: `Prepared staged diff: ${patch.length.toLocaleString()} chars across all files, sending ${preparedDiff.length.toLocaleString()} chars to ${formatAiProvider(aiCommitProvider)} model ${aiCommitModel || "(unset)"}`,
         status: "running"
       });
       upsertProgress({
