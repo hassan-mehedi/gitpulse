@@ -32,6 +32,7 @@ pub async fn ai_generate_commit_message(
     let text = match request.provider.as_str() {
         "ollama" => generate_ollama(&client, &request).await?,
         "anthropic" => generate_anthropic(&client, &request).await?,
+        "deepseek" => generate_deepseek(&client, &request).await?,
         "openai" | "openai-compatible" => generate_openai_compatible(&client, &request).await?,
         provider => {
             return Err(GitError::Parse(format!(
@@ -149,6 +150,29 @@ async fn generate_anthropic(
         }
     }
     Ok(text)
+}
+
+async fn generate_deepseek(
+    client: &reqwest::Client,
+    request: &AiCommitRequest,
+) -> Result<String, GitError> {
+    let payload = send_json(
+        client
+            .post("https://api.deepseek.com/chat/completions")
+            .bearer_auth(&request.api_key)
+            .json(&json!({
+                "model": request.model,
+                "thinking": { "type": "disabled" },
+                "max_tokens": 300,
+                "response_format": { "type": "json_object" },
+                "messages": [{ "role": "user", "content": request.prompt }]
+            })),
+    )
+    .await?;
+    Ok(payload["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string())
 }
 
 async fn send_json(builder: reqwest::RequestBuilder) -> Result<Value, GitError> {

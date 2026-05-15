@@ -11,8 +11,21 @@ export interface CommitIdentityProfile {
 }
 
 export type StageAllOnCommitMode = "ask" | "always" | "never";
-export type AiCommitProvider = "ollama" | "openai" | "anthropic" | "openai-compatible";
+export type AiCommitProvider =
+  | "ollama"
+  | "openai"
+  | "anthropic"
+  | "deepseek"
+  | "openai-compatible";
 export type AiCommitStyle = "conventional" | "plain";
+
+export interface AiCommitProviderConfig {
+  model: string;
+  baseUrl: string;
+  maxDiffChars: number;
+}
+
+type AiCommitProviderConfigs = Record<AiCommitProvider, AiCommitProviderConfig>;
 
 interface PersistedSettings {
   theme: ThemeMode;
@@ -28,6 +41,7 @@ interface PersistedSettings {
   recentRepositoryPaths: string[];
   aiCommitEnabled: boolean;
   aiCommitProvider: AiCommitProvider;
+  aiCommitProviderConfigs: AiCommitProviderConfigs;
   aiCommitBaseUrl: string;
   aiCommitModel: string;
   aiCommitStyle: AiCommitStyle;
@@ -51,6 +65,7 @@ interface SettingsStore {
   recentRepositoryPaths: string[];
   aiCommitEnabled: boolean;
   aiCommitProvider: AiCommitProvider;
+  aiCommitProviderConfigs: AiCommitProviderConfigs;
   aiCommitApiKey: string;
   aiCommitBaseUrl: string;
   aiCommitModel: string;
@@ -96,6 +111,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   recentRepositoryPaths: [],
   aiCommitEnabled: false,
   aiCommitProvider: "ollama",
+  aiCommitProviderConfigs: createDefaultAiProviderConfigs(),
   aiCommitBaseUrl: "http://localhost:11434",
   aiCommitModel: "",
   aiCommitStyle: "conventional",
@@ -135,6 +151,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         recentRepositoryPaths,
         aiCommitEnabled,
         aiCommitProvider,
+        aiCommitProviderConfigs,
         aiCommitBaseUrl,
         aiCommitModel,
         aiCommitStyle,
@@ -156,6 +173,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           settingsStore.get<string[]>("recentRepositoryPaths"),
           settingsStore.get<boolean>("aiCommitEnabled"),
           settingsStore.get<AiCommitProvider>("aiCommitProvider"),
+          settingsStore.get<AiCommitProviderConfigs>("aiCommitProviderConfigs"),
           settingsStore.get<string>("aiCommitBaseUrl"),
           settingsStore.get<string>("aiCommitModel"),
           settingsStore.get<AiCommitStyle>("aiCommitStyle"),
@@ -164,6 +182,15 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           settingsStore.get<string>("aiCommitApiKey")
         ]);
 
+      const activeProvider = sanitizeAiProvider(aiCommitProvider);
+      const providerConfigs = sanitizeAiProviderConfigs(
+        aiCommitProviderConfigs,
+        activeProvider,
+        aiCommitModel,
+        aiCommitBaseUrl,
+        aiCommitMaxDiffChars
+      );
+      const activeProviderConfig = providerConfigs[activeProvider];
       set({
         theme: theme ?? DEFAULT_SETTINGS.theme,
         autoFetch: autoFetch ?? DEFAULT_SETTINGS.autoFetch,
@@ -184,22 +211,21 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         recentRepositoryPaths:
           recentRepositoryPaths ?? DEFAULT_SETTINGS.recentRepositoryPaths,
         aiCommitEnabled: aiCommitEnabled ?? DEFAULT_SETTINGS.aiCommitEnabled,
-        aiCommitProvider: sanitizeAiProvider(aiCommitProvider),
+        aiCommitProvider: activeProvider,
+        aiCommitProviderConfigs: providerConfigs,
         aiCommitApiKey: await migrateLegacyAiApiKey(
-          sanitizeAiProvider(aiCommitProvider),
+          activeProvider,
           legacyAiCommitApiKey ?? "",
           true
         ),
-        aiCommitBaseUrl: aiCommitBaseUrl ?? DEFAULT_SETTINGS.aiCommitBaseUrl,
-        aiCommitModel: aiCommitModel ?? DEFAULT_SETTINGS.aiCommitModel,
+        aiCommitBaseUrl: activeProviderConfig.baseUrl,
+        aiCommitModel: activeProviderConfig.model,
         aiCommitStyle: sanitizeAiStyle(aiCommitStyle),
         aiCommitIncludeBody: aiCommitIncludeBody ?? DEFAULT_SETTINGS.aiCommitIncludeBody,
-        aiCommitMaxDiffChars: sanitizeAiMaxDiff(
-          aiCommitMaxDiffChars,
-          sanitizeAiProvider(aiCommitProvider)
-        ),
+        aiCommitMaxDiffChars: activeProviderConfig.maxDiffChars,
         hydrated: true
       });
+      await persistSettings({ aiCommitProviderConfigs: providerConfigs });
       return;
     }
 
@@ -208,6 +234,15 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const nextSettings = JSON.parse(serialized) as Partial<PersistedSettings> & {
         aiCommitApiKey?: string;
       };
+      const activeProvider = sanitizeAiProvider(nextSettings.aiCommitProvider);
+      const providerConfigs = sanitizeAiProviderConfigs(
+        nextSettings.aiCommitProviderConfigs,
+        activeProvider,
+        nextSettings.aiCommitModel,
+        nextSettings.aiCommitBaseUrl,
+        nextSettings.aiCommitMaxDiffChars
+      );
+      const activeProviderConfig = providerConfigs[activeProvider];
       set({
         theme: nextSettings.theme ?? DEFAULT_SETTINGS.theme,
         autoFetch: nextSettings.autoFetch ?? DEFAULT_SETTINGS.autoFetch,
@@ -228,22 +263,21 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         recentRepositoryPaths:
           nextSettings.recentRepositoryPaths ?? DEFAULT_SETTINGS.recentRepositoryPaths,
         aiCommitEnabled: nextSettings.aiCommitEnabled ?? DEFAULT_SETTINGS.aiCommitEnabled,
-        aiCommitProvider: sanitizeAiProvider(nextSettings.aiCommitProvider),
+        aiCommitProvider: activeProvider,
+        aiCommitProviderConfigs: providerConfigs,
         aiCommitApiKey: await migrateLegacyAiApiKey(
-          sanitizeAiProvider(nextSettings.aiCommitProvider),
+          activeProvider,
           typeof nextSettings.aiCommitApiKey === "string" ? nextSettings.aiCommitApiKey : ""
         ),
-        aiCommitBaseUrl: nextSettings.aiCommitBaseUrl ?? DEFAULT_SETTINGS.aiCommitBaseUrl,
-        aiCommitModel: nextSettings.aiCommitModel ?? DEFAULT_SETTINGS.aiCommitModel,
+        aiCommitBaseUrl: activeProviderConfig.baseUrl,
+        aiCommitModel: activeProviderConfig.model,
         aiCommitStyle: sanitizeAiStyle(nextSettings.aiCommitStyle),
         aiCommitIncludeBody:
           nextSettings.aiCommitIncludeBody ?? DEFAULT_SETTINGS.aiCommitIncludeBody,
-        aiCommitMaxDiffChars: sanitizeAiMaxDiff(
-          nextSettings.aiCommitMaxDiffChars,
-          sanitizeAiProvider(nextSettings.aiCommitProvider)
-        ),
+        aiCommitMaxDiffChars: activeProviderConfig.maxDiffChars,
         hydrated: true
       });
+      await persistSettings({ aiCommitProviderConfigs: providerConfigs });
       return;
     }
 
@@ -339,7 +373,13 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     void persistSettings({ aiCommitEnabled: value }).catch(() => {});
   },
   setAiCommitProvider(value) {
-    set({ aiCommitProvider: value });
+    const config = useSettingsStore.getState().aiCommitProviderConfigs[value];
+    set({
+      aiCommitProvider: value,
+      aiCommitBaseUrl: config.baseUrl,
+      aiCommitModel: config.model,
+      aiCommitMaxDiffChars: config.maxDiffChars
+    });
     void persistSettings({ aiCommitProvider: value }).catch(() => {});
     void loadAiApiKey(value).then((aiCommitApiKey) => set({ aiCommitApiKey }));
   },
@@ -349,12 +389,18 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     void setAiApiKey(provider, value).catch(() => {});
   },
   setAiCommitBaseUrl(value) {
-    set({ aiCommitBaseUrl: value });
-    void persistSettings({ aiCommitBaseUrl: value }).catch(() => {});
+    set((state) => {
+      const aiCommitProviderConfigs = updateAiProviderConfig(state, { baseUrl: value });
+      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      return { aiCommitBaseUrl: value, aiCommitProviderConfigs };
+    });
   },
   setAiCommitModel(value) {
-    set({ aiCommitModel: value });
-    void persistSettings({ aiCommitModel: value }).catch(() => {});
+    set((state) => {
+      const aiCommitProviderConfigs = updateAiProviderConfig(state, { model: value });
+      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      return { aiCommitModel: value, aiCommitProviderConfigs };
+    });
   },
   setAiCommitStyle(value) {
     set({ aiCommitStyle: value });
@@ -365,12 +411,14 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     void persistSettings({ aiCommitIncludeBody: value }).catch(() => {});
   },
   setAiCommitMaxDiffChars(value) {
-    const aiCommitMaxDiffChars = sanitizeAiMaxDiff(
-      value,
-      useSettingsStore.getState().aiCommitProvider
-    );
-    set({ aiCommitMaxDiffChars });
-    void persistSettings({ aiCommitMaxDiffChars }).catch(() => {});
+    set((state) => {
+      const aiCommitMaxDiffChars = sanitizeAiMaxDiff(value, state.aiCommitProvider);
+      const aiCommitProviderConfigs = updateAiProviderConfig(state, {
+        maxDiffChars: aiCommitMaxDiffChars
+      });
+      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      return { aiCommitMaxDiffChars, aiCommitProviderConfigs };
+    });
   }
 }));
 
@@ -419,6 +467,7 @@ function sanitizeStageAllMode(value: unknown): StageAllOnCommitMode {
 function sanitizeAiProvider(value: unknown): AiCommitProvider {
   return value === "openai" ||
     value === "anthropic" ||
+    value === "deepseek" ||
     value === "openai-compatible"
     ? value
     : DEFAULT_SETTINGS.aiCommitProvider;
@@ -438,6 +487,100 @@ function sanitizeAiMaxDiff(value: unknown, provider: AiCommitProvider = DEFAULT_
   return provider === "ollama" && sanitized === 24000
     ? DEFAULT_SETTINGS.aiCommitMaxDiffChars
     : sanitized;
+}
+
+function createDefaultAiProviderConfigs(): AiCommitProviderConfigs {
+  return {
+    ollama: {
+      model: "",
+      baseUrl: "http://localhost:11434",
+      maxDiffChars: 8000
+    },
+    openai: {
+      model: "",
+      baseUrl: "",
+      maxDiffChars: 24000
+    },
+    anthropic: {
+      model: "",
+      baseUrl: "",
+      maxDiffChars: 24000
+    },
+    deepseek: {
+      model: "",
+      baseUrl: "",
+      maxDiffChars: 24000
+    },
+    "openai-compatible": {
+      model: "",
+      baseUrl: "",
+      maxDiffChars: 24000
+    }
+  };
+}
+
+function sanitizeAiProviderConfigs(
+  value: unknown,
+  activeProvider: AiCommitProvider,
+  legacyModel: unknown,
+  legacyBaseUrl: unknown,
+  legacyMaxDiffChars: unknown
+): AiCommitProviderConfigs {
+  const defaults = createDefaultAiProviderConfigs();
+  const raw = isRecord(value) ? value : {};
+  const migratedLegacyConfig =
+    Object.keys(raw).length === 0
+      ? {
+          model: typeof legacyModel === "string" ? legacyModel : defaults[activeProvider].model,
+          baseUrl:
+            typeof legacyBaseUrl === "string"
+              ? legacyBaseUrl
+              : defaults[activeProvider].baseUrl,
+          maxDiffChars: sanitizeAiMaxDiff(legacyMaxDiffChars, activeProvider)
+        }
+      : null;
+
+  return Object.fromEntries(
+    (Object.keys(defaults) as AiCommitProvider[]).map((provider) => {
+      const candidate = isRecord(raw[provider]) ? raw[provider] : {};
+      const fallback =
+        provider === activeProvider && migratedLegacyConfig
+          ? migratedLegacyConfig
+          : defaults[provider];
+      return [
+        provider,
+        {
+          model: typeof candidate.model === "string" ? candidate.model : fallback.model,
+          baseUrl:
+            typeof candidate.baseUrl === "string" ? candidate.baseUrl : fallback.baseUrl,
+          maxDiffChars:
+            candidate.maxDiffChars === undefined
+              ? fallback.maxDiffChars
+              : sanitizeAiMaxDiff(candidate.maxDiffChars, provider)
+        }
+      ];
+    })
+  ) as AiCommitProviderConfigs;
+}
+
+function updateAiProviderConfig(
+  state: Pick<
+    SettingsStore,
+    "aiCommitProvider" | "aiCommitProviderConfigs"
+  >,
+  update: Partial<AiCommitProviderConfig>
+) {
+  return {
+    ...state.aiCommitProviderConfigs,
+    [state.aiCommitProvider]: {
+      ...state.aiCommitProviderConfigs[state.aiCommitProvider],
+      ...update
+    }
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function loadAiApiKey(provider: AiCommitProvider) {

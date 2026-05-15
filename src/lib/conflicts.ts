@@ -1,4 +1,8 @@
-export type ConflictChoice = "ours" | "theirs" | "both";
+export type ConflictChoice =
+  | "ours"
+  | "theirs"
+  | "both-ours-first"
+  | "both-theirs-first";
 
 export interface ConflictRegion {
   id: number;
@@ -93,9 +97,12 @@ export function buildResolvedConflictContent(
       resolvedParts.push(segment.region.ours);
     } else if (choice === "theirs") {
       resolvedParts.push(segment.region.theirs);
-    } else {
+    } else if (choice === "both-ours-first") {
       resolvedParts.push(segment.region.ours);
       resolvedParts.push(segment.region.theirs);
+    } else {
+      resolvedParts.push(segment.region.theirs);
+      resolvedParts.push(segment.region.ours);
     }
   }
 

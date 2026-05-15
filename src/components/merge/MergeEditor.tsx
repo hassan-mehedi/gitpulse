@@ -16,6 +16,7 @@ import {
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useSettingsStore } from "../../stores/settings";
+import { useMergeDraftStore } from "../../stores/mergeDrafts";
 import { HighlightedLineContent } from "../diff/HighlightedLineContent";
 
 interface MergeEditorProps {
@@ -39,6 +40,9 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef<Array<HTMLDivElement | null>>([]);
   const isSyncingScroll = useRef(false);
+  const draftKey = `${repoPath}:${filePath}`;
+  const saveDraft = useMergeDraftStore((state) => state.setDraft);
+  const clearDraft = useMergeDraftStore((state) => state.clearDraft);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +52,11 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
       if (cancelled) return;
       setBase(content.base);
       setRaw(content.raw);
-      setChoices({});
-      setResultDraft(content.raw);
-      setIsResultEdited(false);
+      const savedDraft = useMergeDraftStore.getState().drafts[draftKey];
+      const draft = savedDraft?.raw === content.raw ? savedDraft : null;
+      setChoices(draft?.choices ?? {});
+      setResultDraft(draft?.resultDraft ?? content.raw);
+      setIsResultEdited(draft?.isResultEdited ?? false);
       setActiveConflict(0);
       setIsLoading(false);
     }).catch(() => {
@@ -59,7 +65,7 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
     return () => {
       cancelled = true;
     };
-  }, [filePath, repoPath, runGit]);
+  }, [draftKey, filePath, repoPath, runGit]);
 
   const segments = useMemo(() => parseConflictSegments(raw), [raw]);
   const conflictRegions = useMemo(
@@ -88,6 +94,16 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
       setResultDraft(resultPreview);
     }
   }, [isResultEdited, resultPreview]);
+
+  useEffect(() => {
+    if (!raw) return;
+    saveDraft(draftKey, {
+      raw,
+      choices,
+      resultDraft,
+      isResultEdited
+    });
+  }, [choices, draftKey, isResultEdited, raw, resultDraft, saveDraft]);
 
   const navigateConflict = useCallback(
     (direction: 1 | -1) => {
@@ -160,6 +176,7 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
     await runGit(async () => {
       await gitSetConflictContent(repoPath, filePath, content);
       await gitMarkResolved(repoPath, filePath);
+      clearDraft(draftKey);
       await refreshRepo(repoPath);
     });
   }
@@ -177,6 +194,7 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
     }
     await runGit(async () => {
       await gitAbortMerge(repoPath);
+      clearDraft(draftKey);
       await refreshRepo(repoPath);
     });
   }
@@ -241,12 +259,21 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
           </button>
           <button
             className="vscode-button"
-            onClick={() => acceptAll("both")}
+            onClick={() => acceptAll("both-theirs-first")}
             disabled={conflictCount === 0}
-            title="Accept All Combination"
+            title="Accept All Both (Incoming First)"
             type="button"
           >
-            Accept Both
+            Accept Both (Incoming First)
+          </button>
+          <button
+            className="vscode-button"
+            onClick={() => acceptAll("both-ours-first")}
+            disabled={conflictCount === 0}
+            title="Accept All Both (Current First)"
+            type="button"
+          >
+            Accept Both (Current First)
           </button>
         </div>
       </div>
@@ -260,8 +287,8 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
           <div className="merge-editor__panes">
             <MergePane
               segments={segments}
-              side="ours"
-              label="Current (HEAD)"
+              side="theirs"
+              label="Incoming"
               choices={choices}
               activeConflict={activeConflict}
               onActivate={setActiveConflict}
@@ -275,8 +302,8 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
             />
             <MergePane
               segments={segments}
-              side="theirs"
-              label="Incoming"
+              side="ours"
+              label="Current (HEAD)"
               choices={choices}
               activeConflict={activeConflict}
               onActivate={setActiveConflict}
@@ -400,8 +427,17 @@ function MergePane({
                 theme={theme}
                 tone="ours"
                 active={isActive}
-                accepted={choice === "ours" || choice === "both"}
+                accepted={
+                  choice === "ours" ||
+                  choice === "both-ours-first" ||
+                  choice === "both-theirs-first"
+                }
                 rejected={choice === "theirs"}
+                actions={[
+                  { label: "Accept Current", choice: "ours" },
+                  { label: "Accept Both (Current First)", choice: "both-ours-first" }
+                ]}
+                onChoose={(choice) => onChoose(region.id, choice)}
                 onClick={() => onActivate(region.id)}
               />
             );
@@ -416,8 +452,17 @@ function MergePane({
                 theme={theme}
                 tone="theirs"
                 active={isActive}
-                accepted={choice === "theirs" || choice === "both"}
+                accepted={
+                  choice === "theirs" ||
+                  choice === "both-ours-first" ||
+                  choice === "both-theirs-first"
+                }
                 rejected={choice === "ours"}
+                actions={[
+                  { label: "Accept Incoming", choice: "theirs" },
+                  { label: "Accept Both (Incoming First)", choice: "both-theirs-first" }
+                ]}
+                onChoose={(choice) => onChoose(region.id, choice)}
                 onClick={() => onActivate(region.id)}
               />
             );
@@ -499,10 +544,18 @@ function MergeResultPane({
             <span className="merge-codelens-sep">|</span>
             <button
               className="merge-codelens-action"
-              onClick={() => choose("both")}
+              onClick={() => choose("both-theirs-first")}
               type="button"
             >
-              Accept Both
+              Accept Both (Incoming First)
+            </button>
+            <span className="merge-codelens-sep">|</span>
+            <button
+              className="merge-codelens-action"
+              onClick={() => choose("both-ours-first")}
+              type="button"
+            >
+              Accept Both (Current First)
             </button>
             <span className="merge-codelens-label">
               Conflict {activeRegion.id + 1}
@@ -542,6 +595,8 @@ interface ConflictBlockProps {
   active: boolean;
   accepted: boolean;
   rejected: boolean;
+  actions: Array<{ label: string; choice: ConflictChoice }>;
+  onChoose: (choice: ConflictChoice) => void;
   onClick: () => void;
 }
 
@@ -554,6 +609,8 @@ function ConflictBlock({
   active,
   accepted,
   rejected,
+  actions,
+  onChoose,
   onClick
 }: ConflictBlockProps) {
   const classes = [
@@ -576,6 +633,23 @@ function ConflictBlock({
       <div className="merge-conflict__label">
         Conflict {conflictId + 1}
         {accepted ? <Codicon name="check" size={11} /> : null}
+      </div>
+      <div className="merge-conflict__codelens merge-conflict__codelens--input">
+        {actions.map((action, index) => (
+          <span key={action.choice}>
+            {index > 0 ? <span className="merge-codelens-sep">|</span> : null}
+            <button
+              className="merge-codelens-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChoose(action.choice);
+              }}
+              type="button"
+            >
+              {action.label}
+            </button>
+          </span>
+        ))}
       </div>
       <CodeBlock content={content || "(empty)"} filePath={filePath} theme={theme} className="merge-pane__code" />
     </div>
@@ -645,14 +719,29 @@ function ResultConflict({
         </button>
         <span className="merge-codelens-sep">|</span>
         <button
-          className={`merge-codelens-action${choice === "both" ? " is-selected" : ""}`}
+          className={`merge-codelens-action${
+            choice === "both-theirs-first" ? " is-selected" : ""
+          }`}
           onClick={(event) => {
             event.stopPropagation();
-            choose("both");
+            choose("both-theirs-first");
           }}
           type="button"
         >
-          Accept Both
+          Accept Both (Incoming First)
+        </button>
+        <span className="merge-codelens-sep">|</span>
+        <button
+          className={`merge-codelens-action${
+            choice === "both-ours-first" ? " is-selected" : ""
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            choose("both-ours-first");
+          }}
+          type="button"
+        >
+          Accept Both (Current First)
         </button>
         <span className="merge-codelens-label">Conflict {regionId + 1}</span>
       </div>
@@ -660,10 +749,15 @@ function ResultConflict({
         <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
       ) : choice === "theirs" ? (
         <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
-      ) : choice === "both" ? (
+      ) : choice === "both-ours-first" ? (
         <>
           <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
           <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
+        </>
+      ) : choice === "both-theirs-first" ? (
+        <>
+          <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
+          <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
         </>
       ) : (
         <>
@@ -704,8 +798,10 @@ function buildResultPreview(
       parts.push(ours);
     } else if (choice === "theirs") {
       parts.push(theirs);
-    } else if (choice === "both") {
+    } else if (choice === "both-ours-first") {
       parts.push(ours, theirs);
+    } else if (choice === "both-theirs-first") {
+      parts.push(theirs, ours);
     } else {
       parts.push("<<<<<<< Current", ours, "=======", theirs, ">>>>>>> Incoming");
     }

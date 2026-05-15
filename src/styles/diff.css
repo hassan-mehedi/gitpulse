@@ -956,6 +956,17 @@
   z-index: 1;
 }
 
+.merge-conflict__codelens--input {
+  gap: 8px;
+  padding-inline: 8px;
+}
+
+.merge-conflict__codelens--input span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .merge-codelens-action {
   background: transparent;
   border: 0;

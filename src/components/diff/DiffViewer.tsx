@@ -452,8 +452,11 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
             <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("theirs")} type="button">
               Accept All Incoming
             </button>
-            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("both")} type="button">
-              Accept All Both
+            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("both-theirs-first")} type="button">
+              Accept All Both (Incoming First)
+            </button>
+            <button className="merge-codelens-action" onClick={() => void applyConflictQuickFix("both-ours-first")} type="button">
+              Accept All Both (Current First)
             </button>
           </div>
           <MergeEditor filePath={activeChange.path} repoPath={repo.path} />

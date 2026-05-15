@@ -267,6 +267,7 @@ export function SettingsPanel() {
                 { value: "ollama", label: "Ollama" },
                 { value: "openai", label: "OpenAI" },
                 { value: "anthropic", label: "Anthropic" },
+                { value: "deepseek", label: "DeepSeek" },
                 { value: "openai-compatible", label: "OpenAI-compatible" }
               ]}
               value={aiCommitProvider}
@@ -289,12 +290,16 @@ export function SettingsPanel() {
                   ? "llama3.2"
                   : aiCommitProvider === "anthropic"
                     ? "claude-sonnet-4-..."
+                    : aiCommitProvider === "deepseek"
+                      ? "deepseek-v4-flash"
                     : "model-id"
               }
               value={aiCommitModel}
             />
           </SettingRow>
-          {aiCommitProvider !== "openai" && aiCommitProvider !== "anthropic" ? (
+          {aiCommitProvider !== "openai" &&
+          aiCommitProvider !== "anthropic" &&
+          aiCommitProvider !== "deepseek" ? (
             <SettingRow
               label="Base URL"
               hint={

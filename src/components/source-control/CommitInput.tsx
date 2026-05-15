@@ -19,6 +19,7 @@ import { generateCommitMessage, prepareAiDiffContext } from "../../lib/aiCommit"
 import { createId } from "../../lib/ids";
 import { useNotificationStore } from "../../stores/notifications";
 import { progressId, useProgressStore } from "../../stores/progress";
+import { useCommitDraftStore } from "../../stores/commitDrafts";
 import type { Repository } from "../../types/git";
 
 interface CommitInputProps {
@@ -52,7 +53,6 @@ const HISTORY_LIMIT = 30;
 
 export function CommitInput({ repo }: CommitInputProps) {
   const historyKey = `gitpulse:commitHistory:${repo.path}`;
-  const [message, setMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [history, setHistory] = useState<string[]>(() => readHistory(historyKey));
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
@@ -80,6 +80,9 @@ export function CommitInput({ repo }: CommitInputProps) {
   const pushNotification = useNotificationStore((state) => state.pushNotification);
   const upsertProgress = useProgressStore((state) => state.upsertProgress);
   const removeProgress = useProgressStore((state) => state.removeProgress);
+  const message = useCommitDraftStore((state) => state.drafts[repo.path] ?? "");
+  const setDraft = useCommitDraftStore((state) => state.setDraft);
+  const clearDraft = useCommitDraftStore((state) => state.clearDraft);
   const assignedIdentity = resolveCommitIdentity(
     repo.path,
     commitIdentities,
@@ -174,7 +177,7 @@ export function CommitInput({ repo }: CommitInputProps) {
         }
 
         if (action !== "undo") {
-          setMessage("");
+          clearDraft(repo.path);
         }
         setHistoryCursor(null);
         await refreshRepo(repo.path);
@@ -237,7 +240,7 @@ export function CommitInput({ repo }: CommitInputProps) {
     const current = historyCursor ?? (direction === -1 ? -1 : 0);
     const next = Math.max(0, Math.min(history.length - 1, current + (direction === -1 ? 1 : -1)));
     setHistoryCursor(next);
-    setMessage(history[next] ?? "");
+    setDraft(repo.path, history[next] ?? "");
     window.setTimeout(() => textareaRef.current?.setSelectionRange(0, 0), 0);
   }
 
@@ -278,7 +281,8 @@ export function CommitInput({ repo }: CommitInputProps) {
         includeBody: aiCommitIncludeBody,
         maxDiffChars: aiCommitMaxDiffChars
       });
-      setMessage(
+      setDraft(
+        repo.path,
         generated.body ? `${generated.subject}\n\n${generated.body}` : generated.subject
       );
       emitAiOutput({
@@ -321,7 +325,7 @@ export function CommitInput({ repo }: CommitInputProps) {
         <textarea
           className="commit-input__textarea"
           ref={textareaRef}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => setDraft(repo.path, event.target.value)}
           onFocus={() => setActiveRepo(repo.id)}
           onKeyDown={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -415,6 +419,7 @@ function formatAiProvider(provider: string) {
   if (provider === "ollama") return "Ollama";
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";
+  if (provider === "deepseek") return "DeepSeek";
   return "AI provider";
 }
 
