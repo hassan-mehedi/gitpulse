@@ -5,6 +5,7 @@ import type { FileDiff, FileChange, GitError, Repository, WorkspaceState } from 
 import { useDiffStore } from "./diff";
 import { useInlineBlameStore } from "./inlineBlame";
 import { useNotificationStore } from "./notifications";
+import { useSettingsStore } from "./settings";
 
 interface WorkspaceStore extends WorkspaceState {
   isLoading: boolean;
@@ -48,6 +49,7 @@ const lastSyncToastByRepo = new Map<string, string>();
 function statusEqual(prev: Repository, nextStatus: Awaited<ReturnType<typeof gitStatus>>) {
   if (
     prev.branch !== nextStatus.branch ||
+    prev.headSha !== nextStatus.headSha ||
     prev.upstream !== nextStatus.upstream ||
     prev.ahead !== nextStatus.ahead ||
     prev.behind !== nextStatus.behind ||
@@ -133,6 +135,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...workspace,
         isLoading: false
       });
+      for (const repo of workspace.repositories) {
+        useSettingsStore.getState().rememberRepository(repo.path);
+      }
     } catch (error) {
       set({ isLoading: false });
       notifyWorkspaceError("Open target failed", error);
@@ -147,6 +152,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...workspace,
         isLoading: false
       });
+      for (const repo of workspace.repositories) {
+        useSettingsStore.getState().rememberRepository(repo.path);
+      }
     } catch (error) {
       set({ isLoading: false });
       notifyWorkspaceError("Add repository failed", error);
@@ -182,6 +190,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
               ? {
                   ...repo,
                   branch: nextStatus.branch,
+                  headSha: nextStatus.headSha,
                   upstream: nextStatus.upstream,
                   ahead: nextStatus.ahead,
                   behind: nextStatus.behind,

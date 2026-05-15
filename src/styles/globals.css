@@ -969,6 +969,13 @@ button:disabled {
   background: var(--vscode-menu-separatorBackground);
 }
 
+.dropdown-menu__label {
+  padding: 4px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
 /* Commit input (UX-SPEC §3.1 commit input region) */
 .commit-input {
   display: flex;
@@ -990,6 +997,31 @@ button:disabled {
   line-height: 1.35;
   resize: none;
   overflow-y: hidden;
+}
+
+.commit-input__editor {
+  position: relative;
+}
+
+.commit-input__editor .commit-input__textarea {
+  padding-right: 34px;
+}
+
+.commit-input__generate {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground);
+}
+
+.commit-input__generate:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
 }
 
 .commit-input__textarea::placeholder {
@@ -1075,30 +1107,6 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.commit-input__output {
-  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
-  border-radius: 3px;
-  background: rgba(244, 135, 113, 0.08);
-  color: var(--vscode-foreground);
-  font-size: 12px;
-}
-
-.commit-input__output summary {
-  cursor: pointer;
-  padding: 5px 8px;
-  color: var(--vscode-errorForeground);
-}
-
-.commit-input__output pre {
-  margin: 0;
-  max-height: 180px;
-  overflow: auto;
-  padding: 6px 8px 8px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--vscode-editor-font-family, "Menlo", "Monaco", monospace);
 }
 
 .scm-sync-prompt {
@@ -1676,6 +1684,13 @@ body.is-resizing-sidebar * {
   flex-direction: column;
 }
 
+.scm-section__body--virtualized {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: paint;
+}
+
 .scm-tree__directory {
   display: flex;
   align-items: center;
@@ -1786,6 +1801,68 @@ body.is-resizing-sidebar * {
 .branches-filter__toggle.is-active {
   background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+}
+
+.branches-filter__select {
+  height: 24px;
+  min-width: 74px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.scm-section__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin: 2px 8px 4px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+}
+
+.scm-section__filter-input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.scm-section__empty {
+  padding: 6px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.scm-welcome__recent {
+  display: flex;
+  width: min(100%, 360px);
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.scm-welcome__recent-title {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.scm-welcome__recent-item {
+  overflow: hidden;
+  padding: 4px 0;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branch-compare-modal {
@@ -2180,6 +2257,58 @@ body.is-resizing-sidebar * {
   outline-offset: -1px;
 }
 
+.settings-select {
+  position: relative;
+  width: 100%;
+}
+
+.settings-select__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+}
+
+.settings-select__button > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 2px;
+  background: var(--vscode-menu-background);
+  box-shadow: var(--vscode-shadow-menu);
+}
+
+.settings-select__option {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 2px;
+  color: var(--vscode-menu-foreground);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.settings-select__option:hover,
+.settings-select__option.is-selected {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
 .settings-readonly {
   font-size: 13px;
   color: var(--vscode-descriptionForeground);
@@ -2266,6 +2395,25 @@ body.is-resizing-sidebar * {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.identity-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.identity-assignment {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.misc-panel__field-label {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
 }
 
 .identity-card {
@@ -2414,6 +2562,20 @@ body.is-resizing-sidebar * {
   font-size: 12px;
 }
 
+.misc-panel__compact-result {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-foreground);
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+}
+
 .misc-panel__list {
   display: flex;
   flex-direction: column;
@@ -2433,10 +2595,78 @@ body.is-resizing-sidebar * {
   background: var(--vscode-list-hoverBackground);
 }
 
+.misc-panel__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.misc-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.misc-panel__row-title {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.misc-panel__row-detail {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+}
+
+.misc-panel__row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .misc-panel__hint {
   margin: 0;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
+}
+
+.reflog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(640px, calc(100vw - 48px));
+}
+
+.reflog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.reflog-row__title {
+  font-size: 13px;
+}
+
+.reflog-row__meta {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+}
+
+.reflog-row__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* Toasts (UX-SPEC §5.4) */
@@ -2470,6 +2700,21 @@ body.is-resizing-sidebar * {
 
 .toast--error {
   border-left: 3px solid var(--vscode-errorForeground);
+}
+
+.toast--progress {
+  border-left: 3px solid var(--vscode-progressBar-background);
+}
+
+.toast--progress .progress-bar {
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--vscode-progressBar-background) 20%, transparent);
+}
+
+.toast--progress .progress-bar__fill {
+  background: var(--vscode-progressBar-background);
 }
 
 .toast__title {

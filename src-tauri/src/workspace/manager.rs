@@ -174,6 +174,7 @@ pub async fn scan_repo(path: &Path) -> Result<Repository, GitError> {
         name,
         path: path_string,
         branch: repo_status.branch,
+        head_sha: repo_status.head_sha,
         upstream: repo_status.upstream,
         ahead: repo_status.ahead,
         behind: repo_status.behind,

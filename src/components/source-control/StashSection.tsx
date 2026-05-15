@@ -20,6 +20,10 @@ export function StashSection({ repo }: StashSectionProps) {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const [stashes, setStashes] = useState<StashEntry[]>([]);
   const [collapsed, setCollapsed] = useState(true);
+  const [query, setQuery] = useState("");
+  const filteredStashes = stashes.filter((stash) =>
+    `${stash.stashRef} ${stash.message}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +85,18 @@ export function StashSection({ repo }: StashSectionProps) {
 
       {!collapsed ? (
         <div className="scm-section__body">
-          {stashes.map((stash) => (
+          {stashes.length > 0 ? (
+            <div className="scm-section__filter">
+              <Codicon name="search" size={14} />
+              <input
+                className="scm-section__filter-input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter stashes"
+                value={query}
+              />
+            </div>
+          ) : null}
+          {filteredStashes.map((stash) => (
             <div className="scm-row" key={stash.stashRef} title={stash.message}>
               <Codicon name="archive" size={16} className="scm-row__icon" />
               <span className="scm-row__name">{stash.message || stash.stashRef}</span>
@@ -123,6 +138,9 @@ export function StashSection({ repo }: StashSectionProps) {
               </span>
             </div>
           ))}
+          {stashes.length > 0 && filteredStashes.length === 0 ? (
+            <div className="scm-section__empty">No matching stashes.</div>
+          ) : null}
         </div>
       ) : null}
     </section>

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Codicon } from "../shared/Codicon";
-import { gitLog, gitShowCommit } from "../../lib/git";
+import { gitLog, gitRestoreFileFromCommit } from "../../lib/git";
+import { getCommitDetail } from "../../lib/commitDetails";
 import { useGit } from "../../hooks/useGit";
+import { useWorkspaceStore } from "../../stores/workspace";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import type { CommitDetail, CommitInfo, Repository } from "../../types/git";
 
 interface FileHistoryPanelProps {
@@ -15,6 +18,8 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
   const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<CommitDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
 
   useEffect(() => {
     setIsLoading(true);
@@ -24,7 +29,7 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
       const firstCommit = nextCommits[0];
       setSelectedCommitSha(firstCommit?.sha ?? null);
       if (firstCommit) {
-        const detail = await gitShowCommit(repo.path, firstCommit.sha);
+        const detail = await getCommitDetail(repo.path, firstCommit.sha);
         setSelectedCommit(detail);
       } else {
         setSelectedCommit(null);
@@ -36,7 +41,7 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
   async function handleSelectCommit(commit: CommitInfo) {
     setSelectedCommitSha(commit.sha);
     await runGit(async () => {
-      const detail = await gitShowCommit(repo.path, commit.sha);
+      const detail = await getCommitDetail(repo.path, commit.sha);
       setSelectedCommit(detail);
     });
   }
@@ -109,6 +114,13 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
               {selectedCommit.body ? (
                 <pre className="graph-detail__body">{selectedCommit.body}</pre>
               ) : null}
+              <button
+                className="vscode-button"
+                onClick={() => setConfirmRestore(true)}
+                type="button"
+              >
+                Restore This File From Commit
+              </button>
               <div className="repo-card__section">
                 <div className="repo-card__section-header">
                   <span>Changed Files</span>
@@ -144,6 +156,25 @@ export function FileHistoryPanel({ filePath, repo }: FileHistoryPanelProps) {
           )}
         </aside>
       </div>
+      <ConfirmModal
+        isOpen={confirmRestore}
+        title="Restore File"
+        body={
+          <>
+            Restore <strong>{filePath}</strong> from commit{" "}
+            <strong>{selectedCommit?.shortSha}</strong>? This updates the working tree copy.
+          </>
+        }
+        confirmLabel="Restore"
+        onConfirm={() => {
+          if (!selectedCommit) return;
+          void runGit(async () => {
+            await gitRestoreFileFromCommit(repo.path, selectedCommit.sha, filePath);
+            await refreshRepo(repo.path);
+          });
+        }}
+        onClose={() => setConfirmRestore(false)}
+      />
     </div>
   );
 }

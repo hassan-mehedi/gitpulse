@@ -171,6 +171,14 @@ export function highlightLine(filePath: string, code: string, themeMode: ThemeMo
   return next;
 }
 
+export async function highlightLines(
+  filePath: string,
+  codes: string[],
+  themeMode: ThemeMode
+) {
+  return Promise.all(codes.map((code) => highlightLine(filePath, code, themeMode)));
+}
+
 function extractCodeHtml(html: string) {
   const match = html.match(/<code>([\s\S]*?)<\/code>/);
   return match?.[1] ?? escapeHtml(html);

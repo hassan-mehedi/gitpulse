@@ -12,12 +12,16 @@ import {
   gitCreateTag,
   gitPull,
   gitPush,
+  gitRefLog,
   gitRebaseInteractive,
+  gitResetToCommit,
+  gitRevertCommit,
   gitSwitchBranch
 } from "../../lib/git";
 import { GraphToolbar } from "./GraphToolbar";
 import { InteractiveRebaseModal } from "../rebase/InteractiveRebaseModal";
-import type { ActivityView, GraphNode } from "../../types/git";
+import { Modal } from "../shared/Modal";
+import type { ActivityView, GraphNode, ReflogEntry } from "../../types/git";
 
 // VS Code-style branch lane palette.
 const lanePalette = [
@@ -54,6 +58,9 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
+  const [authorQuery, setAuthorQuery] = useState("");
+  const [pathQuery, setPathQuery] = useState("");
+  const [sinceDays, setSinceDays] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [input, setInput] = useState<PendingInput | null>(null);
   const [rebaseTarget, setRebaseTarget] = useState<GraphNode | null>(null);
@@ -61,6 +68,13 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
   const [hiddenRefs, setHiddenRefs] = useState<string[]>([]);
   const [dateMode, setDateMode] = useState<"relative" | "absolute">("relative");
   const [draggedSha, setDraggedSha] = useState<string | null>(null);
+  const [reflogOpen, setReflogOpen] = useState(false);
+  const [reflogEntries, setReflogEntries] = useState<ReflogEntry[]>([]);
+  const [pendingReset, setPendingReset] = useState<{
+    sha: string;
+    shortSha: string;
+    mode: "soft" | "mixed" | "hard";
+  } | null>(null);
   const {
     nodes,
     repoId,
@@ -90,8 +104,11 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
   useEffect(() => {
     if (!selectedRepo) return;
     setActiveRepo(selectedRepo.id);
-    void runGit(() => loadGraph(selectedRepo)).catch(() => {});
-  }, [loadGraph, runGit, selectedRepo, setActiveRepo]);
+    const timer = window.setTimeout(() => {
+      void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
+    }, pathQuery ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [loadGraph, pathQuery, runGit, selectedRepo?.id, selectedRepo?.path, selectedRepo?.branch, selectedRepo?.headSha, setActiveRepo]);
 
   const availableRefs = useMemo(
     () =>
@@ -107,17 +124,23 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
 
   const visibleNodes = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const authorNeedle = authorQuery.trim().toLowerCase();
+    const sinceThreshold = sinceDays
+      ? Date.now() - Number(sinceDays) * 24 * 60 * 60 * 1000
+      : null;
     return nodes.filter((node) => {
       const visibleByRef =
         hiddenRefs.length === 0 ||
         node.refs.length === 0 ||
         node.refs.some((ref) => ref.startsWith("tag: ") || ref === "HEAD" || !hiddenRefs.includes(ref));
       if (!visibleByRef) return false;
+      if (authorNeedle && !node.author.toLowerCase().includes(authorNeedle)) return false;
+      if (sinceThreshold && new Date(node.date).getTime() < sinceThreshold) return false;
       if (!needle) return true;
       const haystack = `${node.message} ${node.author} ${node.refs.join(" ")}`.toLowerCase();
       return haystack.includes(needle);
     });
-  }, [hiddenRefs, nodes, query]);
+  }, [authorQuery, hiddenRefs, nodes, query, sinceDays]);
 
   const maxLane = useMemo(() => visibleLaneCount(visibleNodes), [visibleNodes]);
   const headNode = useMemo(
@@ -172,6 +195,32 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
     }).catch(() => {});
+  }
+
+  function handleRevert(node: GraphNode) {
+    if (!selectedRepo) return;
+    runGit(async () => {
+      await gitRevertCommit(selectedRepo.path, node.sha);
+      await refreshRepo(selectedRepo.path);
+      await loadGraph(selectedRepo);
+    }).catch(() => {});
+  }
+
+  function handleReset() {
+    if (!selectedRepo || !pendingReset) return;
+    const { sha, mode } = pendingReset;
+    runGit(async () => {
+      await gitResetToCommit(selectedRepo.path, sha, mode);
+      await refreshRepo(selectedRepo.path);
+      await loadGraph(selectedRepo);
+    }).catch(() => {});
+  }
+
+  async function openReflog() {
+    if (!selectedRepo) return;
+    const entries = await runGit(() => gitRefLog(selectedRepo.path)).catch(() => []);
+    setReflogEntries(entries ?? []);
+    setReflogOpen(true);
   }
 
   function toggleRef(ref: string) {
@@ -231,14 +280,20 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
         selectedRepoId={selectedRepo.id}
         onRepoChange={(nextRepoId) => setRepoId(nextRepoId)}
         onQueryChange={setQuery}
+        authorQuery={authorQuery}
+        onAuthorQueryChange={setAuthorQuery}
+        pathQuery={pathQuery}
+        onPathQueryChange={setPathQuery}
+        sinceDays={sinceDays}
+        onSinceDaysChange={setSinceDays}
         onReload={() => {
-          void runGit(() => loadGraph(selectedRepo)).catch(() => {});
+          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
         }}
         query={query}
         includeAll={includeAll}
         onIncludeAllChange={(value) => {
           setIncludeAll(value);
-          void runGit(() => loadGraph(selectedRepo)).catch(() => {});
+          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
         }}
         activeRepo={selectedRepo}
         onPull={() => {
@@ -261,6 +316,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
         onToggleRef={toggleRef}
         dateMode={dateMode}
         onDateModeChange={setDateMode}
+        onOpenReflog={() => void openReflog()}
       />
       <ConfirmModal
         isOpen={confirmForcePush}
@@ -545,6 +601,19 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
                   onSelect: () => handleCherryPick(menu.node)
                 },
                 {
+                  label: "Revert Commit",
+                  onSelect: () => handleRevert(menu.node)
+                },
+                ...(["soft", "mixed", "hard"] as const).map((mode) => ({
+                  label: `Reset Current Branch Here (${capitalize(mode)})…`,
+                  onSelect: () =>
+                    setPendingReset({
+                      sha: menu.node.sha,
+                      shortSha: menu.node.shortSha,
+                      mode
+                    })
+                })),
+                {
                   label: "Rebase Commits Onto Here…",
                   onSelect: () => setRebaseTarget(menu.node)
                 },
@@ -586,8 +655,81 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
           }}
         />
       ) : null}
+      <ConfirmModal
+        isOpen={pendingReset !== null}
+        title="Reset Current Branch"
+        body={
+          <>
+            Reset the current branch to <strong>{pendingReset?.shortSha}</strong> using{" "}
+            <strong>{pendingReset?.mode}</strong> mode?
+          </>
+        }
+        confirmLabel="Reset"
+        danger={pendingReset?.mode === "hard"}
+        onConfirm={handleReset}
+        onClose={() => setPendingReset(null)}
+      />
+      <ReflogModal
+        entries={reflogEntries}
+        isOpen={reflogOpen}
+        onClose={() => setReflogOpen(false)}
+        onReset={(entry, mode) =>
+          setPendingReset({ sha: entry.sha, shortSha: entry.shortSha, mode })
+        }
+      />
     </>
   );
+}
+
+function ReflogModal({
+  entries,
+  isOpen,
+  onClose,
+  onReset
+}: {
+  entries: ReflogEntry[];
+  isOpen: boolean;
+  onClose: () => void;
+  onReset: (entry: ReflogEntry, mode: "soft" | "mixed" | "hard") => void;
+}) {
+  return (
+    <Modal isOpen={isOpen} title="Reflog Recovery" onClose={onClose}>
+      <div className="reflog-list">
+        {entries.length === 0 ? (
+          <div className="scm-row scm-row--placeholder">No reflog entries.</div>
+        ) : null}
+        {entries.map((entry) => (
+          <div className="reflog-row" key={`${entry.selector}:${entry.sha}`}>
+            <div>
+              <div className="reflog-row__title">{entry.message}</div>
+              <div className="reflog-row__meta">
+                {entry.selector} · {entry.shortSha} · {entry.author}
+              </div>
+            </div>
+            <div className="reflog-row__actions">
+              {(["soft", "mixed", "hard"] as const).map((mode) => (
+                <button
+                  className="vscode-button"
+                  key={mode}
+                  onClick={() => {
+                    onReset(entry, mode);
+                    onClose();
+                  }}
+                  type="button"
+                >
+                  {capitalize(mode)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function capitalize(value: string) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
 interface LaneWindow {

@@ -40,6 +40,10 @@ pub async fn diff_merge_base(
     parse_multi_file_diff(&output)
 }
 
+pub async fn patch_file(repo_path: &Path, file: &str) -> Result<String, GitError> {
+    GitRunner::run(repo_path, &["diff", "--patch", "--", file]).await
+}
+
 pub fn parse_multi_file_diff(output: &str) -> Result<Vec<FileDiff>, GitError> {
     let file_diffs = output
         .split("diff --git ")
@@ -78,4 +82,9 @@ pub async fn file_bytes(
     let mut path = repo_path.to_path_buf();
     path.push(file);
     std::fs::read(path).map_err(|err| GitError::Io(err.to_string()))
+}
+
+pub async fn restore_file(repo_path: &Path, sha: &str, file: &str) -> Result<(), GitError> {
+    GitRunner::run(repo_path, &["checkout", sha, "--", file]).await?;
+    Ok(())
 }

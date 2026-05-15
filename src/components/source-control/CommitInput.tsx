@@ -5,6 +5,7 @@ import {
   gitCommit,
   gitCommitAll,
   gitCommitAmend,
+  gitPatchCreate,
   gitPush,
   gitStageFiles,
   gitSync,
@@ -14,6 +15,10 @@ import { useGit } from "../../hooks/useGit";
 import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { resolveCommitIdentity } from "../../lib/commitIdentity";
+import { generateCommitMessage } from "../../lib/aiCommit";
+import { createId } from "../../lib/ids";
+import { useNotificationStore } from "../../stores/notifications";
+import { progressId, useProgressStore } from "../../stores/progress";
 import type { Repository } from "../../types/git";
 
 interface CommitInputProps {
@@ -51,17 +56,30 @@ export function CommitInput({ repo }: CommitInputProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [history, setHistory] = useState<string[]>(() => readHistory(historyKey));
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
-  const [lastGitOutput, setLastGitOutput] = useState<string | null>(null);
   const [stageAllPrompt, setStageAllPrompt] = useState<CommitAction | null>(null);
+  const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const runGit = useGit();
   const smartCommit = useSettingsStore((state) => state.smartCommit);
+  const stageAllOnCommit = useSettingsStore((state) => state.stageAllOnCommit);
+  const setStageAllOnCommit = useSettingsStore((state) => state.setStageAllOnCommit);
   const signCommits = useSettingsStore((state) => state.signCommits);
   const commitIdentities = useSettingsStore((state) => state.commitIdentities);
   const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
+  const aiCommitEnabled = useSettingsStore((state) => state.aiCommitEnabled);
+  const aiCommitProvider = useSettingsStore((state) => state.aiCommitProvider);
+  const aiCommitApiKey = useSettingsStore((state) => state.aiCommitApiKey);
+  const aiCommitBaseUrl = useSettingsStore((state) => state.aiCommitBaseUrl);
+  const aiCommitModel = useSettingsStore((state) => state.aiCommitModel);
+  const aiCommitStyle = useSettingsStore((state) => state.aiCommitStyle);
+  const aiCommitIncludeBody = useSettingsStore((state) => state.aiCommitIncludeBody);
+  const aiCommitMaxDiffChars = useSettingsStore((state) => state.aiCommitMaxDiffChars);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const upsertProgress = useProgressStore((state) => state.upsertProgress);
+  const removeProgress = useProgressStore((state) => state.removeProgress);
   const assignedIdentity = resolveCommitIdentity(
     repo.path,
     commitIdentities,
@@ -79,7 +97,6 @@ export function CommitInput({ repo }: CommitInputProps) {
   useEffect(() => {
     setHistory(readHistory(historyKey));
     setHistoryCursor(null);
-    setLastGitOutput(null);
   }, [historyKey]);
 
   useEffect(() => {
@@ -125,7 +142,6 @@ export function CommitInput({ repo }: CommitInputProps) {
     trimmed: string,
     stageAllBeforeCommit = false
   ) {
-    setLastGitOutput(null);
     try {
       await runGit(async () => {
         switch (action) {
@@ -163,12 +179,8 @@ export function CommitInput({ repo }: CommitInputProps) {
         setHistoryCursor(null);
         await refreshRepo(repo.path);
       });
-    } catch (error) {
-      const detail =
-        (error as { message?: string; stderr?: string })?.stderr ??
-        (error as { message?: string })?.message ??
-        String(error);
-      setLastGitOutput(detail);
+    } catch {
+      // useGit already surfaces commit failures through notifications.
     }
   }
 
@@ -200,8 +212,14 @@ export function CommitInput({ repo }: CommitInputProps) {
       return;
     }
     if (isCommitAction(action) && repo.staged.length === 0 && hasStageableChanges) {
-      setStageAllPrompt(action);
-      return;
+      if (stageAllOnCommit === "always") {
+        void executeCommitAction(action, message.trim(), true);
+        return;
+      }
+      if (stageAllOnCommit === "ask") {
+        setStageAllPrompt(action);
+        return;
+      }
     }
     void execute(action);
   }
@@ -223,17 +241,91 @@ export function CommitInput({ repo }: CommitInputProps) {
     window.setTimeout(() => textareaRef.current?.setSelectionRange(0, 0), 0);
   }
 
+  async function generateMessage() {
+    const startedAt = performance.now();
+    const generationProgress = {
+      repoPath: repo.path,
+      operation: "generate commit message",
+      command: [],
+      message: "Preparing staged diff",
+      status: "started" as const
+    };
+    setIsGeneratingMessage(true);
+    upsertProgress(generationProgress);
+    emitAiOutput(generationProgress);
+    try {
+      const patch = await gitPatchCreate(repo.path, true);
+      if (!patch.trim()) {
+        throw new Error("Stage changes before generating a commit message.");
+      }
+      emitAiOutput({
+        ...generationProgress,
+        message: `Prepared staged diff: ${patch.length.toLocaleString()} chars, sending ${Math.min(
+          patch.length,
+          aiCommitMaxDiffChars
+        ).toLocaleString()} chars to ${formatAiProvider(aiCommitProvider)} model ${aiCommitModel || "(unset)"}`,
+        status: "running"
+      });
+      upsertProgress({
+        ...generationProgress,
+        message: `Waiting for ${formatAiProvider(aiCommitProvider)}`,
+        status: "running"
+      });
+      const generated = await generateCommitMessage(patch, {
+        provider: aiCommitProvider,
+        apiKey: aiCommitApiKey,
+        baseUrl: aiCommitBaseUrl,
+        model: aiCommitModel,
+        style: aiCommitStyle,
+        includeBody: aiCommitIncludeBody,
+        maxDiffChars: aiCommitMaxDiffChars
+      });
+      setMessage(
+        generated.body ? `${generated.subject}\n\n${generated.body}` : generated.subject
+      );
+      emitAiOutput({
+        ...generationProgress,
+        message: `Completed in ${formatElapsed(startedAt)}: ${generated.subject}`,
+        percent: 100,
+        status: "completed"
+      });
+      pushNotification({
+        id: createId(),
+        tone: "info",
+        title: "Commit message generated",
+        message: generated.subject
+      });
+    } catch (error) {
+      const detail = (error as Error).message || String(error);
+      emitAiOutput({
+        ...generationProgress,
+        message: `Failed after ${formatElapsed(startedAt)}: ${detail}`,
+        status: "failed"
+      });
+      pushNotification({
+        id: createId(),
+        tone: "error",
+        title: "Commit message generation failed",
+        message: detail
+      });
+    } finally {
+      setIsGeneratingMessage(false);
+      removeProgress(progressId(generationProgress));
+    }
+  }
+
   const placeholder = `Message (Ctrl+Enter to commit on '${repo.branch}')`;
   const commitToneDimmed = !hasCommitMessage;
 
   return (
     <div className="commit-input">
-      <textarea
-        className="commit-input__textarea"
-        ref={textareaRef}
-        onChange={(event) => setMessage(event.target.value)}
-        onFocus={() => setActiveRepo(repo.id)}
-        onKeyDown={(event) => {
+      <div className="commit-input__editor">
+        <textarea
+          className="commit-input__textarea"
+          ref={textareaRef}
+          onChange={(event) => setMessage(event.target.value)}
+          onFocus={() => setActiveRepo(repo.id)}
+          onKeyDown={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();
             runAction(event.shiftKey ? "commit-all" : "commit");
@@ -251,10 +343,22 @@ export function CommitInput({ repo }: CommitInputProps) {
             }
           }
         }}
-        placeholder={placeholder}
-        rows={1}
-        value={message}
-      />
+          placeholder={placeholder}
+          rows={1}
+          value={message}
+        />
+        {aiCommitEnabled ? (
+          <button
+            className="commit-input__generate"
+            disabled={isGeneratingMessage}
+            onClick={() => void generateMessage()}
+            title="Generate commit message from staged changes"
+            type="button"
+          >
+            <Codicon name={isGeneratingMessage ? "sync~spin" : "rocket"} size={14} />
+          </button>
+        ) : null}
+      </div>
       <div className="commit-input__actions" ref={menuRef}>
         <button
           className={`vscode-button vscode-button--primary commit-input__primary${
@@ -292,20 +396,46 @@ export function CommitInput({ repo }: CommitInputProps) {
           </div>
         ) : null}
       </div>
-      {lastGitOutput ? (
-        <details className="commit-input__output" open>
-          <summary>Git hook / commit output</summary>
-          <pre>{lastGitOutput}</pre>
-        </details>
-      ) : null}
       <StageAllCommitPrompt
         isOpen={stageAllPrompt !== null}
-        onAlways={confirmStageAndCommit}
+        onAlways={() => {
+          setStageAllOnCommit("always");
+          confirmStageAndCommit();
+        }}
         onCancel={() => setStageAllPrompt(null)}
-        onNever={() => setStageAllPrompt(null)}
+        onNever={() => {
+          setStageAllOnCommit("never");
+          setStageAllPrompt(null);
+        }}
         onYes={confirmStageAndCommit}
       />
     </div>
+  );
+}
+
+function formatAiProvider(provider: string) {
+  if (provider === "ollama") return "Ollama";
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  return "AI provider";
+}
+
+function formatElapsed(startedAt: number) {
+  return `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
+}
+
+function emitAiOutput(payload: {
+  repoPath: string;
+  operation: string;
+  command: string[];
+  message: string;
+  percent?: number;
+  status: "started" | "running" | "completed" | "failed";
+}) {
+  window.dispatchEvent(
+    new CustomEvent("gitpulse:output", {
+      detail: payload
+    })
   );
 }
 

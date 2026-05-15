@@ -33,7 +33,18 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-const quietCommands = new Set(["git_status"]);
+const quietCommands = new Set([
+  "git_status",
+  "git_fetch",
+  "git_fetch_all",
+  "git_fetch_prune",
+  "git_pull",
+  "git_pull_ff_only",
+  "git_pull_rebase",
+  "git_push",
+  "git_push_set_upstream",
+  "git_sync"
+]);
 
 async function gitInvoke<T>(command: string, args: Record<string, unknown>): Promise<T> {
   if (!isTauriRuntime()) {
@@ -474,6 +485,29 @@ export async function gitUndoLastCommit(repoPath: string): Promise<void> {
   return gitInvoke("git_undo_last_commit", { repoPath });
 }
 
+export async function gitRevertCommit(
+  repoPath: string,
+  sha: string
+): Promise<OperationResult> {
+  return gitInvoke("git_revert_commit", { repoPath, sha });
+}
+
+export async function gitResetToCommit(
+  repoPath: string,
+  sha: string,
+  mode: "soft" | "mixed" | "hard"
+): Promise<OperationResult> {
+  return gitInvoke("git_reset_to_commit", { repoPath, sha, mode });
+}
+
+export async function gitInit(path: string): Promise<Repository> {
+  return gitInvoke("git_init", { path });
+}
+
+export async function gitClone(url: string, dest: string): Promise<Repository> {
+  return gitInvoke("git_clone", { url, dest });
+}
+
 export async function gitLog(
   repoPath: string,
   n = 50,
@@ -486,9 +520,10 @@ export async function gitLog(
 export async function gitGraph(
   repoPath: string,
   maxCount = 500,
-  includeAll = false
+  includeAll = false,
+  file?: string
 ): Promise<CommitInfo[]> {
-  return gitInvoke("git_graph", { repoPath, maxCount, includeAll });
+  return gitInvoke("git_graph", { repoPath, maxCount, includeAll, file });
 }
 
 export async function gitRefLog(repoPath: string, n = 50): Promise<ReflogEntry[]> {
@@ -496,16 +531,7 @@ export async function gitRefLog(repoPath: string, n = 50): Promise<ReflogEntry[]
 }
 
 export async function gitShowCommit(repoPath: string, sha: string): Promise<CommitDetail> {
-  const detail = await gitInvoke<{ info: CommitInfo; body: string; files: CommitDetail["files"] }>(
-    "git_show_commit",
-    { repoPath, sha }
-  );
-
-  return {
-    ...detail.info,
-    body: detail.body,
-    files: detail.files
-  };
+  return gitInvoke("git_show_commit", { repoPath, sha });
 }
 
 export async function gitStashList(repoPath: string): Promise<StashEntry[]> {
@@ -549,6 +575,10 @@ export async function gitDiscardAll(repoPath: string): Promise<void> {
   return gitInvoke("git_discard_all", { repoPath });
 }
 
+export async function gitDiffPatchFile(repoPath: string, file: string): Promise<string> {
+  return gitInvoke("git_diff_patch_file", { repoPath, file });
+}
+
 export async function gitDiffRefs(
   repoPath: string,
   from: string,
@@ -575,6 +605,14 @@ export async function gitFileBytes(
   revision?: string
 ): Promise<number[]> {
   return gitInvoke("git_file_bytes", { repoPath, file, revision });
+}
+
+export async function gitRestoreFileFromCommit(
+  repoPath: string,
+  sha: string,
+  file: string
+): Promise<void> {
+  return gitInvoke("git_restore_file_from_commit", { repoPath, sha, file });
 }
 
 export async function gitCompareBranches(

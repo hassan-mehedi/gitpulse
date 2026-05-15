@@ -40,3 +40,17 @@ pub async fn git_file_bytes(
 ) -> Result<Vec<u8>, GitError> {
     diff::file_bytes(Path::new(&repo_path), &file, revision.as_deref()).await
 }
+
+#[tauri::command]
+pub async fn git_diff_patch_file(repo_path: String, file: String) -> Result<String, GitError> {
+    diff::patch_file(Path::new(&repo_path), &file).await
+}
+
+#[tauri::command]
+pub async fn git_restore_file_from_commit(
+    repo_path: String,
+    sha: String,
+    file: String,
+) -> Result<(), GitError> {
+    diff::restore_file(Path::new(&repo_path), &sha, &file).await
+}

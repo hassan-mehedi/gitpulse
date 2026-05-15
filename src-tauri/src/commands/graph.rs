@@ -9,8 +9,15 @@ pub async fn git_graph(
     repo_path: String,
     max_count: Option<usize>,
     include_all: Option<bool>,
+    file: Option<String>,
 ) -> Result<Vec<CommitInfo>, GitError> {
-    graph::graph(Path::new(&repo_path), max_count, include_all).await
+    graph::graph(
+        Path::new(&repo_path),
+        max_count,
+        include_all,
+        file.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]

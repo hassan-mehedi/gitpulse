@@ -10,6 +10,7 @@ import { useFileWatcher } from "./hooks/useFileWatcher";
 import { applyTheme } from "./lib/theme";
 import { useAutoFetch } from "./hooks/useAutoFetch";
 import { createId } from "./lib/ids";
+import { useOutputStore } from "./stores/output";
 
 export default function App() {
   const initialize = useWorkspaceStore((state) => state.initialize);
@@ -19,9 +20,21 @@ export default function App() {
   const upsertProgress = useProgressStore((state) => state.upsertProgress);
   const removeProgress = useProgressStore((state) => state.removeProgress);
   const setGitVersion = useRuntimeStore((state) => state.setGitVersion);
+  const pushOutput = useOutputStore((state) => state.pushOutput);
 
   useFileWatcher();
   useAutoFetch();
+
+  useEffect(() => {
+    function onOutput(event: Event) {
+      pushOutput((event as CustomEvent<import("./types/git").ProgressPayload>).detail);
+    }
+
+    window.addEventListener("gitpulse:output", onOutput);
+    return () => {
+      window.removeEventListener("gitpulse:output", onOutput);
+    };
+  }, [pushOutput]);
 
   useEffect(() => {
     void hydrateSettings();
@@ -55,6 +68,7 @@ export default function App() {
     let cancelled = false;
     let dispose: (() => void) | undefined;
     void listenGitProgress((payload) => {
+      pushOutput(payload);
       upsertProgress(payload);
 
       if (payload.status === "completed" || payload.status === "failed") {
@@ -88,7 +102,7 @@ export default function App() {
       cancelled = true;
       dispose?.();
     };
-  }, [pushNotification, removeProgress, setGitVersion, upsertProgress]);
+  }, [pushNotification, pushOutput, removeProgress, setGitVersion, upsertProgress]);
 
   return <AppShell />;
 }

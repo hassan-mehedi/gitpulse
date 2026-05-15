@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::error::GitError;
 use crate::git::commit;
-use crate::git::types::{CommitIdentity, CommitInfo, CommitResult};
+use crate::git::types::{CommitIdentity, CommitInfo, CommitResult, OperationResult};
 
 #[tauri::command]
 pub async fn git_commit(
@@ -57,6 +57,23 @@ pub async fn git_commit_amend(
 #[tauri::command]
 pub async fn git_undo_last_commit(repo_path: String) -> Result<(), GitError> {
     commit::undo_last_commit(Path::new(&repo_path)).await
+}
+
+#[tauri::command]
+pub async fn git_revert_commit(
+    repo_path: String,
+    sha: String,
+) -> Result<OperationResult, GitError> {
+    commit::revert(Path::new(&repo_path), &sha).await
+}
+
+#[tauri::command]
+pub async fn git_reset_to_commit(
+    repo_path: String,
+    sha: String,
+    mode: String,
+) -> Result<OperationResult, GitError> {
+    commit::reset(Path::new(&repo_path), &sha, &mode).await
 }
 
 #[tauri::command]

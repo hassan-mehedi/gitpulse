@@ -136,6 +136,10 @@
   border-radius: 2px;
 }
 
+.graph-toolbar__filter--compact {
+  flex: 0 1 170px;
+}
+
 .graph-toolbar__filter .codicon {
   color: var(--vscode-descriptionForeground);
 }
@@ -150,6 +154,68 @@
   font: inherit;
   font-size: 13px;
   outline: none;
+}
+
+.graph-toolbar__date-filter {
+  position: relative;
+}
+
+.graph-toolbar__date-button {
+  display: inline-flex;
+  width: 100px;
+  height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.graph-toolbar__date-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: 100%;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 2px;
+  background: var(--vscode-menu-background);
+  box-shadow: var(--vscode-shadow-menu);
+}
+
+.graph-toolbar__date-option {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 2px;
+  color: var(--vscode-menu-foreground);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.graph-toolbar__date-option:hover,
+.graph-toolbar__date-option.is-selected {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
+.graph-toolbar__select {
+  height: 24px;
+  padding: 0 22px 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 12px;
 }
 
 .graph-toolbar__sync {
@@ -212,6 +278,52 @@
   padding: 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
+}
+
+.graph-toolbar.is-narrow {
+    flex-wrap: wrap;
+    align-content: center;
+    height: auto;
+    min-height: 64px;
+    padding-block: 4px;
+    overflow: visible;
+}
+
+.graph-toolbar.is-narrow .graph-toolbar__repo-picker {
+    flex: 1 1 100%;
+    width: auto;
+}
+
+.graph-toolbar.is-narrow .graph-toolbar__filter {
+    flex: 1 1 180px;
+}
+
+.graph-toolbar.is-narrow .graph-toolbar__filter--compact {
+    flex: 1 1 120px;
+}
+
+.graph-toolbar.is-narrow .graph-toolbar__date-filter {
+    flex: 0 0 auto;
+}
+
+.graph-toolbar.is-very-narrow {
+    gap: 6px;
+}
+
+.graph-toolbar.is-very-narrow .graph-toolbar__filter {
+    flex-basis: 100%;
+}
+
+.graph-toolbar.is-very-narrow .graph-toolbar__filter--compact {
+    flex-basis: calc(50% - 3px);
+}
+
+.graph-toolbar.is-very-narrow .graph-toolbar__date-filter {
+    flex: 1 1 100%;
+}
+
+.graph-toolbar.is-very-narrow .graph-toolbar__date-button {
+  width: 100%;
 }
 
 /* No longer used now that the graph list lives in the sidebar — keep for

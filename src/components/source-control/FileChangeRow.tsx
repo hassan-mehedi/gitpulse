@@ -56,6 +56,10 @@ function FileChangeRowImpl({
   const segments = change.path.split("/");
   const name = segments.pop() ?? change.path;
   const directory = segments.join("/");
+  const displayName =
+    change.oldPath && (change.status === "R" || change.status === "C")
+      ? `${change.oldPath.split("/").pop() ?? change.oldPath} -> ${name}`
+      : name;
 
   return (
     <div
@@ -69,8 +73,11 @@ function FileChangeRowImpl({
       role="treeitem"
     >
       <FileIcon path={change.path} size={16} className="scm-row__icon" />
-      <span className="scm-row__name" title={change.path}>
-        {name}
+      <span
+        className="scm-row__name"
+        title={change.oldPath ? `${change.oldPath} -> ${change.path}` : change.path}
+      >
+        {displayName}
       </span>
       {directory ? (
         <span className="scm-row__path" title={change.path}>

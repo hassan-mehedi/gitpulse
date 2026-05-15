@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod blame;
 pub mod branch;
 pub mod cherry_pick;
@@ -11,6 +12,7 @@ pub mod misc;
 pub mod rebase;
 pub mod remote;
 pub mod repo;
+pub mod secrets;
 pub mod staging;
 pub mod stash;
 pub mod status;

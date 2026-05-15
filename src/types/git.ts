@@ -7,6 +7,7 @@ export interface FileChange {
 
 export interface RepoStatus {
   branch: string;
+  headSha: string;
   upstream?: string;
   ahead: number;
   behind: number;
@@ -21,6 +22,7 @@ export interface Repository {
   name: string;
   path: string;
   branch: string;
+  headSha: string;
   upstream?: string;
   ahead: number;
   behind: number;

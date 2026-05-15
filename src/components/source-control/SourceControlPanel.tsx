@@ -4,9 +4,14 @@ import { ContextMenu } from "../shared/ContextMenu";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
+import { useSettingsStore } from "../../stores/settings";
 import {
   gitAddToGitignore,
+  gitClone,
+  gitDiffPatchFile,
   gitDiscardFile,
+  gitInit,
+  gitPatchApply,
   gitStashApply,
   gitStashClear,
   gitStashPop,
@@ -16,11 +21,16 @@ import {
 } from "../../lib/git";
 import {
   openFileInExternalEditor,
+  pickDirectory,
   pickRepositoryDirectory,
   pickWorkspaceFile,
   revealFileInManager
 } from "../../lib/openTarget";
 import { RepoSection } from "./RepoSection";
+import { InputModal } from "../shared/InputModal";
+import { ConfirmModal } from "../shared/ConfirmModal";
+import { useNotificationStore } from "../../stores/notifications";
+import { createId } from "../../lib/ids";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
 
 interface SourceControlPanelProps {
@@ -45,15 +55,20 @@ export function SourceControlPanel({
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const activeRepoId = useWorkspaceStore((state) => state.activeRepoId);
+  const recentRepositoryPaths = useSettingsStore((state) => state.recentRepositoryPaths);
   const openDiff = useWorkspaceStore((state) => state.openDiff);
   const activeChange = useDiffStore((state) => state.activeChange);
   const activeStaged = useDiffStore((state) => state.staged);
   const activeDiffRepo = useDiffStore((state) => state.activeRepo);
   const runGit = useGit();
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
 
   const [viewMode, setViewMode] = useState<"tree" | "list">("list");
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [cloneDest, setCloneDest] = useState<string | null>(null);
+  const [showCloneInput, setShowCloneInput] = useState(false);
+  const [discardTarget, setDiscardTarget] = useState<MenuTarget | null>(null);
   const overflowRef = useRef<HTMLDivElement | null>(null);
 
   const selectedKey = activeChange
@@ -112,11 +127,40 @@ export function SourceControlPanel({
     (repo: Repository, change: FileChange) => {
       setActiveRepo(repo.id);
       runGit(async () => {
+        const patch =
+          change.status === "?" ? "" : await gitDiffPatchFile(repo.path, change.path);
         await gitDiscardFile(repo.path, change.path);
         await refreshRepo(repo.path);
+        if (patch.trim()) {
+          pushNotification({
+            id: createId(),
+            tone: "info",
+            title: "Changes discarded",
+            message: change.path,
+            actionLabel: "Undo",
+            onAction: () => {
+              void runGit(async () => {
+                await gitPatchApply(repo.path, patch);
+                await refreshRepo(repo.path);
+              });
+            }
+          });
+        }
       }).catch(() => {});
     },
-    [refreshRepo, runGit, setActiveRepo]
+    [pushNotification, refreshRepo, runGit, setActiveRepo]
+  );
+
+  const requestDiscard = useCallback(
+    (repo: Repository, change: FileChange) => {
+      setDiscardTarget({
+        repo,
+        change,
+        staged: false,
+        position: { x: 0, y: 0 }
+      });
+    },
+    []
   );
 
   const handleAddToGitignore = useCallback(
@@ -161,6 +205,22 @@ export function SourceControlPanel({
     await addTarget(selection);
   }
 
+  async function handleInitRepository() {
+    const selection = await pickDirectory("Initialize Repository");
+    if (!selection) return;
+    await runGit(async () => {
+      await gitInit(selection);
+      await loadTarget(selection);
+    });
+  }
+
+  async function handleCloneRepository() {
+    const selection = await pickDirectory("Choose Clone Destination");
+    if (!selection) return;
+    setCloneDest(selection);
+    setShowCloneInput(true);
+  }
+
   async function handleRefreshAll() {
     await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch(() => {});
   }
@@ -198,6 +258,22 @@ export function SourceControlPanel({
             type="button"
           >
             <Codicon name="folder-opened" size={16} />
+          </button>
+          <button
+            className="view-action"
+            onClick={() => void handleCloneRepository()}
+            title="Clone Repository"
+            type="button"
+          >
+            <Codicon name="repo-clone" size={16} />
+          </button>
+          <button
+            className="view-action"
+            onClick={() => void handleInitRepository()}
+            title="Initialize Repository"
+            type="button"
+          >
+            <Codicon name="repo" size={16} />
           </button>
           <button
             className="view-action"
@@ -261,6 +337,27 @@ export function SourceControlPanel({
                   Refresh
                 </button>
                 <div className="dropdown-menu__separator" role="separator" />
+                {recentRepositoryPaths.length > 0 ? (
+                  <>
+                    <div className="dropdown-menu__label">Recent Repositories</div>
+                    {recentRepositoryPaths.map((path) => (
+                      <button
+                        className="dropdown-menu__item"
+                        key={path}
+                        onClick={() => {
+                          setOverflowOpen(false);
+                          void loadTarget(path);
+                        }}
+                        role="menuitem"
+                        title={path}
+                        type="button"
+                      >
+                        {path}
+                      </button>
+                    ))}
+                    <div className="dropdown-menu__separator" role="separator" />
+                  </>
+                ) : null}
                 <button
                   className="dropdown-menu__item"
                   disabled={!activeRepo}
@@ -344,11 +441,34 @@ export function SourceControlPanel({
             </button>
             <button
               className="vscode-button"
+              onClick={() => void handleCloneRepository()}
+              type="button"
+            >
+              Clone from URL
+            </button>
+            <button
+              className="vscode-button"
               onClick={() => void handleOpenWorkspace()}
               type="button"
             >
               Open Workspace
             </button>
+            {recentRepositoryPaths.length > 0 ? (
+              <div className="scm-welcome__recent">
+                <div className="scm-welcome__recent-title">Recent Repositories</div>
+                {recentRepositoryPaths.map((repoPath) => (
+                  <button
+                    className="scm-welcome__recent-item"
+                    key={repoPath}
+                    onClick={() => void loadTarget(repoPath)}
+                    title={repoPath}
+                    type="button"
+                  >
+                    {repoPath}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {repositories.map((repo, index) => (
@@ -361,7 +481,7 @@ export function SourceControlPanel({
             onOpenBranchPicker={onOpenBranchPicker}
             onSelect={handleSelect}
             onStageToggle={handleStageToggle}
-            onDiscard={handleDiscard}
+            onDiscard={requestDiscard}
             onContextMenu={handleContextMenu}
           />
         ))}
@@ -404,13 +524,53 @@ export function SourceControlPanel({
                   danger: true,
                   disabled: menuTarget.staged,
                   label: "Discard Changes",
-                  onSelect: () => handleDiscard(menuTarget.repo, menuTarget.change)
+                  onSelect: () => requestDiscard(menuTarget.repo, menuTarget.change)
                 }
               ]
             : []
         }
         position={menuTarget?.position ?? null}
         onClose={() => setMenuTarget(null)}
+      />
+      <InputModal
+        isOpen={showCloneInput}
+        title="Clone Repository"
+        label="Repository URL"
+        placeholder="https://github.com/org/repo.git"
+        confirmLabel="Clone"
+        onSubmit={(url) => {
+          const dest = cloneDest;
+          if (!dest) return;
+          void runGit(async () => {
+            const repoName =
+              url.split("/").pop()?.replace(/\.git$/, "") || `repository-${Date.now()}`;
+            const target = `${dest}/${repoName}`;
+            await gitClone(url, target);
+            await loadTarget(target);
+          });
+        }}
+        onClose={() => {
+          setShowCloneInput(false);
+          setCloneDest(null);
+        }}
+      />
+      <ConfirmModal
+        isOpen={discardTarget !== null}
+        title="Discard Changes"
+        body={
+          <>
+            Discard changes in <strong>{discardTarget?.change.path}</strong>? Tracked changes can be
+            restored from the notification that appears after discard.
+          </>
+        }
+        confirmLabel="Discard"
+        danger
+        onConfirm={() => {
+          if (discardTarget) {
+            handleDiscard(discardTarget.repo, discardTarget.change);
+          }
+        }}
+        onClose={() => setDiscardTarget(null)}
       />
     </>
   );

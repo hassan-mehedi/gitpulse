@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import type { DiffHunk as DiffHunkType } from "../../types/git";
 import type { ThemeMode } from "../../lib/theme";
+import { highlightLines } from "../../lib/highlight";
 import { DiffLine } from "./DiffLine";
 
 interface DiffHunkProps {
@@ -42,6 +44,19 @@ export function DiffHunk({
     .filter(({ line }) => line.lineType !== "remove");
   const selected = new Set(selectedLineIndices);
   const comparisons = buildLineComparisons(hunk.lines);
+  const [highlightedHtml, setHighlightedHtml] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHighlightedHtml([]);
+    const codes = hunk.lines.map((line) => line.content.slice(1));
+    void highlightLines(filePath, codes, theme).then((next) => {
+      if (!cancelled) setHighlightedHtml(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, hunk.lines, theme]);
 
   return (
     <section className={`diff-hunk ${isActive ? "is-active" : ""}`} onMouseEnter={onFocus}>
@@ -67,6 +82,7 @@ export function DiffHunk({
                   selected={selected.has(index)}
                   theme={theme}
                   compareContent={comparisons.get(index)}
+                  highlightedHtml={highlightedHtml[index]}
                 />
               ))}
             </pre>
@@ -88,6 +104,7 @@ export function DiffHunk({
                   selected={selected.has(index)}
                   theme={theme}
                   compareContent={comparisons.get(index)}
+                  highlightedHtml={highlightedHtml[index]}
                 />
               ))}
             </pre>
@@ -109,6 +126,7 @@ export function DiffHunk({
               selected={selected.has(index)}
               theme={theme}
               compareContent={comparisons.get(index)}
+              highlightedHtml={highlightedHtml[index]}
             />
           ))}
         </pre>

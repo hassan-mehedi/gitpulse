@@ -6,21 +6,22 @@ Desktop Git client built with Tauri v2, React, and Vite.
 
 GitPulse currently includes:
 
-- repository and workspace loading
+- repository and multi-repository workspace loading, including recent repository reopen
 - source control with staged/unstaged sections
-- file diffing with split and inline modes
+- file diffing with split and inline modes, whitespace controls, binary/image previews, and word-level highlighting
 - line and hunk stage, unstage, and discard actions
 - Shiki-based diff syntax highlighting
-- commit creation, amend, and undo
-- branch management and branch picker
-- commit graph with SVG lanes, search, context actions, and virtualized scrolling
+- commit creation, amend, undo, commit identities, signing, and staged-change prompts
+- branch management, upstream controls, compare view, publishing, and branch picker
+- commit graph with SVG lanes, filters, ref visibility, interactive rebase, reflog recovery, and virtualized scrolling
 - blame view
 - file history view
-- stash management
+- stash management with filtering
 - worktree management
 - merge conflict inspection and resolution flow
-- fetch, pull, push, sync, auto-fetch, and progress reporting
-- settings persistence for theme and auto-fetch
+- fetch, pull, push, sync, auto-fetch, progress reporting, and sync confirmation
+- remotes, tags, submodules, sparse checkout, LFS, hooks, patches, and timeline tools
+- settings persistence for theme, auto-fetch, external editor, identities, and sync behavior
 
 ## Stack
 

@@ -20,6 +20,20 @@ export async function pickRepositoryDirectory() {
   return typeof selection === "string" ? selection : null;
 }
 
+export async function pickDirectory(title: string) {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  const selection = await open({
+    title,
+    directory: true,
+    multiple: false
+  });
+
+  return typeof selection === "string" ? selection : null;
+}
+
 export async function pickWorkspaceFile() {
   if (!isTauriRuntime()) {
     return null;

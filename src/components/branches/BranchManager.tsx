@@ -94,6 +94,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
   const [userInfoByRepo, setUserInfoByRepo] = useState<Record<string, UserInfo>>({});
   const [query, setQuery] = useState("");
   const [showOnlyMine, setShowOnlyMine] = useState(false);
+  const [sortMode, setSortMode] = useState<"name" | "recent">("name");
   const [menu, setMenu] = useState<BranchMenuTarget | null>(null);
   const [inputModal, setInputModal] = useState<InputModalState | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
@@ -538,15 +539,23 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
               >
                 Mine
               </button>
+              <select
+                className="branches-filter__select"
+                onChange={(event) => setSortMode(event.target.value as typeof sortMode)}
+                value={sortMode}
+              >
+                <option value="name">Name</option>
+                <option value="recent">Recent</option>
+              </select>
             </div>
 
             {repositories.map((repo) => {
               const repoState = branchStateByRepo[repo.path] ?? EMPTY_REPO_STATE;
-              const filteredBranches = filterBranches(
+              const filteredBranches = sortBranches(filterBranches(
                 repoState.branches,
                 query,
                 showOnlyMine ? userInfoByRepo[repo.path]?.email : undefined
-              );
+              ), sortMode);
               const localBranches = filteredBranches.filter((branch) => !branch.isRemote);
               const remoteGroups = groupRemoteBranches(filteredBranches);
               const repoKey = `repo:${repo.id}`;
@@ -727,6 +736,16 @@ function filterBranches(branches: BranchInfo[], query: string, mineEmail?: strin
       !branch.lastCommitAuthorEmail ||
       normalizeEmail(branch.lastCommitAuthorEmail) === normalizeEmail(mineEmail);
     return matchesQuery && matchesMine;
+  });
+}
+
+function sortBranches(branches: BranchInfo[], mode: "name" | "recent") {
+  return [...branches].sort((left, right) => {
+    if (mode === "recent") {
+      const byCommitDate = right.lastCommitDate.localeCompare(left.lastCommitDate);
+      if (byCommitDate !== 0) return byCommitDate;
+    }
+    return left.name.localeCompare(right.name);
   });
 }
 

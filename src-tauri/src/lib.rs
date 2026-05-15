@@ -27,6 +27,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::repo::git_detect_repo,
+            commands::ai::ai_generate_commit_message,
+            commands::secrets::ai_get_api_key,
+            commands::secrets::ai_set_api_key,
             commands::repo::git_init,
             commands::repo::git_clone,
             commands::repo::git_get_config,
@@ -101,6 +104,8 @@ pub fn run() {
             commands::commit::git_commit_all,
             commands::commit::git_commit_amend,
             commands::commit::git_undo_last_commit,
+            commands::commit::git_revert_commit,
+            commands::commit::git_reset_to_commit,
             commands::commit::git_log,
             commands::graph::git_graph,
             commands::graph::git_ref_log,
@@ -112,6 +117,8 @@ pub fn run() {
             commands::diff::git_diff_refs,
             commands::diff::git_diff_merge_base,
             commands::diff::git_file_bytes,
+            commands::diff::git_diff_patch_file,
+            commands::diff::git_restore_file_from_commit,
             commands::misc::git_bisect,
             commands::misc::git_submodule_status,
             commands::misc::git_submodule_init,

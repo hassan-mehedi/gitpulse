@@ -14,8 +14,8 @@ pub async fn open_file_in_editor(
     tauri::async_runtime::spawn_blocking(move || {
         open_editor(&path, line.unwrap_or(1), editor_command.as_deref())
     })
-        .await
-        .map_err(|err| GitError::Io(err.to_string()))?
+    .await
+    .map_err(|err| GitError::Io(err.to_string()))?
 }
 
 #[tauri::command]
@@ -35,11 +35,7 @@ fn resolve_file_path(repo_path: &str, file: &str) -> PathBuf {
     }
 }
 
-fn open_editor(
-    path: &Path,
-    line: usize,
-    editor_command: Option<&str>,
-) -> Result<(), GitError> {
+fn open_editor(path: &Path, line: usize, editor_command: Option<&str>) -> Result<(), GitError> {
     if let Some(editor) = editor_command.filter(|value| !value.trim().is_empty()) {
         return run_editor_command(editor, path, Some(line))
             .map_err(|err| GitError::Io(err.to_string()));
@@ -67,9 +63,7 @@ fn open_editor(
         return Ok(());
     }
 
-    if let Ok(editor) = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-    {
+    if let Ok(editor) = std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {
         if is_gui_editor(&editor) && run_editor_command(&editor, path, None).is_ok() {
             return Ok(());
         }

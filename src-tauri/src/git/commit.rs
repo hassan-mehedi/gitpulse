@@ -3,9 +3,9 @@ use std::path::Path;
 use crate::error::GitError;
 use crate::git::parser::{parse_commit_result, parse_log};
 use crate::git::runner::GitRunner;
-use crate::git::types::{CommitIdentity, CommitInfo, CommitResult};
+use crate::git::types::{CommitIdentity, CommitInfo, CommitResult, OperationResult};
 
-const LOG_FORMAT: &str = "%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%G?";
+const LOG_FORMAT: &str = "%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cI%x1f%G?";
 
 pub async fn commit(
     repo_path: &Path,
@@ -54,6 +54,26 @@ pub async fn undo_last_commit(repo_path: &Path) -> Result<(), GitError> {
     Ok(())
 }
 
+pub async fn revert(repo_path: &Path, sha: &str) -> Result<OperationResult, GitError> {
+    GitRunner::run(repo_path, &["revert", "--no-edit", sha]).await?;
+    Ok(OperationResult {
+        summary: format!("Reverted {sha}"),
+    })
+}
+
+pub async fn reset(repo_path: &Path, sha: &str, mode: &str) -> Result<OperationResult, GitError> {
+    let flag = match mode {
+        "soft" => "--soft",
+        "mixed" => "--mixed",
+        "hard" => "--hard",
+        _ => return Err(GitError::Parse(format!("unsupported reset mode: {mode}"))),
+    };
+    GitRunner::run(repo_path, &["reset", flag, sha]).await?;
+    Ok(OperationResult {
+        summary: format!("Reset {mode} to {sha}"),
+    })
+}
+
 pub async fn log(
     repo_path: &Path,
     n: usize,
@@ -63,7 +83,7 @@ pub async fn log(
     let limit = n.to_string();
     let mut args = vec![
         "log",
-        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%G?",
+        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cI%x1f%G?",
         "-n",
         &limit,
     ];
@@ -73,6 +93,7 @@ pub async fn log(
         args.push(&skip_value);
     }
     if let Some(file) = file {
+        args.push("--follow");
         args.push("--");
         args.push(file);
     }
@@ -81,7 +102,7 @@ pub async fn log(
 }
 
 pub async fn show_commit_header(repo_path: &Path, sha: &str) -> Result<String, GitError> {
-    let format = format!("--format={LOG_FORMAT}");
+    let format = format!("--format={LOG_FORMAT}%n%b");
     GitRunner::run(repo_path, &["show", "--stat", &format, "--summary", sha]).await
 }
 

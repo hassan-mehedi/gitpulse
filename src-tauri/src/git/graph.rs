@@ -9,6 +9,7 @@ pub async fn graph(
     repo_path: &Path,
     max_count: Option<usize>,
     include_all: Option<bool>,
+    file: Option<&str>,
 ) -> Result<Vec<CommitInfo>, GitError> {
     let limit = max_count.unwrap_or(500).to_string();
     let mut args: Vec<&str> = vec!["log"];
@@ -17,10 +18,14 @@ pub async fn graph(
     }
     args.extend_from_slice(&[
         "--date-order",
-        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%G?",
+        "--format=%H%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cI%x1f%G?",
         "-n",
         &limit,
     ]);
+    if let Some(file) = file {
+        args.push("--");
+        args.push(file);
+    }
     let output = GitRunner::run(repo_path, &args).await?;
     Ok(parse_log(&output))
 }

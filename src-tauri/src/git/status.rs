@@ -8,10 +8,12 @@ use crate::git::runner::GitRunner;
 use crate::git::types::{DiffStat, FileDiff, RepoStatus};
 
 pub async fn status(repo_path: &Path) -> Result<RepoStatus, GitError> {
-    let output = GitRunner::run(repo_path, &["status", "--porcelain=v2", "--branch"]).await?;
-    let stash_output = GitRunner::run(repo_path, &["stash", "list", "--format=%gd"])
-        .await
-        .unwrap_or_default();
+    let (output, stash_output) = tokio::join!(
+        GitRunner::run(repo_path, &["status", "--porcelain=v2", "--branch"]),
+        GitRunner::run(repo_path, &["stash", "list", "--format=%gd"])
+    );
+    let output = output?;
+    let stash_output = stash_output.unwrap_or_default();
     let stash_count = stash_output.lines().count();
     parse_status(&output, stash_count)
 }

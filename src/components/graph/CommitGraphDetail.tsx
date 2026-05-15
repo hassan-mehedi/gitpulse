@@ -75,16 +75,8 @@ export function CommitGraphDetail() {
   return (
     <div className="commit-detail">
       <header className="commit-detail__header">
-        <div className="commit-detail__subject">{selectedCommitDetail.message}</div>
-        <div className="commit-detail__meta-row">
-          <span className="commit-detail__sha">{selectedCommitDetail.sha}</span>
-          <span>•</span>
-          <span>{selectedCommitDetail.author}</span>
-          <span className="commit-detail__email">
-            &lt;{selectedCommitDetail.authorEmail}&gt;
-          </span>
-          <span>•</span>
-          <span>{selectedCommitDetail.date}</span>
+        <div className="commit-detail__subject">
+          {selectedCommitDetail.message || `Commit ${selectedCommitDetail.shortSha}`}
         </div>
         {selectedCommitDetail.body ? (
           <pre className="commit-detail__body">{selectedCommitDetail.body}</pre>

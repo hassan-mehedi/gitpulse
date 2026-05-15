@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Codicon } from "../shared/Codicon";
-import { gitBlame, gitShowCommit } from "../../lib/git";
+import { gitBlame } from "../../lib/git";
+import { getCommitDetail } from "../../lib/commitDetails";
 import { useGit } from "../../hooks/useGit";
 import { useDiffStore } from "../../stores/diff";
 import { useRepo } from "../../hooks/useRepo";
@@ -41,7 +42,7 @@ export function BlameView() {
       setSelectedSha(firstLine?.sha ?? null);
       setSelectedLineNumber(firstLine?.lineNumber ?? null);
       if (firstLine && !isUncommittedSha(firstLine.sha)) {
-        const detail = await gitShowCommit(activeRepo.path, firstLine.sha);
+        const detail = await getCommitDetail(activeRepo.path, firstLine.sha);
         if (cancelled) return;
         setSelectedCommit(detail);
       } else {
@@ -72,7 +73,7 @@ export function BlameView() {
       return;
     }
     await runGit(async () => {
-      const detail = await gitShowCommit(activeRepo.path, line.sha);
+      const detail = await getCommitDetail(activeRepo.path, line.sha);
       setSelectedCommit(detail);
     }).catch(() => {});
   }

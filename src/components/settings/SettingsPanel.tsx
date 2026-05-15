@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSettingsStore } from "../../stores/settings";
 import { useRuntimeStore } from "../../stores/runtime";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { useRepo } from "../../hooks/useRepo";
-import { formatIdentity, validateIdentityFields } from "../../lib/commitIdentity";
+import { formatIdentity, resolveCommitIdentity, validateIdentityFields } from "../../lib/commitIdentity";
 import { gitGetUserInfo } from "../../lib/git";
 import { THEME_OPTIONS, type ThemeMode } from "../../lib/theme";
 import type { UserInfo } from "../../types/git";
@@ -13,11 +14,20 @@ export function SettingsPanel() {
   const autoFetch = useSettingsStore((state) => state.autoFetch);
   const autoFetchIntervalSeconds = useSettingsStore((state) => state.autoFetchIntervalSeconds);
   const smartCommit = useSettingsStore((state) => state.smartCommit);
+  const stageAllOnCommit = useSettingsStore((state) => state.stageAllOnCommit);
   const signCommits = useSettingsStore((state) => state.signCommits);
   const externalEditorCommand = useSettingsStore((state) => state.externalEditorCommand);
   const confirmSyncBeforeOperation = useSettingsStore(
     (state) => state.confirmSyncBeforeOperation
   );
+  const aiCommitEnabled = useSettingsStore((state) => state.aiCommitEnabled);
+  const aiCommitProvider = useSettingsStore((state) => state.aiCommitProvider);
+  const aiCommitApiKey = useSettingsStore((state) => state.aiCommitApiKey);
+  const aiCommitBaseUrl = useSettingsStore((state) => state.aiCommitBaseUrl);
+  const aiCommitModel = useSettingsStore((state) => state.aiCommitModel);
+  const aiCommitStyle = useSettingsStore((state) => state.aiCommitStyle);
+  const aiCommitIncludeBody = useSettingsStore((state) => state.aiCommitIncludeBody);
+  const aiCommitMaxDiffChars = useSettingsStore((state) => state.aiCommitMaxDiffChars);
   const commitIdentities = useSettingsStore((state) => state.commitIdentities);
   const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
   const setTheme = useSettingsStore((state) => state.setTheme);
@@ -26,20 +36,36 @@ export function SettingsPanel() {
     (state) => state.setAutoFetchIntervalSeconds
   );
   const setSmartCommit = useSettingsStore((state) => state.setSmartCommit);
+  const setStageAllOnCommit = useSettingsStore((state) => state.setStageAllOnCommit);
   const setSignCommits = useSettingsStore((state) => state.setSignCommits);
   const setExternalEditorCommand = useSettingsStore((state) => state.setExternalEditorCommand);
   const setConfirmSyncBeforeOperation = useSettingsStore(
     (state) => state.setConfirmSyncBeforeOperation
   );
+  const setAiCommitEnabled = useSettingsStore((state) => state.setAiCommitEnabled);
+  const setAiCommitProvider = useSettingsStore((state) => state.setAiCommitProvider);
+  const setAiCommitApiKey = useSettingsStore((state) => state.setAiCommitApiKey);
+  const setAiCommitBaseUrl = useSettingsStore((state) => state.setAiCommitBaseUrl);
+  const setAiCommitModel = useSettingsStore((state) => state.setAiCommitModel);
+  const setAiCommitStyle = useSettingsStore((state) => state.setAiCommitStyle);
+  const setAiCommitIncludeBody = useSettingsStore((state) => state.setAiCommitIncludeBody);
+  const setAiCommitMaxDiffChars = useSettingsStore((state) => state.setAiCommitMaxDiffChars);
   const addCommitIdentity = useSettingsStore((state) => state.addCommitIdentity);
   const removeCommitIdentity = useSettingsStore((state) => state.removeCommitIdentity);
   const assignRepoIdentity = useSettingsStore((state) => state.assignRepoIdentity);
   const gitVersion = useRuntimeStore((state) => state.gitVersion);
+  const repositories = useWorkspaceStore((state) => state.repositories);
   const [gitUser, setGitUser] = useState<UserInfo | null>(null);
   const [identityLabel, setIdentityLabel] = useState("");
   const [identityName, setIdentityName] = useState("");
   const [identityEmail, setIdentityEmail] = useState("");
   const [identityError, setIdentityError] = useState<string | null>(null);
+  const effectiveIdentity = resolveCommitIdentity(
+    activeRepo?.path,
+    commitIdentities,
+    repoIdentityAssignments,
+    gitUser
+  );
 
   useEffect(() => {
     if (!activeRepo) {
@@ -99,17 +125,11 @@ export function SettingsPanel() {
         <section className="settings-section">
           <div className="settings-section__title">Application</div>
           <SettingRow label="Theme" hint="Color palette used across the UI.">
-            <select
-              className="settings-control"
-              onChange={(event) => setTheme(event.target.value as ThemeMode)}
+            <SettingsSelect
+              options={THEME_OPTIONS}
+              onChange={(value) => setTheme(value as ThemeMode)}
               value={theme}
-            >
-              {THEME_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </SettingRow>
         </section>
 
@@ -148,33 +168,60 @@ export function SettingsPanel() {
                 : "Open a repository to assign an identity."
             }
           >
-            <select
-              className="settings-control"
+            <SettingsSelect
               disabled={!activeRepo}
-              onChange={(event) =>
+              onChange={(value) =>
                 activeRepo
-                  ? assignRepoIdentity(activeRepo.path, event.target.value || null)
+                  ? assignRepoIdentity(activeRepo.path, value || null)
                   : undefined
               }
+              options={[
+                {
+                  value: "",
+                  label:
+                    gitUser?.name && gitUser.email
+                      ? `Use Git config: ${formatIdentity(gitUser.name, gitUser.email)}`
+                      : "No GitPulse identity assigned"
+                },
+                ...commitIdentities.map((identity) => ({
+                  value: identity.id,
+                  label: `${identity.label} — ${formatIdentity(identity.name, identity.email)}`
+                }))
+              ]}
               value={activeRepo ? repoIdentityAssignments[activeRepo.path] ?? "" : ""}
-            >
-              <option value="">
-                {gitUser?.name && gitUser.email
-                  ? `Use Git config: ${formatIdentity(gitUser.name, gitUser.email)}`
-                  : "No GitPulse identity assigned"}
-              </option>
-              {commitIdentities.map((identity) => (
-                <option key={identity.id} value={identity.id}>
-                  {identity.label} — {formatIdentity(identity.name, identity.email)}
-                </option>
-              ))}
-            </select>
+            />
+          </SettingRow>
+          <SettingRow
+            label="Effective identity"
+            hint={
+              effectiveIdentity.source === "gitpulse"
+                ? "GitPulse overrides repository Git config for commits."
+                : effectiveIdentity.source === "git-config"
+                  ? "GitPulse is using this repository's Git config."
+                  : "Commits will fail until Git config or a GitPulse identity is available."
+            }
+          >
+            <span className="settings-readonly">{effectiveIdentity.label}</span>
           </SettingRow>
           <SettingRow
             label="Smart Commit"
             hint="When nothing is staged, auto-stage tracked modified/deleted files before committing."
           >
             <SettingsCheckbox checked={smartCommit} onChange={setSmartCommit} />
+          </SettingRow>
+          <SettingRow
+            label="Commit with unstaged changes"
+            hint="Choose whether GitPulse should ask before staging all changes when a commit has no staged files."
+          >
+            <SettingsSelect
+              onChange={(value) => setStageAllOnCommit(value as typeof stageAllOnCommit)}
+              options={[
+                { value: "ask", label: "Ask every time" },
+                { value: "always", label: "Always stage all" },
+                { value: "never", label: "Never stage all" }
+              ]}
+              value={stageAllOnCommit}
+            />
           </SettingRow>
           <SettingRow
             label="Sign commits"
@@ -200,6 +247,117 @@ export function SettingsPanel() {
             <SettingsCheckbox
               checked={confirmSyncBeforeOperation}
               onChange={setConfirmSyncBeforeOperation}
+            />
+          </SettingRow>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-section__title">AI Commit Messages</div>
+          <SettingRow
+            label="Enable AI commit messages"
+            hint="Generate a suggested subject and optional body from the staged diff."
+          >
+            <SettingsCheckbox checked={aiCommitEnabled} onChange={setAiCommitEnabled} />
+          </SettingRow>
+          <SettingRow label="Provider">
+            <SettingsSelect
+              disabled={!aiCommitEnabled}
+              onChange={(value) => setAiCommitProvider(value as typeof aiCommitProvider)}
+              options={[
+                { value: "ollama", label: "Ollama" },
+                { value: "openai", label: "OpenAI" },
+                { value: "anthropic", label: "Anthropic" },
+                { value: "openai-compatible", label: "OpenAI-compatible" }
+              ]}
+              value={aiCommitProvider}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Model"
+            hint={
+              aiCommitProvider === "ollama"
+                ? "Name of a local Ollama model."
+                : "Provider model ID."
+            }
+          >
+            <input
+              className="settings-control"
+              disabled={!aiCommitEnabled}
+              onChange={(event) => setAiCommitModel(event.target.value)}
+              placeholder={
+                aiCommitProvider === "ollama"
+                  ? "llama3.2"
+                  : aiCommitProvider === "anthropic"
+                    ? "claude-sonnet-4-..."
+                    : "model-id"
+              }
+              value={aiCommitModel}
+            />
+          </SettingRow>
+          {aiCommitProvider !== "openai" && aiCommitProvider !== "anthropic" ? (
+            <SettingRow
+              label="Base URL"
+              hint={
+                aiCommitProvider === "ollama"
+                  ? "Local Ollama server URL."
+                  : "Server URL ending before `/responses`."
+              }
+            >
+              <input
+                className="settings-control"
+                disabled={!aiCommitEnabled}
+                onChange={(event) => setAiCommitBaseUrl(event.target.value)}
+                placeholder={
+                  aiCommitProvider === "ollama"
+                    ? "http://localhost:11434"
+                    : "https://example.com/v1"
+                }
+                value={aiCommitBaseUrl}
+              />
+            </SettingRow>
+          ) : null}
+          {aiCommitProvider !== "ollama" ? (
+            <SettingRow label="API key" hint="Stored in the operating system credential store.">
+              <input
+                className="settings-control"
+                disabled={!aiCommitEnabled}
+                onChange={(event) => setAiCommitApiKey(event.target.value)}
+                placeholder="API key"
+                type="password"
+                value={aiCommitApiKey}
+              />
+            </SettingRow>
+          ) : null}
+          <SettingRow label="Message style">
+            <SettingsSelect
+              disabled={!aiCommitEnabled}
+              onChange={(value) => setAiCommitStyle(value as typeof aiCommitStyle)}
+              options={[
+                { value: "conventional", label: "Conventional Commit" },
+                { value: "plain", label: "Plain" }
+              ]}
+              value={aiCommitStyle}
+            />
+          </SettingRow>
+          <SettingRow label="Include description" hint="Allow the model to add a short commit body.">
+            <SettingsCheckbox
+              checked={aiCommitIncludeBody}
+              disabled={!aiCommitEnabled}
+              onChange={setAiCommitIncludeBody}
+            />
+          </SettingRow>
+          <SettingRow
+            label="Maximum diff size"
+            hint="Characters sent from the staged diff. Keep local models near 8000 unless they have a larger context window."
+          >
+            <input
+              className="settings-control settings-control--narrow"
+              disabled={!aiCommitEnabled}
+              min={2000}
+              max={100000}
+              onChange={(event) => setAiCommitMaxDiffChars(Number(event.target.value))}
+              type="number"
+              value={aiCommitMaxDiffChars}
             />
           </SettingRow>
         </section>
@@ -232,6 +390,21 @@ export function SettingsPanel() {
                 ))}
               </div>
             )}
+            {repositories.length > 0 ? (
+              <div className="identity-assignments">
+                {repositories.map((repo) => {
+                  const assigned = commitIdentities.find(
+                    (identity) => identity.id === repoIdentityAssignments[repo.path]
+                  );
+                  return (
+                    <div className="identity-assignment" key={repo.path}>
+                      <span>{repo.name}</span>
+                      <span>{assigned?.label ?? "Git config"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="identity-form">
               <input
                 className="settings-control"
@@ -313,6 +486,76 @@ export function SettingsCheckbox({
         </svg>
       </span>
     </label>
+  );
+}
+
+interface SettingsSelectOption {
+  value: string;
+  label: string;
+}
+
+function SettingsSelect({
+  value,
+  options,
+  disabled = false,
+  onChange
+}: {
+  value: string;
+  options: SettingsSelectOption[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="settings-select" ref={rootRef}>
+      <button
+        className="settings-control settings-select__button"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <span>{selected?.label ?? ""}</span>
+        <span aria-hidden>{open ? "▴" : "▾"}</span>
+      </button>
+      {open ? (
+        <div className="settings-select__menu">
+          {options.map((option) => (
+            <button
+              className={`settings-select__option${option.value === value ? " is-selected" : ""}`}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

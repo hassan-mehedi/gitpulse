@@ -15,6 +15,7 @@ interface DiffLineProps {
   selectable?: boolean;
   theme: ThemeMode;
   compareContent?: string;
+  highlightedHtml?: string;
   onToggle?: () => void;
   onOpenLine?: (lineNumber: number) => void;
 }
@@ -29,6 +30,7 @@ function DiffLineImpl({
   selectable,
   theme,
   compareContent,
+  highlightedHtml,
   onToggle,
   onOpenLine
 }: DiffLineProps) {
@@ -61,6 +63,11 @@ function DiffLineImpl({
         <span className="diff-line__marker">{marker}</span>
         {compareContent !== undefined ? (
           <WordHighlightedContent content={code} compareContent={compareContent} />
+        ) : highlightedHtml !== undefined ? (
+          <span
+            className="diff-line__content"
+            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+          />
         ) : (
           <HighlightedLineContent content={code} filePath={filePath} theme={theme} />
         )}

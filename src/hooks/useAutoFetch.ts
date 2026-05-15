@@ -15,17 +15,24 @@ export function useAutoFetch() {
       return;
     }
 
+    let running = false;
     const timer = window.setInterval(() => {
+      if (running) return;
+      running = true;
       // Read latest repositories from store imperatively to avoid stale closure
       // without making `repositories` a dependency (which would reset the interval
       // on every status update).
       const { repositories } = useWorkspaceStore.getState();
-      for (const repo of repositories) {
-        void runGit(async () => {
-          await gitFetchAll(repo.path);
-          await refreshRepo(repo.path);
-        });
-      }
+      void (async () => {
+        for (const repo of repositories) {
+          await runGit(async () => {
+            await gitFetchAll(repo.path);
+            await refreshRepo(repo.path);
+          }).catch(() => {});
+        }
+      })().finally(() => {
+        running = false;
+      });
     }, intervalSeconds * 1000);
 
     return () => {

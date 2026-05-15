@@ -7,6 +7,7 @@ use crate::git::types::{
 
 pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitError> {
     let mut branch = "HEAD".to_string();
+    let mut head_sha = String::new();
     let mut upstream = None;
     let mut ahead = 0;
     let mut behind = 0;
@@ -17,6 +18,11 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
     for line in output.lines() {
         if let Some(rest) = line.strip_prefix("# branch.head ") {
             branch = rest.to_string();
+            continue;
+        }
+
+        if let Some(rest) = line.strip_prefix("# branch.oid ") {
+            head_sha = rest.to_string();
             continue;
         }
 
@@ -33,20 +39,8 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
         }
 
         if line.starts_with("1 ") || line.starts_with("2 ") || line.starts_with("u ") {
-            let mut parts = line.split_whitespace();
-            let kind = parts.next().unwrap_or_default();
-            let xy = parts.next().unwrap_or("..");
-            let _sub = parts.next();
-            let _m_h = parts.next();
-            let _m_i = parts.next();
-            let _m_w = parts.next();
-            let _h_h = parts.next();
-            let _h_i = parts.next();
-            let path = parts.next().unwrap_or_default().to_string();
-            let old_path = if kind == "2" {
-                parts.next().map(|value| value.to_string())
-            } else {
-                None
+            let Some((xy, path, old_path)) = parse_status_record(line) else {
+                continue;
             };
 
             let index_status = xy.chars().next().unwrap_or('.');
@@ -85,6 +79,7 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
 
     Ok(RepoStatus {
         branch,
+        head_sha,
         upstream,
         ahead,
         behind,
@@ -93,6 +88,69 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
         stash_count,
         has_conflicts,
     })
+}
+
+fn parse_status_record(line: &str) -> Option<(&str, String, Option<String>)> {
+    if line.starts_with("1 ") {
+        let parts = line.splitn(9, ' ').collect::<Vec<_>>();
+        return Some((parts.get(1)?, parts.get(8)?.to_string(), None));
+    }
+
+    if line.starts_with("2 ") {
+        let parts = line.splitn(10, ' ').collect::<Vec<_>>();
+        let (path, old_path) = parts.get(9)?.split_once('\t')?;
+        return Some((parts.get(1)?, path.to_string(), Some(old_path.to_string())));
+    }
+
+    if line.starts_with("u ") {
+        let parts = line.splitn(11, ' ').collect::<Vec<_>>();
+        return Some((parts.get(1)?, parts.get(10)?.to_string(), None));
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::parse_status;
+
+    #[test]
+    fn preserves_spaces_in_regular_paths() {
+        let status = parse_status(
+            "# branch.head main\n1 .M N... 100644 100644 100644 abc abc docs/my file.md",
+            0,
+        )
+        .expect("status should parse");
+
+        assert_eq!(status.changes[0].path, "docs/my file.md");
+    }
+
+    #[test]
+    fn preserves_spaces_in_rename_paths() {
+        let status = parse_status(
+            "# branch.head main\n2 R. N... 100644 100644 100644 abc def R100 docs/new file.md\tdocs/old file.md",
+            0,
+        )
+        .expect("status should parse");
+
+        assert_eq!(status.staged[0].path, "docs/new file.md");
+        assert_eq!(
+            status.staged[0].old_path.as_deref(),
+            Some("docs/old file.md")
+        );
+    }
+
+    #[test]
+    fn preserves_spaces_in_unmerged_paths() {
+        let status = parse_status(
+            "# branch.head main\nu UU N... 100644 100644 100644 100644 abc def ghi conflicted file.md",
+            0,
+        )
+        .expect("status should parse");
+
+        assert_eq!(status.changes[0].path, "conflicted file.md");
+        assert!(status.has_conflicts);
+    }
 }
 
 pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {

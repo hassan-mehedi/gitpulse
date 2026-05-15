@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { gitGraph, gitShowCommit } from "../lib/git";
+import { gitGraph } from "../lib/git";
+import { getCommitDetail } from "../lib/commitDetails";
 import { buildGraphNodes } from "../lib/graphLayout";
 import type { CommitDetail, CommitInfo, GraphNode, Repository } from "../types/git";
 
@@ -17,7 +18,7 @@ interface GraphStore {
   includeAll: boolean;
   setRepoId: (repoId: string | null) => void;
   setIncludeAll: (value: boolean) => void;
-  loadGraph: (repo: Repository) => Promise<void>;
+  loadGraph: (repo: Repository, file?: string) => Promise<void>;
   selectCommit: (repo: Repository, sha: string) => Promise<void>;
   clear: () => void;
 }
@@ -103,7 +104,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
       };
     });
   },
-  async loadGraph(repo) {
+  async loadGraph(repo, file) {
     persistRepoId(repo.id);
     set({
       repoId: repo.id,
@@ -114,7 +115,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     });
 
     try {
-      const commits = await gitGraph(repo.path, 500, get().includeAll);
+      const commits = await gitGraph(repo.path, 500, get().includeAll, file || undefined);
       const nodes = buildGraphNodes(commits);
       set({
         repoId: repo.id,
@@ -131,7 +132,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
     }
   },
   async selectCommit(repo, sha) {
-    const detail = await gitShowCommit(repo.path, sha);
+    const detail = await getCommitDetail(repo.path, sha);
     set({
       repoId: repo.id,
       repoPath: repo.path,

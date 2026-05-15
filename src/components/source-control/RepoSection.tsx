@@ -5,7 +5,9 @@ import { Modal } from "../shared/Modal";
 import { useGit } from "../../hooks/useGit";
 import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { gitDiscardAll, gitFetchAll, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
+import { useNotificationStore } from "../../stores/notifications";
+import { createId } from "../../lib/ids";
+import { gitDiscardAll, gitFetchAll, gitPatchApply, gitPatchCreate, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
 import { StashSection } from "./StashSection";
@@ -49,9 +51,11 @@ export function RepoSection({
   );
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
   const [collapsed, setCollapsed] = useState(false);
   const [confirmForcePush, setConfirmForcePush] = useState(false);
   const [confirmSync, setConfirmSync] = useState(false);
+  const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
 
   const conflicted = repo.changes.filter((change) => change.status === "U");
   const regular = repo.changes.filter((change) => change.status !== "U");
@@ -76,6 +80,28 @@ export function RepoSection({
       return;
     }
     withRefresh(() => syncOperation(repo));
+  }
+
+  function discardAllWithUndo() {
+    withRefresh(async () => {
+      const patch = await gitPatchCreate(repo.path, false);
+      await gitDiscardAll(repo.path);
+      if (patch.trim()) {
+        pushNotification({
+          id: createId(),
+          tone: "info",
+          title: "Changes discarded",
+          message: `${repo.name}: all unstaged tracked changes`,
+          actionLabel: "Undo",
+          onAction: () => {
+            void runGit(async () => {
+              await gitPatchApply(repo.path, patch);
+              await refreshRepo(repo.path);
+            });
+          }
+        });
+      }
+    });
   }
 
   return (
@@ -196,6 +222,15 @@ export function RepoSection({
           withRefresh(() => syncOperation(repo));
         }}
       />
+      <ConfirmModal
+        isOpen={confirmDiscardAll}
+        title="Discard All Changes"
+        body="Discard all unstaged changes? Tracked changes can be restored from the notification that appears after discard."
+        confirmLabel="Discard All"
+        danger
+        onConfirm={discardAllWithUndo}
+        onClose={() => setConfirmDiscardAll(false)}
+      />
 
       {!collapsed ? (
         <>
@@ -261,7 +296,7 @@ export function RepoSection({
                 {
                   icon: "discard",
                   label: "Discard All Changes",
-                  onClick: () => withRefresh(() => gitDiscardAll(repo.path))
+                  onClick: () => setConfirmDiscardAll(true)
                 },
                 {
                   icon: "add",

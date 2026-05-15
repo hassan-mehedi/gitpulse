@@ -27,6 +27,7 @@ pub struct FileChange {
 #[serde(rename_all = "camelCase")]
 pub struct RepoStatus {
     pub branch: String,
+    pub head_sha: String,
     pub upstream: Option<String>,
     pub ahead: usize,
     pub behind: usize,
@@ -285,6 +286,7 @@ pub struct Repository {
     pub name: String,
     pub path: String,
     pub branch: String,
+    pub head_sha: String,
     pub upstream: Option<String>,
     pub ahead: usize,
     pub behind: usize,
