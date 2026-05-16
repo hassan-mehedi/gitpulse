@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 ignore = "0.4"
-keyring = "3.6"
+keyring = "4.0"
 notify = "7"
 notify-debouncer-full = "0.4"
 reqwest = { version = "0.13", features = ["json"] }
