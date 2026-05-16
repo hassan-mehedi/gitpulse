@@ -13,7 +13,7 @@ GitPulse currently includes:
 - Shiki-based diff syntax highlighting
 - commit creation, amend, undo, commit identities, signing, and staged-change prompts
 - branch management, upstream controls, compare view, publishing, and branch picker
-- commit graph with SVG lanes, filters, ref visibility, interactive rebase, reflog recovery, and virtualized scrolling
+- commit graph with SVG lanes, filters, ref visibility, interactive rebase, reflog recovery, merge-commit parent picker, and virtualized scrolling
 - blame view
 - file history view
 - stash management with filtering
@@ -31,11 +31,18 @@ GitPulse currently includes:
 
 ## Requirements
 
-- Node.js 18+
+- Node.js (see `.nvmrc`; currently v26.1.0)
 - npm
 - Rust toolchain
 - system dependencies required by Tauri/WebKitGTK on Linux
 - Git installed and available on `PATH`
+
+## Project Layout
+
+- `src/` — React frontend (components, hooks, Zustand stores, types, styles)
+- `src-tauri/` — Rust backend (Tauri commands, Git runners and parsers, workspace and config)
+- `vite.config.ts`, `tsconfig*.json` — frontend build configuration
+- `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` — backend and desktop shell configuration
 
 ## Development
 
@@ -74,9 +81,11 @@ npm run tauri build
 The project is currently verified with:
 
 ```bash
-cargo check
-npx tsc --noEmit
-npm run build
+cargo check                          # backend type check
+cargo test --manifest-path src-tauri/Cargo.toml   # Rust unit tests (Git parsers, runner)
+npx tsc --noEmit                     # frontend type check
+npm test                             # vitest suite
+npm run build                        # production frontend bundle
 ```
 
 ## Notes
