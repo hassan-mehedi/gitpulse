@@ -9,10 +9,28 @@ use tauri::{Emitter, Manager};
 pub fn run() {
     tracing_subscriber::fmt::init();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }))
+            .plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             app.manage(workspace::manager::WorkspaceManager::default());
             let main_window = app.get_webview_window("main");

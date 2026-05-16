@@ -21,13 +21,44 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://github.com https://*.githubusercontent.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
       "devCsp": "default-src 'self' http://localhost:1420; script-src 'self' http://localhost:1420 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' http://localhost:1420 'unsafe-inline'; img-src 'self' asset: http://asset.localhost http://localhost:1420 data: blob:; font-src 'self' http://localhost:1420 data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "icon": []
+    "targets": ["deb", "rpm", "appimage", "nsis", "dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "copyright": "Copyright (c) 2026 hassan-mehedi",
+    "shortDescription": "A VS Code-inspired Git GUI built with Tauri, Rust, and React.",
+    "longDescription": "GitPulse is a cross-platform desktop Git client with source control, diffing, branch management, commit graph, blame, file history, stashes, worktrees, and remote sync.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/hassan-mehedi/gitpulse/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYxQ0Q4ODA0MzZGQzQ4NzAKUldSd1NQdzJCSWpOOGZLUXQxbmdBdWM5TTBKb3A2bUxZdXk3V29vMGhNVXBLcmMzMW5qdjlJZkMK"
+    }
   }
 }

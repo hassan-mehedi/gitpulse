@@ -88,6 +88,25 @@ npm test                             # vitest suite
 npm run build                        # production frontend bundle
 ```
 
+## Smoke Test on a Large Repository
+
+Performance regressions tend to surface only on big histories. Before tagging a release, exercise the app against a deep repository (the Linux kernel works well):
+
+```bash
+git clone --filter=blob:none https://github.com/torvalds/linux.git ~/scratch/linux
+npm run tauri dev
+```
+
+Then open the cloned repo and check:
+
+- the commit graph scrolls smoothly past 100k commits and lanes stay aligned
+- blame on `kernel/sched/core.c` (or any large, frequently edited file) returns within a few seconds and the gutter stays responsive on scroll
+- file history on a long-lived file paginates without blocking
+- a full status pass on the dirty working tree returns under a second
+- searching/filtering the graph by author/ref does not freeze the UI
+
+If any of these stall the UI for more than a beat, that's a regression to fix before release.
+
 ## Notes
 
 - The commit graph now uses virtualized scrolling for large histories.
