@@ -10,8 +10,12 @@ pub async fn git_show_commit(repo_path: String, sha: String) -> Result<CommitDet
 }
 
 #[tauri::command]
-pub async fn git_commit_diff(repo_path: String, sha: String) -> Result<Vec<FileDiff>, GitError> {
-    diff::commit_diff(Path::new(&repo_path), &sha).await
+pub async fn git_commit_diff(
+    repo_path: String,
+    sha: String,
+    parent_index: Option<usize>,
+) -> Result<Vec<FileDiff>, GitError> {
+    diff::commit_diff(Path::new(&repo_path), &sha, parent_index).await
 }
 
 #[tauri::command]

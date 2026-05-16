@@ -8,7 +8,28 @@ export default defineConfig({
   build: {
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: isTauriDebug ? false : "esbuild",
-    sourcemap: isTauriDebug
+    sourcemap: isTauriDebug,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/shiki")) return "shiki";
+          if (
+            id.includes("node_modules/@iconify") ||
+            id.includes("node_modules/@vscode/codicons") ||
+            id.includes("node_modules/vscode-icons-js")
+          ) {
+            return "icons";
+          }
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/")
+          ) {
+            return "react";
+          }
+        }
+      }
+    }
   },
   server: {
     port: 1420,

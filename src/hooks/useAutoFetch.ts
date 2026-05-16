@@ -5,6 +5,10 @@ import { useSettingsStore } from "../stores/settings";
 import { useWorkspaceStore } from "../stores/workspace";
 import { reportBackgroundError } from "../lib/errors";
 
+// Cap concurrent network Git operations so a multi-repo workspace doesn't fan
+// out one connection per repo at the same tick.
+const MAX_CONCURRENT_FETCHES = 3;
+
 export function useAutoFetch() {
   const autoFetch = useSettingsStore((state) => state.autoFetch);
   const intervalSeconds = useSettingsStore((state) => state.autoFetchIntervalSeconds);
@@ -25,19 +29,30 @@ export function useAutoFetch() {
       // on every status update).
       const { repositories } = useWorkspaceStore.getState();
       void (async () => {
-        for (const repo of repositories) {
-          await runGit(async () => {
-            await gitFetchAll(repo.path);
-            await refreshRepo(repo.path);
-          }).catch((error) => {
-            reportBackgroundError(error, {
-              operation: "Auto fetch",
-              repoPath: repo.path,
-              title: "Auto fetch failed",
-              notify: false
+        let cursor = 0;
+        const fetchOne = async () => {
+          while (true) {
+            const index = cursor++;
+            if (index >= repositories.length) return;
+            const repo = repositories[index]!;
+            await runGit(async () => {
+              await gitFetchAll(repo.path);
+              await refreshRepo(repo.path);
+            }).catch((error) => {
+              reportBackgroundError(error, {
+                operation: "Auto fetch",
+                repoPath: repo.path,
+                title: "Auto fetch failed",
+                notify: false
+              });
             });
-          });
-        }
+          }
+        };
+        const workers = Array.from(
+          { length: Math.min(MAX_CONCURRENT_FETCHES, repositories.length) },
+          fetchOne
+        );
+        await Promise.all(workers);
       })().finally(() => {
         running = false;
       });

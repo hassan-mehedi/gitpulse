@@ -462,27 +462,33 @@ pub fn parse_branches(output: &str) -> Vec<BranchInfo> {
 }
 
 pub fn parse_remotes(output: &str) -> Vec<RemoteInfo> {
+    // `git remote -v` lines look like:  `<name>\t<url> (fetch)` / `(push)`.
+    // Names cannot contain whitespace, but URLs occasionally do (file:// paths
+    // pointing at folders with spaces), so we split on the leading tab and then
+    // separate the trailing `(fetch)`/`(push)` marker from the URL.
     let mut remotes = std::collections::BTreeMap::<String, RemoteInfo>::new();
 
     for line in output.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 3 {
+        let Some((name, rest)) = line.split_once('\t') else {
             continue;
-        }
+        };
+        let rest = rest.trim_end();
+        let (url, kind) = match rest.rsplit_once(' ') {
+            Some((url, kind)) if kind.starts_with('(') && kind.ends_with(')') => (url, kind),
+            _ => continue,
+        };
 
-        let name = parts[0].to_string();
-        let url = parts[1].to_string();
-        let kind = parts[2];
+        let name = name.to_string();
         let entry = remotes.entry(name.clone()).or_insert(RemoteInfo {
             name,
             fetch_url: String::new(),
             push_url: String::new(),
         });
 
-        if kind.contains("(fetch)") {
-            entry.fetch_url = url;
-        } else if kind.contains("(push)") {
-            entry.push_url = url;
+        if kind == "(fetch)" {
+            entry.fetch_url = url.to_string();
+        } else if kind == "(push)" {
+            entry.push_url = url.to_string();
         }
     }
 
@@ -725,5 +731,241 @@ fn parse_hunk_range(range: &str) -> Result<(usize, usize), GitError> {
             .parse()
             .map_err(|_| GitError::Parse(format!("invalid hunk range: {range}")))?;
         Ok((start, 1))
+    }
+}
+
+#[cfg(test)]
+mod parser_tests {
+    use super::*;
+
+    #[test]
+    fn parse_remotes_handles_url_with_spaces() {
+        // file:// URLs pointing at folders with spaces are legal.
+        let output =
+            "origin\tfile:///home/me/My Projects/repo.git (fetch)\n\
+             origin\tfile:///home/me/My Projects/repo.git (push)\n";
+        let remotes = parse_remotes(output);
+        assert_eq!(remotes.len(), 1);
+        assert_eq!(remotes[0].name, "origin");
+        assert_eq!(remotes[0].fetch_url, "file:///home/me/My Projects/repo.git");
+        assert_eq!(remotes[0].push_url, "file:///home/me/My Projects/repo.git");
+    }
+
+    #[test]
+    fn parse_remotes_splits_fetch_and_push() {
+        let output =
+            "origin\tgit@github.com:a/b.git (fetch)\n\
+             origin\thttps://example.com/a/b.git (push)\n\
+             upstream\tgit@github.com:x/y.git (fetch)\n\
+             upstream\tgit@github.com:x/y.git (push)\n";
+        let remotes = parse_remotes(output);
+        assert_eq!(remotes.len(), 2);
+        let origin = remotes.iter().find(|r| r.name == "origin").unwrap();
+        assert_eq!(origin.fetch_url, "git@github.com:a/b.git");
+        assert_eq!(origin.push_url, "https://example.com/a/b.git");
+    }
+
+    #[test]
+    fn parse_remotes_skips_malformed_lines() {
+        let output = "garbage without tab\norigin\tgit@example.com:a/b.git (fetch)\n";
+        let remotes = parse_remotes(output);
+        assert_eq!(remotes.len(), 1);
+        assert_eq!(remotes[0].fetch_url, "git@example.com:a/b.git");
+    }
+
+    #[test]
+    fn parse_blame_attaches_metadata_to_all_lines_in_run() {
+        let output = "\
+0000000000000000000000000000000000000001 1 1 2\n\
+author Alice\n\
+author-mail <alice@example.com>\n\
+author-time 1700000000\n\
+summary First change\n\
+filename src/main.rs\n\
+\tfn main() {\n\
+0000000000000000000000000000000000000001 2 2\n\
+\t    println!(\"hi\");\n";
+        let lines = parse_blame(output).expect("blame should parse");
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].author, "Alice");
+        assert_eq!(lines[0].author_email, "alice@example.com");
+        assert_eq!(lines[0].summary, "First change");
+        // The second line shares the SHA — metadata must come from the cache.
+        assert_eq!(lines[1].author, "Alice");
+        assert_eq!(lines[1].author_email, "alice@example.com");
+        assert_eq!(lines[1].line_number, 2);
+    }
+
+    #[test]
+    fn parse_log_splits_fields_and_parents() {
+        let line = format!(
+            "abc123def\u{1f}p1 p2\u{1f}HEAD -> main, origin/main\u{1f}A merge\u{1f}Alice\u{1f}alice@example.com\u{1f}2026-01-02 03:04:05 +0000\u{1f}G"
+        );
+        let commits = parse_log(&line);
+        assert_eq!(commits.len(), 1);
+        let commit = &commits[0];
+        assert_eq!(commit.sha, "abc123def");
+        assert_eq!(commit.short_sha, "abc123d");
+        assert_eq!(commit.parents, vec!["p1".to_string(), "p2".to_string()]);
+        assert_eq!(
+            commit.refs,
+            vec!["HEAD -> main".to_string(), "origin/main".to_string()]
+        );
+        assert_eq!(commit.message, "A merge");
+        assert_eq!(commit.signature, "G");
+    }
+
+    #[test]
+    fn parse_branches_skips_remote_head_pointer() {
+        let output = format!(
+            "refs/heads/main\u{1f}*\u{1f}origin/main\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n\
+             refs/remotes/origin/HEAD\u{1f} \u{1f}\u{1f}\u{1f}\u{1f}\n\
+             refs/remotes/origin/main\u{1f} \u{1f}\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n"
+        );
+        let branches = parse_branches(&output);
+        assert_eq!(branches.len(), 2);
+        assert!(branches.iter().any(|b| b.name == "main" && b.is_current));
+        assert!(branches
+            .iter()
+            .any(|b| b.name == "origin/main" && b.is_remote));
+    }
+
+    #[test]
+    fn parse_diff_extracts_hunks_and_line_numbers() {
+        // NB: build the patch by concatenation so the leading space on the
+        // context line is preserved (a `\` continuation would eat it).
+        let output = [
+            "diff --git a/foo.txt b/foo.txt",
+            "--- a/foo.txt",
+            "+++ b/foo.txt",
+            "@@ -1,2 +1,3 @@",
+            " context",
+            "-old",
+            "+new",
+            "+extra",
+            "",
+        ]
+        .join("\n");
+        let diff = parse_diff(&output).expect("diff should parse");
+        assert_eq!(diff.file, "foo.txt");
+        assert!(!diff.is_binary);
+        assert_eq!(diff.hunks.len(), 1);
+        let hunk = &diff.hunks[0];
+        assert_eq!(hunk.old_start, 1);
+        assert_eq!(hunk.new_start, 1);
+        assert_eq!(hunk.lines.len(), 4);
+        assert_eq!(hunk.lines[0].line_type, "context");
+        assert_eq!(hunk.lines[1].line_type, "remove");
+        assert_eq!(hunk.lines[2].line_type, "add");
+        assert_eq!(hunk.lines[2].new_lineno, Some(2));
+    }
+
+    #[test]
+    fn parse_diff_detects_binary_files() {
+        let output = "\
+diff --git a/image.png b/image.png\n\
+Binary files a/image.png and b/image.png differ\n";
+        let diff = parse_diff(output).expect("binary diff should parse");
+        assert!(diff.is_binary);
+        assert!(diff.hunks.is_empty());
+    }
+
+    #[test]
+    fn parse_diff_marks_new_and_deleted_files() {
+        let new_file = "\
+diff --git a/foo.txt b/foo.txt\n\
+new file mode 100644\n\
+--- /dev/null\n\
++++ b/foo.txt\n\
+@@ -0,0 +1,1 @@\n\
++new\n";
+        let diff = parse_diff(new_file).expect("new file should parse");
+        assert_eq!(diff.status.as_deref(), Some("A"));
+
+        let deleted = "\
+diff --git a/foo.txt b/foo.txt\n\
+deleted file mode 100644\n\
+--- a/foo.txt\n\
++++ /dev/null\n\
+@@ -1,1 +0,0 @@\n\
+-old\n";
+        let diff = parse_diff(deleted).expect("deleted file should parse");
+        assert_eq!(diff.status.as_deref(), Some("D"));
+    }
+
+    #[test]
+    fn parse_hunk_header_handles_function_context() {
+        // Function context after the second `@@` must not break range parsing.
+        let (old_start, old_count, new_start, new_count) =
+            parse_hunk_header("@@ -10,5 +12,7 @@ fn main() {").expect("hunk should parse");
+        assert_eq!((old_start, old_count, new_start, new_count), (10, 5, 12, 7));
+    }
+
+    #[test]
+    fn parse_hunk_header_handles_single_line_form() {
+        let (old_start, old_count, new_start, new_count) =
+            parse_hunk_header("@@ -3 +3 @@").expect("single-line hunk should parse");
+        assert_eq!((old_start, old_count, new_start, new_count), (3, 1, 3, 1));
+    }
+
+    #[test]
+    fn parse_worktrees_marks_main_and_handles_detached() {
+        let output = "\
+worktree /home/me/repo\n\
+HEAD abcdef\n\
+branch refs/heads/main\n\
+\n\
+worktree /home/me/feature\n\
+HEAD 123456\n\
+detached\n\
+\n";
+        let worktrees = parse_worktrees(output, "/home/me/repo");
+        assert_eq!(worktrees.len(), 2);
+        assert!(worktrees[0].is_main);
+        assert_eq!(worktrees[0].branch, "main");
+        assert!(!worktrees[1].is_main);
+        assert_eq!(worktrees[1].branch, "DETACHED");
+    }
+
+    #[test]
+    fn parse_stashes_requires_all_fields() {
+        let line = format!("stash@{{0}}\u{1f}abc\u{1f}WIP\u{1f}2026-01-01\u{1f}Alice");
+        let entries = parse_stashes(&line);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].stash_ref, "stash@{0}");
+        assert_eq!(entries[0].message, "WIP");
+
+        let malformed = "stash@{0}\u{1f}only-two-fields";
+        let entries = parse_stashes(malformed);
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn parse_tags_marks_annotated_vs_lightweight() {
+        let output = format!(
+            "v1.0\u{1f}sha1\u{1f}initial release\u{1f}tag\u{1f}Alice\u{1f}2026-01-01\n\
+             v0.9\u{1f}sha2\u{1f}\u{1f}commit\u{1f}\u{1f}\n"
+        );
+        let tags = parse_tags(&output);
+        assert_eq!(tags.len(), 2);
+        let v1 = tags.iter().find(|t| t.name == "v1.0").unwrap();
+        assert!(v1.is_annotated);
+        assert_eq!(v1.message.as_deref(), Some("initial release"));
+        let v09 = tags.iter().find(|t| t.name == "v0.9").unwrap();
+        assert!(!v09.is_annotated);
+        assert!(v09.message.is_none());
+        assert!(v09.tagger.is_none());
+    }
+
+    #[test]
+    fn parse_diff_stat_aggregates_totals() {
+        let output = "\
+ src/foo.rs |  5 +++--\n\
+ src/bar.rs | 10 ++++++----\n\
+ 2 files changed, 9 insertions(+), 6 deletions(-)\n";
+        let stat = parse_diff_stat(output);
+        assert_eq!(stat.files.len(), 2);
+        assert_eq!(stat.total_additions, 9);
+        assert_eq!(stat.total_deletions, 6);
     }
 }

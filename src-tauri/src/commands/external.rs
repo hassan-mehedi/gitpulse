@@ -47,16 +47,19 @@ fn open_editor(path: &Path, line: usize, editor_command: Option<&str>) -> Result
         }
     }
 
-    let line_target = format!("{}:{line}", path.display());
+    let mut line_target = path.as_os_str().to_os_string();
+    line_target.push(format!(":{line}"));
     if Command::new("code")
-        .args(["-g", &line_target])
+        .arg("-g")
+        .arg(&line_target)
         .spawn()
         .is_ok()
     {
         return Ok(());
     }
     if Command::new("code-insiders")
-        .args(["-g", &line_target])
+        .arg("-g")
+        .arg(&line_target)
         .spawn()
         .is_ok()
     {
@@ -77,17 +80,26 @@ fn run_editor_command(
     path: &Path,
     line: Option<usize>,
 ) -> Result<(), std::io::Error> {
-    let mut parts = editor.split_whitespace();
-    let Some(command) = parts.next() else {
+    let parts = shell_words::split(editor).unwrap_or_else(|_| {
+        editor
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect()
+    });
+    let mut iter = parts.into_iter();
+    let Some(command) = iter.next() else {
         return Ok(());
     };
-    let mut process = Command::new(command);
-    for arg in parts {
+    let mut process = Command::new(&command);
+    for arg in iter {
         process.arg(arg);
     }
-    if supports_code_line_arg(command) {
+    if supports_code_line_arg(&command) {
         if let Some(line) = line {
-            process.args(["-g", &format!("{}:{line}", path.display())]);
+            process.arg("-g");
+            let mut target = path.as_os_str().to_os_string();
+            target.push(format!(":{line}"));
+            process.arg(target);
         } else {
             process.arg(path);
         }
@@ -102,13 +114,19 @@ fn supports_code_line_arg(command: &str) -> bool {
 }
 
 fn is_gui_editor(editor: &str) -> bool {
-    let Some(command) = editor.split_whitespace().next() else {
+    let parts = shell_words::split(editor).unwrap_or_else(|_| {
+        editor
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect()
+    });
+    let Some(command) = parts.into_iter().next() else {
         return false;
     };
-    let name = Path::new(command)
+    let name = Path::new(&command)
         .file_name()
         .and_then(|value| value.to_str())
-        .unwrap_or(command)
+        .unwrap_or(&command)
         .to_ascii_lowercase();
     matches!(
         name.as_str(),

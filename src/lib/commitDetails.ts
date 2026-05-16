@@ -1,7 +1,7 @@
 import { gitShowCommit } from "./git";
 import type { CommitDetail } from "../types/git";
 
-const MAX_COMMIT_DETAILS = 200;
+const MAX_COMMIT_DETAILS = 2000;
 const cache = new Map<string, Promise<CommitDetail>>();
 
 export function getCommitDetail(repoPath: string, sha: string) {

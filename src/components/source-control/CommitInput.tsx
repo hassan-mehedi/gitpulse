@@ -406,8 +406,10 @@ export function CommitInput({ repo }: CommitInputProps) {
         }}
         onCancel={() => setStageAllPrompt(null)}
         onNever={() => {
+          const action = stageAllPrompt;
           setStageAllOnCommit("never");
           setStageAllPrompt(null);
+          if (action) void execute(action);
         }}
         onYes={confirmStageAndCommit}
       />

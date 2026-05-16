@@ -14,9 +14,18 @@ pub async fn show_commit(repo_path: &Path, sha: &str) -> Result<CommitDetail, Gi
     parse_show_commit(&output)
 }
 
-pub async fn commit_diff(repo_path: &Path, sha: &str) -> Result<Vec<FileDiff>, GitError> {
+pub async fn commit_diff(
+    repo_path: &Path,
+    sha: &str,
+    parent_index: Option<usize>,
+) -> Result<Vec<FileDiff>, GitError> {
+    // `rev-list --parents` line is `<sha> <parent1> <parent2> ...`. Skip the
+    // commit itself, then pick the requested parent. None / 0 means first
+    // parent — matching how non-merge commits are displayed.
     let parents = GitRunner::run(repo_path, &["rev-list", "--parents", "-n", "1", sha]).await?;
-    let parent = parents.split_whitespace().nth(1);
+    let parent_shas: Vec<&str> = parents.split_whitespace().skip(1).collect();
+    let index = parent_index.unwrap_or(0);
+    let parent = parent_shas.get(index).copied().or_else(|| parent_shas.first().copied());
     let range = format!("{}..{sha}", parent.unwrap_or(EMPTY_TREE_SHA));
     let output = GitRunner::run(repo_path, &["diff", "--patch", "--find-renames", &range]).await?;
     parse_multi_file_diff(&output)

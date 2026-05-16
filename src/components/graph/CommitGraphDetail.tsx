@@ -22,6 +22,13 @@ export function CommitGraphDetail() {
   const [commitFileDiffs, setCommitFileDiffs] = useState<FileDiff[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [filesViewMode, setFilesViewMode] = useState<"list" | "tree">("tree");
+  const [parentIndex, setParentIndex] = useState(0);
+  const parents = selectedCommitDetail?.parents ?? [];
+
+  useEffect(() => {
+    // Reset to first parent whenever a different commit is selected.
+    setParentIndex(0);
+  }, [selectedCommitSha]);
 
   useEffect(() => {
     if (!activeRepo || !selectedCommitSha || !selectedCommitDetail) {
@@ -31,7 +38,7 @@ export function CommitGraphDetail() {
     }
 
     let cancelled = false;
-    void gitCommitDiff(activeRepo.path, selectedCommitSha)
+    void gitCommitDiff(activeRepo.path, selectedCommitSha, parentIndex)
       .then((diffs) => {
         if (cancelled) return;
         setCommitFileDiffs(diffs);
@@ -50,7 +57,7 @@ export function CommitGraphDetail() {
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, selectedCommitDetail, selectedCommitSha, setActiveCommitDiff]);
+  }, [activeRepo, parentIndex, selectedCommitDetail, selectedCommitSha, setActiveCommitDiff]);
 
   const commitFiles = useMemo(
     () => commitFileDiffs.map((diff) => toCommitFileStat(diff)),
@@ -80,6 +87,22 @@ export function CommitGraphDetail() {
         </div>
         {selectedCommitDetail.body ? (
           <pre className="commit-detail__body">{selectedCommitDetail.body}</pre>
+        ) : null}
+        {parents.length > 1 ? (
+          <div className="commit-detail__parents">
+            <span>Compare against parent:</span>
+            {parents.map((parentSha, index) => (
+              <button
+                key={parentSha}
+                className={`vscode-button${parentIndex === index ? " vscode-button--primary" : ""}`}
+                onClick={() => setParentIndex(index)}
+                type="button"
+                title={parentSha}
+              >
+                {index === 0 ? "First" : `#${index + 1}`} · {parentSha.slice(0, 7)}
+              </button>
+            ))}
+          </div>
         ) : null}
       </header>
 
