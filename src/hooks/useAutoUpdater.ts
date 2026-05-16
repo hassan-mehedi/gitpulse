@@ -31,13 +31,20 @@ export function useAutoUpdater() {
                 const { relaunch } = await import("@tauri-apps/plugin-process");
                 await relaunch();
               } catch (err) {
-                reportBackgroundError(err, "Failed to install update");
+                reportBackgroundError(err, {
+                  operation: "updater:install",
+                  title: "Failed to install update"
+                });
               }
             })();
           }
         });
       } catch (err) {
-        reportBackgroundError(err, "Update check failed");
+        reportBackgroundError(err, {
+          operation: "updater:check",
+          title: "Update check failed",
+          notify: false
+        });
       }
     })();
 
