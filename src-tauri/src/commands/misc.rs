@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::error::GitError;
 use crate::git::misc;
 use crate::git::types::{
-    GitHookInfo, LfsLockInfo, LfsStatus, OperationResult, PrRemoteInfo, SubmoduleInfo,
+    GitHookInfo, LfsLockInfo, LfsStatus, OperationResult, PatchApplyResult, PatchCreateResult,
+    PrRemoteInfo, SparseCheckoutStatus, SubmoduleInfo,
 };
 
 #[tauri::command]
@@ -31,7 +32,7 @@ pub async fn git_submodule_update(repo_path: String) -> Result<OperationResult, 
 }
 
 #[tauri::command]
-pub async fn git_sparse_list(repo_path: String) -> Result<Vec<String>, GitError> {
+pub async fn git_sparse_list(repo_path: String) -> Result<SparseCheckoutStatus, GitError> {
     misc::sparse_list(Path::new(&repo_path)).await
 }
 
@@ -79,7 +80,10 @@ pub async fn git_hook_read(repo_path: String, name: String) -> Result<String, Gi
 }
 
 #[tauri::command]
-pub async fn git_patch_create(repo_path: String, staged: bool) -> Result<String, GitError> {
+pub async fn git_patch_create(
+    repo_path: String,
+    staged: bool,
+) -> Result<PatchCreateResult, GitError> {
     misc::patch_create(Path::new(&repo_path), staged).await
 }
 
@@ -87,7 +91,7 @@ pub async fn git_patch_create(repo_path: String, staged: bool) -> Result<String,
 pub async fn git_patch_apply(
     repo_path: String,
     patch: String,
-) -> Result<OperationResult, GitError> {
+) -> Result<PatchApplyResult, GitError> {
     misc::patch_apply(Path::new(&repo_path), &patch).await
 }
 

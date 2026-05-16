@@ -258,13 +258,13 @@ export function CommitInput({ repo }: CommitInputProps) {
     emitAiOutput(generationProgress);
     try {
       const patch = await gitPatchCreate(repo.path, true);
-      if (!patch.trim()) {
+      if (!patch.patch.trim()) {
         throw new Error("Stage changes before generating a commit message.");
       }
-      const preparedDiff = prepareAiDiffContext(patch, aiCommitMaxDiffChars);
+      const preparedDiff = prepareAiDiffContext(patch.patch, aiCommitMaxDiffChars);
       emitAiOutput({
         ...generationProgress,
-        message: `Prepared staged diff: ${patch.length.toLocaleString()} chars across all files, sending ${preparedDiff.length.toLocaleString()} chars to ${formatAiProvider(aiCommitProvider)} model ${aiCommitModel || "(unset)"}`,
+        message: `Prepared staged diff: ${patch.patch.length.toLocaleString()} chars across all files, sending ${preparedDiff.length.toLocaleString()} chars to ${formatAiProvider(aiCommitProvider)} model ${aiCommitModel || "(unset)"}`,
         status: "running"
       });
       upsertProgress({
@@ -272,7 +272,7 @@ export function CommitInput({ repo }: CommitInputProps) {
         message: `Waiting for ${formatAiProvider(aiCommitProvider)}`,
         status: "running"
       });
-      const generated = await generateCommitMessage(patch, {
+      const generated = await generateCommitMessage(patch.patch, {
         provider: aiCommitProvider,
         apiKey: aiCommitApiKey,
         baseUrl: aiCommitBaseUrl,

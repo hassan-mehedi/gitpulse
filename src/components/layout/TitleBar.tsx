@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRepo } from "../../hooks/useRepo";
+import { reportBackgroundError } from "../../lib/errors";
+import { isTauriRuntime } from "../../lib/runtime";
 
 /**
  * Thin custom title bar replacing the OS chrome (Tauri's `decorations: false`).
@@ -12,7 +14,7 @@ export function TitleBar() {
   const [tauriReady, setTauriReady] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    if (!isTauriRuntime()) {
       return;
     }
     setTauriReady(true);
@@ -29,7 +31,12 @@ export function TitleBar() {
           if (!cancelled) setIsMaximized(next);
         });
       })
-      .catch(() => {});
+      .catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Read window state",
+          notify: false
+        });
+      });
 
     return () => {
       cancelled = true;

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useWorkspaceStore } from "../stores/workspace";
+import { isTauriRuntime } from "../lib/runtime";
+import { reportBackgroundError } from "../lib/errors";
 
 // Coalesce bursts of file-watcher events into one refresh per repo. The Rust
 // debouncer already batches at 300 ms, but a single git operation usually fires
@@ -12,7 +14,7 @@ export function useFileWatcher() {
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    if (!isTauriRuntime()) {
       return;
     }
 
@@ -28,7 +30,13 @@ export function useFileWatcher() {
       }
       const timer = window.setTimeout(() => {
         pendingRefreshTimers.delete(repoPath);
-        void refreshRepo(repoPath).catch(() => {});
+        void refreshRepo(repoPath).catch((error) => {
+          reportBackgroundError(error, {
+            operation: "Refresh repository",
+            repoPath,
+            notify: false
+          });
+        });
       }, FRONTEND_REFRESH_DEBOUNCE_MS);
       pendingRefreshTimers.set(repoPath, timer);
     }
@@ -49,7 +57,12 @@ export function useFileWatcher() {
         }
         disposers.push(...nextDisposers);
       })
-      .catch(() => {});
+      .catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Initialize file watcher",
+          title: "File watcher unavailable"
+        });
+      });
 
     return () => {
       cancelled = true;

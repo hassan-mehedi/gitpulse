@@ -3,6 +3,7 @@ import { Codicon } from "../shared/Codicon";
 import { gitBlame } from "../../lib/git";
 import { getCommitDetail } from "../../lib/commitDetails";
 import { useGit } from "../../hooks/useGit";
+import { ignoreReportedError } from "../../lib/errors";
 import { useDiffStore } from "../../stores/diff";
 import { useRepo } from "../../hooks/useRepo";
 import type { BlameLine, CommitDetail } from "../../types/git";
@@ -75,7 +76,7 @@ export function BlameView() {
     await runGit(async () => {
       const detail = await getCommitDetail(activeRepo.path, line.sha);
       setSelectedCommit(detail);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   const groupedCount = useMemo(() => new Set(blameLines.map((line) => line.sha)).size, [blameLines]);

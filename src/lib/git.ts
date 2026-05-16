@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "./runtime";
 import type {
   BlameLine,
   BranchInfo,
@@ -21,17 +22,16 @@ import type {
   GitHookInfo,
   LfsLockInfo,
   LfsStatus,
+  PatchApplyResult,
+  PatchCreateResult,
   StashEntry,
+  SparseCheckoutStatus,
   SubmoduleInfo,
   TagInfo,
   UserInfo,
   WorktreeInfo,
   WorkspaceState
 } from "../types/git";
-
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 const quietCommands = new Set([
   "git_status",
@@ -667,7 +667,7 @@ export async function gitSubmoduleUpdate(repoPath: string): Promise<OperationRes
   return gitInvoke("git_submodule_update", { repoPath });
 }
 
-export async function gitSparseList(repoPath: string): Promise<string[]> {
+export async function gitSparseList(repoPath: string): Promise<SparseCheckoutStatus> {
   return gitInvoke("git_sparse_list", { repoPath });
 }
 
@@ -703,11 +703,11 @@ export async function gitHookRead(repoPath: string, name: string): Promise<strin
   return gitInvoke("git_hook_read", { repoPath, name });
 }
 
-export async function gitPatchCreate(repoPath: string, staged: boolean): Promise<string> {
+export async function gitPatchCreate(repoPath: string, staged: boolean): Promise<PatchCreateResult> {
   return gitInvoke("git_patch_create", { repoPath, staged });
 }
 
-export async function gitPatchApply(repoPath: string, patch: string): Promise<OperationResult> {
+export async function gitPatchApply(repoPath: string, patch: string): Promise<PatchApplyResult> {
   return gitInvoke("git_patch_apply", { repoPath, patch });
 }
 

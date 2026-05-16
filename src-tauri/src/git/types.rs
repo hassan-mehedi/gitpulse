@@ -174,7 +174,34 @@ pub struct SubmoduleInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LfsStatus {
+    pub available: bool,
+    pub pending_push_count: Option<usize>,
+    pub pending_pull_count: Option<usize>,
     pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SparseCheckoutStatus {
+    pub enabled: bool,
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchCreateResult {
+    pub patch: String,
+    pub file_count: usize,
+    pub hunk_count: usize,
+    pub staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchApplyResult {
+    pub summary: String,
+    pub file_count: usize,
+    pub hunk_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

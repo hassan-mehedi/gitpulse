@@ -32,6 +32,7 @@ import { InputModal } from "../shared/InputModal";
 import { ConfirmModal } from "../shared/ConfirmModal";
 import { useNotificationStore } from "../../stores/notifications";
 import { createId } from "../../lib/ids";
+import { ignoreReportedError, reportBackgroundError } from "../../lib/errors";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
 
 interface SourceControlPanelProps {
@@ -104,7 +105,7 @@ export function SourceControlPanel({
       setActiveRepo(repo.id);
       runGit(async () => {
         await openDiff(repo, change, staged);
-      }).catch(() => {});
+      }).catch(ignoreReportedError);
     },
     [openDiff, runGit, setActiveRepo]
   );
@@ -119,7 +120,7 @@ export function SourceControlPanel({
           await gitStageFile(repo.path, change.path);
         }
         await refreshRepo(repo.path);
-      }).catch(() => {});
+      }).catch(ignoreReportedError);
     },
     [refreshRepo, runGit, setActiveRepo]
   );
@@ -159,7 +160,7 @@ export function SourceControlPanel({
             }
           });
         }
-      }).catch(() => {});
+      }).catch(ignoreReportedError);
     },
     [pushNotification, refreshRepo, runGit, setActiveRepo]
   );
@@ -182,7 +183,7 @@ export function SourceControlPanel({
       runGit(async () => {
         await gitAddToGitignore(repo.path, change.path);
         await refreshRepo(repo.path);
-      }).catch(() => {});
+      }).catch(ignoreReportedError);
     },
     [refreshRepo, runGit, setActiveRepo]
   );
@@ -235,7 +236,12 @@ export function SourceControlPanel({
   }
 
   async function handleRefreshAll() {
-    await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch(() => {});
+    await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch((error) => {
+      reportBackgroundError(error, {
+        operation: "Refresh repositories",
+        title: "Refresh failed"
+      });
+    });
   }
 
   function withActiveRepo(operation: (repo: Repository) => Promise<unknown>) {
@@ -245,7 +251,7 @@ export function SourceControlPanel({
     runGit(async () => {
       await operation(activeRepo);
       await refreshRepo(activeRepo.path);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   if (activeView !== "source-control") {

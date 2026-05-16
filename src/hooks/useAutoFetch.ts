@@ -3,6 +3,7 @@ import { gitFetchAll } from "../lib/git";
 import { useGit } from "./useGit";
 import { useSettingsStore } from "../stores/settings";
 import { useWorkspaceStore } from "../stores/workspace";
+import { reportBackgroundError } from "../lib/errors";
 
 export function useAutoFetch() {
   const autoFetch = useSettingsStore((state) => state.autoFetch);
@@ -28,7 +29,14 @@ export function useAutoFetch() {
           await runGit(async () => {
             await gitFetchAll(repo.path);
             await refreshRepo(repo.path);
-          }).catch(() => {});
+          }).catch((error) => {
+            reportBackgroundError(error, {
+              operation: "Auto fetch",
+              repoPath: repo.path,
+              title: "Auto fetch failed",
+              notify: false
+            });
+          });
         }
       })().finally(() => {
         running = false;

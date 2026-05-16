@@ -17,6 +17,7 @@ import {
 } from "../../lib/conflicts";
 import { buildPatch, buildPatchFromSelectedLines } from "../../lib/patch";
 import { useGit } from "../../hooks/useGit";
+import { ignoreReportedError } from "../../lib/errors";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
 import { useSettingsStore } from "../../stores/settings";
@@ -85,7 +86,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
       .then((nextDiff) => {
         if (!cancelled) setWhitespaceDiff(nextDiff);
       })
-      .catch(() => {});
+      .catch(ignoreReportedError);
     return () => {
       cancelled = true;
     };

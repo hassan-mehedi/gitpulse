@@ -2601,6 +2601,191 @@ body.is-resizing-sidebar * {
   gap: 6px;
 }
 
+.misc-panel__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.misc-panel__summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+  padding: 7px 9px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.misc-panel__summary-item span,
+.misc-panel__empty {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.misc-panel__summary-item strong {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.misc-panel__empty {
+  padding: 10px;
+  border: 1px dashed var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.misc-panel__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.misc-panel__pill--success {
+  background: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground) 18%, transparent);
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.misc-panel__pill--warning {
+  background: color-mix(in srgb, var(--vscode-gitDecoration-modifiedResourceForeground) 18%, transparent);
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.misc-panel__pill--danger {
+  background: color-mix(in srgb, var(--vscode-errorForeground) 18%, transparent);
+  color: var(--vscode-errorForeground);
+}
+
+.misc-panel__details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.misc-panel__details summary {
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.misc-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.misc-panel__form-title,
+.misc-panel__detail h4,
+.misc-panel__timeline-detail h4 {
+  margin: 0;
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.misc-panel__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.misc-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.misc-panel__field span {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.misc-panel__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.misc-panel__detail > div {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.misc-panel__detail pre {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 12px;
+}
+
+.misc-panel__timeline-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.misc-panel__timeline-row:hover,
+.misc-panel__timeline-row.is-selected {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.misc-panel__timeline-row small {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+  font-size: 11px;
+}
+
+.misc-panel__timeline-detail {
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.misc-panel__timeline-detail dl {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.misc-panel__timeline-detail dl > div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.misc-panel__timeline-detail dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.misc-panel__timeline-detail dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--vscode-editor-font-family, "Menlo", monospace);
+}
+
 .misc-panel__row {
   display: flex;
   align-items: center;

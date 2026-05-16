@@ -14,7 +14,10 @@ function ensureCollection(): Promise<void> {
       addCollection(mod.default ?? (mod as unknown as Parameters<typeof addCollection>[0]));
       collectionLoaded = true;
     })
-    .catch(() => {});
+    .catch(() => {
+      // The component already falls back to a generic file icon if the optional
+      // icon collection cannot be loaded.
+    });
   return collectionLoading;
 }
 

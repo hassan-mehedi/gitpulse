@@ -7,6 +7,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useNotificationStore } from "../../stores/notifications";
 import { createId } from "../../lib/ids";
+import { ignoreReportedError } from "../../lib/errors";
 import { gitDiscardAll, gitFetchAll, gitPatchApply, gitPatchCreate, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
@@ -71,7 +72,7 @@ export function RepoSection({
       setActiveRepo(repo.id);
       await operation();
       await refreshRepo(repo.path);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function requestSync() {
@@ -86,7 +87,7 @@ export function RepoSection({
     withRefresh(async () => {
       const patch = await gitPatchCreate(repo.path, false);
       await gitDiscardAll(repo.path);
-      if (patch.trim()) {
+      if (patch.patch.trim()) {
         pushNotification({
           id: createId(),
           tone: "info",
@@ -95,7 +96,7 @@ export function RepoSection({
           actionLabel: "Undo",
           onAction: () => {
             void runGit(async () => {
-              await gitPatchApply(repo.path, patch);
+              await gitPatchApply(repo.path, patch.patch);
               await refreshRepo(repo.path);
             });
           }

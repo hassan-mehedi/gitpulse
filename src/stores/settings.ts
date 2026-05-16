@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import type { ThemeMode } from "../lib/theme";
 import { getAiApiKey, setAiApiKey } from "../lib/secrets";
+import { isTauriRuntime } from "../lib/runtime";
+import { reportBackgroundError } from "../lib/errors";
 
 export interface CommitIdentityProfile {
   id: string;
@@ -285,35 +287,35 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   },
   setTheme(theme) {
     set({ theme });
-    void persistSettings({ theme }).catch(() => {});
+    persistSettingsSafely({ theme });
   },
   setAutoFetch(value) {
     set({ autoFetch: value });
-    void persistSettings({ autoFetch: value }).catch(() => {});
+    persistSettingsSafely({ autoFetch: value });
   },
   setAutoFetchIntervalSeconds(value) {
     set({ autoFetchIntervalSeconds: value });
-    void persistSettings({ autoFetchIntervalSeconds: value }).catch(() => {});
+    persistSettingsSafely({ autoFetchIntervalSeconds: value });
   },
   setSmartCommit(value) {
     set({ smartCommit: value });
-    void persistSettings({ smartCommit: value }).catch(() => {});
+    persistSettingsSafely({ smartCommit: value });
   },
   setStageAllOnCommit(value) {
     set({ stageAllOnCommit: value });
-    void persistSettings({ stageAllOnCommit: value }).catch(() => {});
+    persistSettingsSafely({ stageAllOnCommit: value });
   },
   setSignCommits(value) {
     set({ signCommits: value });
-    void persistSettings({ signCommits: value }).catch(() => {});
+    persistSettingsSafely({ signCommits: value });
   },
   setExternalEditorCommand(value) {
     set({ externalEditorCommand: value });
-    void persistSettings({ externalEditorCommand: value }).catch(() => {});
+    persistSettingsSafely({ externalEditorCommand: value });
   },
   setConfirmSyncBeforeOperation(value) {
     set({ confirmSyncBeforeOperation: value });
-    void persistSettings({ confirmSyncBeforeOperation: value }).catch(() => {});
+    persistSettingsSafely({ confirmSyncBeforeOperation: value });
   },
   addCommitIdentity(identity) {
     const nextIdentity = {
@@ -322,7 +324,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     };
     set((state) => {
       const commitIdentities = [...state.commitIdentities, nextIdentity];
-      void persistSettings({ commitIdentities }).catch(() => {});
+      persistSettingsSafely({ commitIdentities });
       return { commitIdentities };
     });
     return nextIdentity;
@@ -332,7 +334,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const commitIdentities = state.commitIdentities.map((item) =>
         item.id === id ? { ...identity, id } : item
       );
-      void persistSettings({ commitIdentities }).catch(() => {});
+      persistSettingsSafely({ commitIdentities });
       return { commitIdentities };
     });
   },
@@ -342,7 +344,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const repoIdentityAssignments = Object.fromEntries(
         Object.entries(state.repoIdentityAssignments).filter(([, identityId]) => identityId !== id)
       );
-      void persistSettings({ commitIdentities, repoIdentityAssignments }).catch(() => {});
+      persistSettingsSafely({ commitIdentities, repoIdentityAssignments });
       return { commitIdentities, repoIdentityAssignments };
     });
   },
@@ -354,7 +356,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       } else {
         delete repoIdentityAssignments[repoPath];
       }
-      void persistSettings({ repoIdentityAssignments }).catch(() => {});
+      persistSettingsSafely({ repoIdentityAssignments });
       return { repoIdentityAssignments };
     });
   },
@@ -364,13 +366,13 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         repoPath,
         ...state.recentRepositoryPaths.filter((path) => path !== repoPath)
       ].slice(0, 10);
-      void persistSettings({ recentRepositoryPaths }).catch(() => {});
+      persistSettingsSafely({ recentRepositoryPaths });
       return { recentRepositoryPaths };
     });
   },
   setAiCommitEnabled(value) {
     set({ aiCommitEnabled: value });
-    void persistSettings({ aiCommitEnabled: value }).catch(() => {});
+    persistSettingsSafely({ aiCommitEnabled: value });
   },
   setAiCommitProvider(value) {
     const config = useSettingsStore.getState().aiCommitProviderConfigs[value];
@@ -380,35 +382,40 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       aiCommitModel: config.model,
       aiCommitMaxDiffChars: config.maxDiffChars
     });
-    void persistSettings({ aiCommitProvider: value }).catch(() => {});
+    persistSettingsSafely({ aiCommitProvider: value });
     void loadAiApiKey(value).then((aiCommitApiKey) => set({ aiCommitApiKey }));
   },
   setAiCommitApiKey(value) {
     set({ aiCommitApiKey: value });
     const provider = useSettingsStore.getState().aiCommitProvider;
-    void setAiApiKey(provider, value).catch(() => {});
+    void setAiApiKey(provider, value).catch((error) =>
+      reportBackgroundError(error, {
+        operation: "Save AI API key",
+        title: "Settings save failed"
+      })
+    );
   },
   setAiCommitBaseUrl(value) {
     set((state) => {
       const aiCommitProviderConfigs = updateAiProviderConfig(state, { baseUrl: value });
-      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      persistSettingsSafely({ aiCommitProviderConfigs });
       return { aiCommitBaseUrl: value, aiCommitProviderConfigs };
     });
   },
   setAiCommitModel(value) {
     set((state) => {
       const aiCommitProviderConfigs = updateAiProviderConfig(state, { model: value });
-      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      persistSettingsSafely({ aiCommitProviderConfigs });
       return { aiCommitModel: value, aiCommitProviderConfigs };
     });
   },
   setAiCommitStyle(value) {
     set({ aiCommitStyle: value });
-    void persistSettings({ aiCommitStyle: value }).catch(() => {});
+    persistSettingsSafely({ aiCommitStyle: value });
   },
   setAiCommitIncludeBody(value) {
     set({ aiCommitIncludeBody: value });
-    void persistSettings({ aiCommitIncludeBody: value }).catch(() => {});
+    persistSettingsSafely({ aiCommitIncludeBody: value });
   },
   setAiCommitMaxDiffChars(value) {
     set((state) => {
@@ -416,7 +423,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const aiCommitProviderConfigs = updateAiProviderConfig(state, {
         maxDiffChars: aiCommitMaxDiffChars
       });
-      void persistSettings({ aiCommitProviderConfigs }).catch(() => {});
+      persistSettingsSafely({ aiCommitProviderConfigs });
       return { aiCommitMaxDiffChars, aiCommitProviderConfigs };
     });
   }
@@ -436,8 +443,13 @@ async function persistSettings(update: Partial<PersistedSettings>) {
   window.localStorage.setItem("gitpulse-settings", JSON.stringify({ ...parsed, ...update }));
 }
 
-function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+function persistSettingsSafely(update: Partial<PersistedSettings>) {
+  void persistSettings(update).catch((error) =>
+    reportBackgroundError(error, {
+      operation: "Save settings",
+      title: "Settings save failed"
+    })
+  );
 }
 
 function createIdentityId() {
@@ -597,9 +609,19 @@ async function migrateLegacyAiApiKey(
     return loadAiApiKey(provider);
   }
   if (isTauriRuntime()) {
-    await setAiApiKey(provider, legacyValue).catch(() => {});
+    await setAiApiKey(provider, legacyValue).catch((error) => {
+      reportBackgroundError(error, {
+        operation: "Migrate AI API key",
+        notify: false
+      });
+    });
     if (fromTauriStore && settingsStore) {
-      await settingsStore.delete("aiCommitApiKey").catch(() => {});
+      await settingsStore.delete("aiCommitApiKey").catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Delete legacy AI API key",
+          notify: false
+        });
+      });
     }
   } else {
     const existing = window.localStorage.getItem("gitpulse-settings");

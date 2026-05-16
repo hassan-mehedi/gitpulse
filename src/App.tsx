@@ -11,6 +11,8 @@ import { applyTheme } from "./lib/theme";
 import { useAutoFetch } from "./hooks/useAutoFetch";
 import { createId } from "./lib/ids";
 import { useOutputStore } from "./stores/output";
+import { isTauriRuntime } from "./lib/runtime";
+import { reportBackgroundError } from "./lib/errors";
 
 export default function App() {
   const initialize = useWorkspaceStore((state) => state.initialize);
@@ -49,7 +51,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    if (!isTauriRuntime()) {
       return;
     }
 
@@ -96,7 +98,12 @@ export default function App() {
         }
         dispose = unlisten;
       })
-      .catch(() => {});
+      .catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Listen for Git progress",
+          title: "Git progress listener failed"
+        });
+      });
 
     return () => {
       cancelled = true;

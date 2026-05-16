@@ -19,6 +19,8 @@ import { BranchPickerModal } from "../branches/BranchPickerModal";
 import { ShortcutReferenceModal } from "../shared/ShortcutReferenceModal";
 import { ConfirmModal } from "../shared/ConfirmModal";
 import { useGit } from "../../hooks/useGit";
+import { ignoreReportedError, reportBackgroundError } from "../../lib/errors";
+import { isTauriRuntime } from "../../lib/runtime";
 import { useRepo } from "../../hooks/useRepo";
 import {
   gitFetchAll,
@@ -63,7 +65,7 @@ export function AppShell() {
   }, [sidebarWidth]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    if (!isTauriRuntime()) {
       return;
     }
 
@@ -72,7 +74,12 @@ export function AppShell() {
         const next = activeRepo ? `${activeRepo.name} — GitPulse` : "GitPulse";
         return getCurrentWindow().setTitle(next);
       })
-      .catch(() => {});
+      .catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Set window title",
+          notify: false
+        });
+      });
   }, [activeRepo]);
 
   useEffect(() => {
@@ -302,7 +309,7 @@ export function AppShell() {
           void runGit(async () => {
             await gitPush(forcePushRepoPath, undefined, undefined, true);
             await refreshRepo(forcePushRepoPath);
-          }).catch(() => {});
+          }).catch(ignoreReportedError);
         }}
         onClose={() => setForcePushRepoPath(null)}
       />

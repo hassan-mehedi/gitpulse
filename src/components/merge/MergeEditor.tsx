@@ -318,6 +318,7 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
             <MergeResultPane
               content={resultDraft}
               hasConflictMarkers={hasConflictMarkers(resultDraft)}
+              isManualEdit={isResultEdited}
               activeConflict={activeConflict}
               label="Result"
               onChange={(value) => {
@@ -326,6 +327,8 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
               }}
               onChoose={chooseFor}
               regions={conflictRegions.map((segment) => segment.region)}
+              filePath={filePath}
+              theme={theme}
               bodyRef={(node) => {
                 paneRefs.current[2] = node;
               }}
@@ -488,9 +491,12 @@ function MergePane({
 interface MergeResultPaneProps {
   content: string;
   hasConflictMarkers: boolean;
+  isManualEdit: boolean;
   label: string;
   regions: Array<{ id: number; ours: string; theirs: string }>;
   activeConflict: number | null;
+  filePath: string;
+  theme: ReturnType<typeof useSettingsStore.getState>["theme"];
   bodyRef: (node: HTMLDivElement | null) => void;
   onScroll: () => void;
   onChange: (value: string) => void;
@@ -500,15 +506,19 @@ interface MergeResultPaneProps {
 function MergeResultPane({
   content,
   hasConflictMarkers: containsConflictMarkers,
+  isManualEdit,
   label,
   regions,
   activeConflict,
+  filePath,
+  theme,
   bodyRef,
   onScroll,
   onChange,
   onChoose
 }: MergeResultPaneProps) {
   const activeRegion = regions.find((region) => region.id === activeConflict) ?? regions[0];
+  const lineCount = Math.max(1, content.split("\n").length);
 
   function choose(choice: ConflictChoice) {
     if (!activeRegion) return;
@@ -520,7 +530,11 @@ function MergeResultPane({
       <div className="merge-pane__title">
         <span>{label}</span>
         <span className="merge-pane__title-status">
-          {containsConflictMarkers ? "contains conflict markers" : "editable"}
+          {containsConflictMarkers
+            ? "contains conflict markers"
+            : isManualEdit
+              ? "manual edit"
+              : "auto result"}
         </span>
       </div>
       <div className="merge-pane__body merge-pane__body--result" ref={bodyRef} onScroll={onScroll}>
@@ -562,12 +576,28 @@ function MergeResultPane({
             </span>
           </div>
         ) : null}
-        <textarea
-          className="merge-pane__textarea"
-          value={content}
-          onChange={(event) => onChange(event.target.value)}
-          spellCheck={false}
-        />
+        <div className="merge-result-editor">
+          <div className="merge-result-editor__gutter" aria-hidden>
+            {Array.from({ length: lineCount }, (_, index) => (
+              <span key={index}>{index + 1}</span>
+            ))}
+          </div>
+          <div className="merge-result-editor__surface">
+            <CodeBlock
+              content={content || " "}
+              filePath={filePath}
+              theme={theme}
+              className="merge-result-editor__highlight"
+            />
+            <textarea
+              className="merge-result-editor__textarea"
+              value={content}
+              onChange={(event) => onChange(event.target.value)}
+              rows={lineCount}
+              spellCheck={false}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );

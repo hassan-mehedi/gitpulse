@@ -130,7 +130,28 @@ export interface SubmoduleInfo {
 }
 
 export interface LfsStatus {
+  available: boolean;
+  pendingPushCount?: number;
+  pendingPullCount?: number;
   output: string;
+}
+
+export interface SparseCheckoutStatus {
+  enabled: boolean;
+  patterns: string[];
+}
+
+export interface PatchCreateResult {
+  patch: string;
+  fileCount: number;
+  hunkCount: number;
+  staged: boolean;
+}
+
+export interface PatchApplyResult {
+  summary: string;
+  fileCount: number;
+  hunkCount: number;
 }
 
 export interface LfsLockInfo {

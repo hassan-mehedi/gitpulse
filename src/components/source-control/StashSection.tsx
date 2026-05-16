@@ -9,6 +9,7 @@ import {
 } from "../../lib/git";
 import { useGit } from "../../hooks/useGit";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { reportBackgroundError } from "../../lib/errors";
 import type { Repository, StashEntry } from "../../types/git";
 
 interface StashSectionProps {
@@ -31,14 +32,27 @@ export function StashSection({ repo }: StashSectionProps) {
       .then((entries) => {
         if (!cancelled) setStashes(entries);
       })
-      .catch(() => {});
+      .catch((error) => {
+        reportBackgroundError(error, {
+          operation: "Load stashes",
+          repoPath: repo.path,
+          notify: false
+        });
+      });
     return () => {
       cancelled = true;
     };
   }, [repo.path, repo.stashCount]);
 
   async function reload() {
-    const entries = await gitStashList(repo.path).catch(() => [] as StashEntry[]);
+    const entries = await gitStashList(repo.path).catch((error) => {
+      reportBackgroundError(error, {
+        operation: "Reload stashes",
+        repoPath: repo.path,
+        notify: false
+      });
+      return [] as StashEntry[];
+    });
     setStashes(entries);
   }
 

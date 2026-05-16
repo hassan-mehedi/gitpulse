@@ -2,6 +2,7 @@ import { Codicon } from "../shared/Codicon";
 import { useRepo } from "../../hooks/useRepo";
 import { pickRepositoryDirectory } from "../../lib/openTarget";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { reportBackgroundError } from "../../lib/errors";
 
 export function RepoSelector() {
   const { activeRepo, repositories, setActiveRepo } = useRepo();
@@ -15,7 +16,12 @@ export function RepoSelector() {
       return;
     }
 
-    await loadTarget(selection).catch(() => {});
+    await loadTarget(selection).catch((error) =>
+      reportBackgroundError(error, {
+        operation: "Open repository",
+        title: "Open repository failed"
+      })
+    );
   }
 
   async function handleAddRepository() {
@@ -24,7 +30,12 @@ export function RepoSelector() {
       return;
     }
 
-    await addTarget(selection).catch(() => {});
+    await addTarget(selection).catch((error) =>
+      reportBackgroundError(error, {
+        operation: "Add repository",
+        title: "Add repository failed"
+      })
+    );
   }
 
   return (

@@ -851,20 +851,69 @@
   color: var(--vscode-descriptionForeground);
 }
 
-.merge-pane__textarea {
+.merge-result-editor {
+  display: grid;
+  grid-template-columns: minmax(40px, auto) minmax(0, 1fr);
   flex: 1;
-  min-height: 0;
-  width: 100%;
-  resize: none;
-  border: 0;
-  outline: none;
-  padding: 8px 12px;
+  min-width: 0;
+  align-items: stretch;
   background: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
+}
+
+.merge-result-editor__gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 40px;
+  padding: 8px 10px 8px 8px;
+  color: var(--vscode-editorLineNumber-foreground);
+  background: var(--vscode-editorGutter-background, var(--vscode-editor-background));
+  user-select: none;
+}
+
+.merge-result-editor__gutter span {
+  min-height: 18px;
+}
+
+.merge-result-editor__surface {
+  position: relative;
+  min-width: 0;
+}
+
+.merge-result-editor__highlight,
+.merge-result-editor__textarea {
+  margin: 0;
+  padding: 8px 12px;
   font: inherit;
   line-height: inherit;
   white-space: pre;
   tab-size: 2;
+}
+
+.merge-result-editor__highlight {
+  min-height: 100%;
+  pointer-events: none;
+  color: var(--vscode-editor-foreground);
+}
+
+.merge-result-editor__textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  resize: none;
+  overflow: hidden;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground));
+}
+
+.merge-result-editor__textarea::selection {
+  color: transparent;
+  background: var(--vscode-editor-selectionBackground);
 }
 
 /* Conflict block — shared across panes */

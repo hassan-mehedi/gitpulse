@@ -21,6 +21,7 @@ import {
 import { GraphToolbar } from "./GraphToolbar";
 import { InteractiveRebaseModal } from "../rebase/InteractiveRebaseModal";
 import { Modal } from "../shared/Modal";
+import { ignoreReportedError } from "../../lib/errors";
 import type { ActivityView, GraphNode, ReflogEntry } from "../../types/git";
 
 // VS Code-style branch lane palette.
@@ -105,7 +106,9 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
     if (!selectedRepo) return;
     setActiveRepo(selectedRepo.id);
     const timer = window.setTimeout(() => {
-      void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
+      void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(
+        ignoreReportedError
+      );
     }, pathQuery ? 250 : 0);
     return () => window.clearTimeout(timer);
   }, [loadGraph, pathQuery, runGit, selectedRepo?.id, selectedRepo?.path, selectedRepo?.branch, selectedRepo?.headSha, setActiveRepo]);
@@ -173,7 +176,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
   async function handleSelectCommit(sha: string) {
     if (!selectedRepo) return;
     setActiveRepo(selectedRepo.id);
-    await runGit(() => selectCommit(selectedRepo, sha)).catch(() => {});
+    await runGit(() => selectCommit(selectedRepo, sha)).catch(ignoreReportedError);
   }
 
   function handleCheckout(node: GraphNode) {
@@ -184,7 +187,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await gitSwitchBranch(selectedRepo.path, target);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function handleCherryPick(node: GraphNode) {
@@ -194,7 +197,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await gitCherryPick(selectedRepo.path, node.sha);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function handleRevert(node: GraphNode) {
@@ -203,7 +206,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await gitRevertCommit(selectedRepo.path, node.sha);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function handleReset() {
@@ -213,7 +216,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await gitResetToCommit(selectedRepo.path, sha, mode);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   async function openReflog() {
@@ -248,7 +251,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
       await gitRebaseInteractive(selectedRepo.path, base.sha, todo);
       await refreshRepo(selectedRepo.path);
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function handleInputSubmit(value: string) {
@@ -262,7 +265,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
         await gitCreateTag(repoPath, value, node.sha);
       }
       await loadGraph(selectedRepo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   if (!selectedRepo) {
@@ -287,13 +290,17 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
         sinceDays={sinceDays}
         onSinceDaysChange={setSinceDays}
         onReload={() => {
-          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
+          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(
+            ignoreReportedError
+          );
         }}
         query={query}
         includeAll={includeAll}
         onIncludeAllChange={(value) => {
           setIncludeAll(value);
-          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(() => {});
+          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(
+            ignoreReportedError
+          );
         }}
         activeRepo={selectedRepo}
         onPull={() => {
@@ -301,14 +308,14 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
             await gitPull(selectedRepo.path);
             await refreshRepo(selectedRepo.path);
             await loadGraph(selectedRepo);
-          }).catch(() => {});
+          }).catch(ignoreReportedError);
         }}
         onPush={() => {
           void runGit(async () => {
             await gitPush(selectedRepo.path);
             await refreshRepo(selectedRepo.path);
             await loadGraph(selectedRepo);
-          }).catch(() => {});
+          }).catch(ignoreReportedError);
         }}
         onForcePush={() => setConfirmForcePush(true)}
         availableRefs={availableRefs}
@@ -334,7 +341,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
             await gitPush(selectedRepo.path, undefined, undefined, true);
             await refreshRepo(selectedRepo.path);
             await loadGraph(selectedRepo);
-          }).catch(() => {});
+          }).catch(ignoreReportedError);
         }}
         onClose={() => setConfirmForcePush(false)}
       />
@@ -651,7 +658,7 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
             void runGit(async () => {
               await refreshRepo(selectedRepo.path);
               await loadGraph(selectedRepo);
-            }).catch(() => {});
+            }).catch(ignoreReportedError);
           }}
         />
       ) : null}

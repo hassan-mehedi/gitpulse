@@ -37,14 +37,22 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import type {
   GitHookInfo,
   LfsLockInfo,
+  PatchCreateResult,
   ProgressPayload,
   RemoteInfo,
+  SparseCheckoutStatus,
   SubmoduleInfo,
   TagInfo,
   CommitInfo,
   WorktreeInfo
 } from "../../types/git";
 import { useOutputStore } from "../../stores/output";
+import { ignoreReportedError, reportBackgroundError } from "../../lib/errors";
+import {
+  submoduleStatusMeta,
+  summarizeLfsStatus,
+  summarizeSparseCheckout
+} from "../../lib/miscViews";
 
 type Section =
   | "output"
@@ -83,35 +91,60 @@ export function MiscPanel() {
   const [text, setText] = useState("");
   const [secondary, setSecondary] = useState("");
   const [result, setResult] = useState("");
+  const [remoteName, setRemoteName] = useState("");
+  const [remoteValue, setRemoteValue] = useState("");
+  const [tagName, setTagName] = useState("");
+  const [tagRemote, setTagRemote] = useState("origin");
+  const [worktreePath, setWorktreePath] = useState("");
+  const [worktreeBranch, setWorktreeBranch] = useState("");
+  const [selectedHook, setSelectedHook] = useState<GitHookInfo | null>(null);
+  const [hookContent, setHookContent] = useState("");
+  const [patchInput, setPatchInput] = useState("");
+  const [patchOutput, setPatchOutput] = useState<PatchCreateResult | null>(null);
+  const [timelinePath, setTimelinePath] = useState("");
+  const [selectedTimelineCommit, setSelectedTimelineCommit] = useState<CommitInfo | null>(null);
   const [hooks, setHooks] = useState<GitHookInfo[]>([]);
   const [remotes, setRemotes] = useState<RemoteInfo[]>([]);
   const [tags, setTags] = useState<TagInfo[]>([]);
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [submodules, setSubmodules] = useState<SubmoduleInfo[]>([]);
-  const [sparsePaths, setSparsePaths] = useState<string[]>([]);
+  const [sparseStatus, setSparseStatus] = useState<SparseCheckoutStatus>({
+    enabled: false,
+    patterns: []
+  });
   const [lfsLocks, setLfsLocks] = useState<LfsLockInfo[]>([]);
-  const [lfsStatusText, setLfsStatusText] = useState("");
+  const [lfsStatus, setLfsStatus] = useState({
+    available: false,
+    output: ""
+  });
   const [timelineCommits, setTimelineCommits] = useState<CommitInfo[]>([]);
   const repo = useMemo(
     () => repositories.find((item) => item.id === activeRepoId) ?? repositories[0] ?? null,
     [activeRepoId, repositories]
   );
   const activeSection = sections.find((item) => item.id === section) ?? sections[0];
+  const lfsSummary = summarizeLfsStatus(lfsStatus, lfsLocks);
 
   useEffect(() => {
     if (!repo) return;
     if (section === "remotes") {
-      void reloadRemotes().catch(() => {});
+      void reloadRemotes().catch((error) => reportSectionLoadError(error, "Load remotes", repo.path));
     } else if (section === "tags") {
-      void reloadTags().catch(() => {});
+      void reloadTags().catch((error) => reportSectionLoadError(error, "Load tags", repo.path));
     } else if (section === "worktrees") {
-      void reloadWorktrees().catch(() => {});
+      void reloadWorktrees().catch((error) =>
+        reportSectionLoadError(error, "Load worktrees", repo.path)
+      );
     } else if (section === "submodules") {
-      void reloadSubmodules().catch(() => {});
+      void reloadSubmodules().catch((error) =>
+        reportSectionLoadError(error, "Load submodules", repo.path)
+      );
     } else if (section === "sparse") {
-      void reloadSparsePaths().catch(() => {});
+      void reloadSparsePaths().catch((error) =>
+        reportSectionLoadError(error, "Load sparse checkout", repo.path)
+      );
     } else if (section === "lfs") {
-      void reloadLfs().catch(() => {});
+      void reloadLfs().catch((error) => reportSectionLoadError(error, "Load LFS", repo.path));
     }
   }, [repo?.path, section]);
 
@@ -123,7 +156,7 @@ export function MiscPanel() {
       if (typeof value === "string") setResult(value);
       else setResult(JSON.stringify(value, null, 2));
       await refreshRepo(repo.path);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   async function reloadRemotes() {
@@ -157,7 +190,7 @@ export function MiscPanel() {
   async function reloadSparsePaths() {
     if (!repo) return [];
     const next = await gitSparseList(repo.path);
-    setSparsePaths(next);
+    setSparseStatus(next);
     return next;
   }
 
@@ -167,16 +200,32 @@ export function MiscPanel() {
       gitLfsStatus(repo.path),
       gitLfsLocks(repo.path)
     ]);
-    setLfsStatusText(status.output);
+    setLfsStatus(status);
     setLfsLocks(locks);
     return locks;
   }
 
   async function reloadTimeline() {
     if (!repo) return [];
-    const next = await gitLog(repo.path, 100, undefined, text || undefined);
+    const next = await gitLog(repo.path, 100, undefined, timelinePath || undefined);
     setTimelineCommits(next);
+    setSelectedTimelineCommit(next[0] ?? null);
     return next;
+  }
+
+  async function loadHookContent(hook: GitHookInfo) {
+    if (!repo) return "";
+    const content = await gitHookRead(repo.path, hook.name);
+    setSelectedHook(hook);
+    setHookContent(content);
+    return content;
+  }
+
+  async function createPatch(staged: boolean) {
+    if (!repo) return "";
+    const patch = await gitPatchCreate(repo.path, staged);
+    setPatchOutput(patch);
+    return patch;
   }
 
   return (
@@ -221,29 +270,59 @@ export function MiscPanel() {
                 </ToolCard>
               ) : section === "submodules" ? (
                 <ToolCard title="Submodules">
+                  <SummaryStrip
+                    items={[
+                      {
+                        label: "Total",
+                        value: String(submodules.length)
+                      },
+                      {
+                        label: "Needs attention",
+                        value: String(
+                          submodules.filter(
+                            (submodule) => submoduleStatusMeta(submodule).tone !== "success"
+                          ).length
+                        )
+                      }
+                    ]}
+                  />
                   <div className="misc-panel__actions">
                     <button className="vscode-button" onClick={() => run(reloadSubmodules)} type="button">Refresh</button>
                     <button className="vscode-button" onClick={() => run(async () => { await gitSubmoduleInit(repo.path); return reloadSubmodules(); })} type="button">Init</button>
                     <button className="vscode-button" onClick={() => run(async () => { await gitSubmoduleUpdate(repo.path); return reloadSubmodules(); })} type="button">Update</button>
                   </div>
-                  <ToolRows>
-                    {submodules.map((submodule) => (
-                      <ToolRow
-                        key={submodule.path}
-                        title={submodule.path}
-                        detail={`${submodule.status} ${submodule.sha.slice(0, 7)}${submodule.description ? ` | ${submodule.description}` : ""}`}
-                        actions={null}
-                      />
-                    ))}
-                  </ToolRows>
+                  {submodules.length === 0 ? (
+                    <EmptyToolState>No submodules detected in this repository.</EmptyToolState>
+                  ) : (
+                    <ToolRows>
+                      {submodules.map((submodule) => {
+                        const meta = submoduleStatusMeta(submodule);
+                        return (
+                          <ToolRow
+                            key={submodule.path}
+                            title={submodule.path}
+                            detail={`${meta.label} | ${submodule.sha.slice(0, 7)}${submodule.description ? ` | ${submodule.description}` : ""}`}
+                            actions={<StatusPill tone={meta.tone}>{meta.label}</StatusPill>}
+                          />
+                        );
+                      })}
+                    </ToolRows>
+                  )}
                 </ToolCard>
               ) : section === "sparse" ? (
                 <ToolCard title="Sparse Checkout">
-                  <ToolRows>
-                    {sparsePaths.map((path) => (
-                      <ToolRow key={path} title={path} detail="included path" actions={null} />
-                    ))}
-                  </ToolRows>
+                  <SummaryStrip items={[{ label: "State", value: summarizeSparseCheckout(sparseStatus) }]} />
+                  {sparseStatus.patterns.length === 0 ? (
+                    <EmptyToolState>
+                      No sparse paths configured. Add one path per line to limit the working tree.
+                    </EmptyToolState>
+                  ) : (
+                    <ToolRows>
+                      {sparseStatus.patterns.map((path) => (
+                        <ToolRow key={path} title={path} detail="Included path" actions={null} />
+                      ))}
+                    </ToolRows>
+                  )}
                   <textarea className="misc-panel__textarea" placeholder="one path per line" value={text} onChange={(e) => setText(e.target.value)} />
                   <div className="misc-panel__actions">
                     <button className="vscode-button" onClick={() => run(reloadSparsePaths)} type="button">Refresh</button>
@@ -253,19 +332,42 @@ export function MiscPanel() {
                 </ToolCard>
               ) : section === "lfs" ? (
                 <ToolCard title="Git LFS">
-                  {lfsStatusText ? <pre className="misc-panel__compact-result">{lfsStatusText}</pre> : null}
-                  <ToolRows>
-                    {lfsLocks.map((lock) => (
-                      <ToolRow
-                        key={lock.id || lock.path}
-                        title={lock.path}
-                        detail={`${lock.owner}${lock.id ? ` | ${lock.id}` : ""}`}
-                        actions={
-                          <button className="vscode-button" onClick={() => run(async () => { await gitLfsUnlock(repo.path, lock.path); return reloadLfs(); })} type="button">Unlock</button>
-                        }
-                      />
-                    ))}
-                  </ToolRows>
+                  <SummaryStrip
+                    items={[
+                      { label: "Availability", value: lfsSummary.available ? "Available" : "Unavailable" },
+                      { label: "Locks", value: String(lfsSummary.lockCount) },
+                      {
+                        label: "Pending push",
+                        value: lfsSummary.pendingPushCount === null ? "-" : String(lfsSummary.pendingPushCount)
+                      },
+                      {
+                        label: "Pending pull",
+                        value: lfsSummary.pendingPullCount === null ? "-" : String(lfsSummary.pendingPullCount)
+                      }
+                    ]}
+                  />
+                  {lfsLocks.length === 0 ? (
+                    <EmptyToolState>No LFS locks reported.</EmptyToolState>
+                  ) : (
+                    <ToolRows>
+                      {lfsLocks.map((lock) => (
+                        <ToolRow
+                          key={lock.id || lock.path}
+                          title={lock.path}
+                          detail={`${lock.owner}${lock.id ? ` | ${lock.id}` : ""}`}
+                          actions={
+                            <button className="vscode-button" onClick={() => run(async () => { await gitLfsUnlock(repo.path, lock.path); return reloadLfs(); })} type="button">Unlock</button>
+                          }
+                        />
+                      ))}
+                    </ToolRows>
+                  )}
+                  {lfsSummary.hasRawOutput ? (
+                    <details className="misc-panel__details">
+                      <summary>Show raw LFS status</summary>
+                      <pre className="misc-panel__compact-result">{lfsStatus.output}</pre>
+                    </details>
+                  ) : null}
                   <input className="settings-control" placeholder="file path" value={text} onChange={(e) => setText(e.target.value)} />
                   <div className="misc-panel__actions">
                     <button className="vscode-button" onClick={() => run(reloadLfs)} type="button">Refresh</button>
@@ -291,14 +393,27 @@ export function MiscPanel() {
                       />
                     ))}
                   </ToolRows>
-                  <input className="settings-control" placeholder="remote name" value={text} onChange={(e) => setText(e.target.value)} />
-                  <input className="settings-control" placeholder="url or new name" value={secondary} onChange={(e) => setSecondary(e.target.value)} />
-                  <div className="misc-panel__actions">
-                    <button className="vscode-button" onClick={() => run(async () => { await gitAddRemote(repo.path, text, secondary); return reloadRemotes(); })} type="button">Add Remote</button>
-                    <button className="vscode-button" onClick={() => run(async () => { await gitRenameRemote(repo.path, text, secondary); return reloadRemotes(); })} type="button">Rename Remote</button>
-                    <button className="vscode-button" onClick={() => run(async () => { await gitRemoteSetUrl(repo.path, text, secondary, false); return reloadRemotes(); })} type="button">Set Fetch URL</button>
-                    <button className="vscode-button" onClick={() => run(async () => { await gitRemoteSetUrl(repo.path, text, secondary, true); return reloadRemotes(); })} type="button">Set Push URL</button>
-                  </div>
+                  <ToolForm
+                    title="Manage Remote"
+                    fields={
+                      <>
+                        <LabeledField label="Remote name">
+                          <input className="settings-control" placeholder="origin" value={remoteName} onChange={(e) => setRemoteName(e.target.value)} />
+                        </LabeledField>
+                        <LabeledField label="URL or new name">
+                          <input className="settings-control" placeholder="git@github.com:org/repo.git" value={remoteValue} onChange={(e) => setRemoteValue(e.target.value)} />
+                        </LabeledField>
+                      </>
+                    }
+                    actions={
+                      <>
+                        <button className="vscode-button" onClick={() => run(async () => { await gitAddRemote(repo.path, remoteName, remoteValue); return reloadRemotes(); })} type="button">Add</button>
+                        <button className="vscode-button" onClick={() => run(async () => { await gitRenameRemote(repo.path, remoteName, remoteValue); return reloadRemotes(); })} type="button">Rename</button>
+                        <button className="vscode-button" onClick={() => run(async () => { await gitRemoteSetUrl(repo.path, remoteName, remoteValue, false); return reloadRemotes(); })} type="button">Set Fetch URL</button>
+                        <button className="vscode-button" onClick={() => run(async () => { await gitRemoteSetUrl(repo.path, remoteName, remoteValue, true); return reloadRemotes(); })} type="button">Set Push URL</button>
+                      </>
+                    }
+                  />
                 </ToolCard>
               ) : section === "tags" ? (
                 <ToolCard title="Tags">
@@ -313,16 +428,29 @@ export function MiscPanel() {
                         detail={`${tag.sha.slice(0, 7)}${tag.message ? ` | ${tag.message}` : ""}`}
                         actions={
                           <>
-                            <button className="vscode-button" onClick={() => run(() => gitPushTag(repo.path, secondary || "origin", tag.name))} type="button">Push</button>
+                            <button className="vscode-button" onClick={() => run(() => gitPushTag(repo.path, tagRemote || "origin", tag.name))} type="button">Push</button>
                             <button className="vscode-button" onClick={() => run(async () => { await gitDeleteTag(repo.path, tag.name); return reloadTags(); })} type="button">Delete</button>
                           </>
                         }
                       />
                     ))}
                   </ToolRows>
-                  <input className="settings-control" placeholder="tag name" value={text} onChange={(e) => setText(e.target.value)} />
-                  <input className="settings-control" placeholder="remote for push (default origin)" value={secondary} onChange={(e) => setSecondary(e.target.value)} />
-                  <button className="vscode-button" onClick={() => run(async () => { await gitCreateTag(repo.path, text); return reloadTags(); })} type="button">Create Tag</button>
+                  <ToolForm
+                    title="Create / Push"
+                    fields={
+                      <>
+                        <LabeledField label="Tag name">
+                          <input className="settings-control" placeholder="v1.0.0" value={tagName} onChange={(e) => setTagName(e.target.value)} />
+                        </LabeledField>
+                        <LabeledField label="Push remote">
+                          <input className="settings-control" placeholder="origin" value={tagRemote} onChange={(e) => setTagRemote(e.target.value)} />
+                        </LabeledField>
+                      </>
+                    }
+                    actions={
+                      <button className="vscode-button" onClick={() => run(async () => { await gitCreateTag(repo.path, tagName); return reloadTags(); })} type="button">Create Tag</button>
+                    }
+                  />
                 </ToolCard>
               ) : section === "worktrees" ? (
                 <ToolCard title="Worktrees">
@@ -344,9 +472,22 @@ export function MiscPanel() {
                       />
                     ))}
                   </ToolRows>
-                  <input className="settings-control" placeholder="new worktree path" value={text} onChange={(e) => setText(e.target.value)} />
-                  <input className="settings-control" placeholder="branch (optional)" value={secondary} onChange={(e) => setSecondary(e.target.value)} />
-                  <button className="vscode-button" onClick={() => run(async () => { await gitAddWorktree(repo.path, text, secondary || undefined); return reloadWorktrees(); })} type="button">Add Worktree</button>
+                  <ToolForm
+                    title="Add Worktree"
+                    fields={
+                      <>
+                        <LabeledField label="Path">
+                          <input className="settings-control" placeholder="../repo-feature" value={worktreePath} onChange={(e) => setWorktreePath(e.target.value)} />
+                        </LabeledField>
+                        <LabeledField label="Branch (optional)">
+                          <input className="settings-control" placeholder="feature/name" value={worktreeBranch} onChange={(e) => setWorktreeBranch(e.target.value)} />
+                        </LabeledField>
+                      </>
+                    }
+                    actions={
+                      <button className="vscode-button" onClick={() => run(async () => { await gitAddWorktree(repo.path, worktreePath, worktreeBranch || undefined); return reloadWorktrees(); })} type="button">Add Worktree</button>
+                    }
+                  />
                 </ToolCard>
               ) : section === "hooks" ? (
                 <ToolCard title="Git Hooks">
@@ -360,37 +501,67 @@ export function MiscPanel() {
                         title={hook.name}
                         detail={`${hook.executable ? "executable" : "not executable"} | ${hook.path}`}
                         actions={
-                          <button className="vscode-button" onClick={() => run(() => gitHookRead(repo.path, hook.name))} type="button">View</button>
+                          <button className="vscode-button" onClick={() => run(() => loadHookContent(hook))} type="button">View</button>
                         }
                       />
                     ))}
                   </ToolRows>
+                  <DetailPane
+                    title={selectedHook ? selectedHook.name : "Hook details"}
+                    empty="Select a hook to inspect its contents."
+                    content={selectedHook ? hookContent : ""}
+                  />
                 </ToolCard>
               ) : section === "patches" ? (
                 <ToolCard title="Patch Import / Export">
                   <div className="misc-panel__field-label">Export</div>
                   <div className="misc-panel__actions">
-                    <button className="vscode-button" onClick={() => run(() => gitPatchCreate(repo.path, false))} type="button">Create Working Patch</button>
-                    <button className="vscode-button" onClick={() => run(() => gitPatchCreate(repo.path, true))} type="button">Create Staged Patch</button>
+                    <button className="vscode-button" onClick={() => run(() => createPatch(false))} type="button">Create Working Patch</button>
+                    <button className="vscode-button" onClick={() => run(() => createPatch(true))} type="button">Create Staged Patch</button>
                   </div>
+                  <DetailPane
+                    title="Generated patch"
+                    empty="Create a patch to preview it here."
+                    content={patchOutput?.patch ?? ""}
+                  />
+                  {patchOutput ? (
+                    <SummaryStrip
+                      items={[
+                        { label: "Files", value: String(patchOutput.fileCount) },
+                        { label: "Hunks", value: String(patchOutput.hunkCount) },
+                        { label: "Source", value: patchOutput.staged ? "Staged" : "Working tree" }
+                      ]}
+                    />
+                  ) : null}
                   <div className="misc-panel__field-label">Import</div>
-                  <textarea className="misc-panel__textarea" placeholder="Paste patch text to apply" value={text} onChange={(e) => setText(e.target.value)} />
-                  <button className="vscode-button" onClick={() => run(() => gitPatchApply(repo.path, text))} type="button">Apply Patch</button>
+                  <textarea className="misc-panel__textarea" placeholder="Paste patch text to apply" value={patchInput} onChange={(e) => setPatchInput(e.target.value)} />
+                  <button className="vscode-button" onClick={() => run(() => gitPatchApply(repo.path, patchInput))} type="button">Apply Patch</button>
                 </ToolCard>
               ) : (
                 <ToolCard title="Timeline">
-                  <input className="settings-control" placeholder="file path" value={text} onChange={(e) => setText(e.target.value)} />
-                  <button className="vscode-button" onClick={() => run(reloadTimeline)} type="button">Load Timeline</button>
+                  <ToolForm
+                    title="Filter Timeline"
+                    fields={
+                      <LabeledField label="File path (optional)">
+                        <input className="settings-control" placeholder="src/components/App.tsx" value={timelinePath} onChange={(e) => setTimelinePath(e.target.value)} />
+                      </LabeledField>
+                    }
+                    actions={<button className="vscode-button" onClick={() => run(reloadTimeline)} type="button">Load Timeline</button>}
+                  />
                   <ToolRows>
                     {timelineCommits.map((commit) => (
-                      <ToolRow
+                      <button
+                        className={`misc-panel__timeline-row${selectedTimelineCommit?.sha === commit.sha ? " is-selected" : ""}`}
                         key={commit.sha}
-                        title={commit.message}
-                        detail={`${commit.shortSha} | ${commit.author} | ${commit.date}`}
-                        actions={null}
-                      />
+                        onClick={() => setSelectedTimelineCommit(commit)}
+                        type="button"
+                      >
+                        <span>{commit.message}</span>
+                        <small>{`${commit.shortSha} | ${commit.author} | ${commit.date}`}</small>
+                      </button>
                     ))}
                   </ToolRows>
+                  <TimelineDetail commit={selectedTimelineCommit} />
                 </ToolCard>
               )}
               <pre className="misc-panel__result">{result || "No output yet."}</pre>
@@ -413,6 +584,107 @@ function ToolCard({ title, children }: { title: string; children: React.ReactNod
 
 function ToolRows({ children }: { children: React.ReactNode }) {
   return <div className="misc-panel__rows">{children}</div>;
+}
+
+function SummaryStrip({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="misc-panel__summary">
+      {items.map((item) => (
+        <div key={item.label} className="misc-panel__summary-item">
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyToolState({ children }: { children: React.ReactNode }) {
+  return <div className="misc-panel__empty">{children}</div>;
+}
+
+function ToolForm({
+  title,
+  fields,
+  actions
+}: {
+  title: string;
+  fields: React.ReactNode;
+  actions: React.ReactNode;
+}) {
+  return (
+    <section className="misc-panel__form">
+      <div className="misc-panel__form-title">{title}</div>
+      <div className="misc-panel__form-grid">{fields}</div>
+      <div className="misc-panel__actions">{actions}</div>
+    </section>
+  );
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="misc-panel__field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function DetailPane({
+  title,
+  empty,
+  content
+}: {
+  title: string;
+  empty: string;
+  content: string;
+}) {
+  return (
+    <section className="misc-panel__detail">
+      <h4>{title}</h4>
+      {content ? <pre>{content}</pre> : <div>{empty}</div>}
+    </section>
+  );
+}
+
+function TimelineDetail({ commit }: { commit: CommitInfo | null }) {
+  if (!commit) {
+    return <EmptyToolState>Load the timeline and select a commit to inspect it.</EmptyToolState>;
+  }
+
+  return (
+    <section className="misc-panel__timeline-detail">
+      <h4>{commit.message}</h4>
+      <dl>
+        <div>
+          <dt>Commit</dt>
+          <dd>{commit.sha}</dd>
+        </div>
+        <div>
+          <dt>Author</dt>
+          <dd>{commit.author}</dd>
+        </div>
+        <div>
+          <dt>Date</dt>
+          <dd>{commit.date}</dd>
+        </div>
+        <div>
+          <dt>Refs</dt>
+          <dd>{commit.refs.join(", ") || "-"}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function StatusPill({
+  children,
+  tone
+}: {
+  children: React.ReactNode;
+  tone: "success" | "warning" | "danger";
+}) {
+  return <span className={`misc-panel__pill misc-panel__pill--${tone}`}>{children}</span>;
 }
 
 function ToolRow({
@@ -451,4 +723,12 @@ function OutputPanel({ output }: { output: ProgressPayload[] }) {
       </pre>
     </div>
   );
+}
+
+function reportSectionLoadError(error: unknown, operation: string, repoPath: string) {
+  reportBackgroundError(error, {
+    operation,
+    repoPath,
+    notify: false
+  });
 }

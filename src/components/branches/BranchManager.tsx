@@ -29,6 +29,7 @@ import { DiffHunk } from "../diff/DiffHunk";
 import { useSettingsStore } from "../../stores/settings";
 import { findTrackedLocalBranch, inferLocalBranchName } from "../../lib/branches";
 import { useGit } from "../../hooks/useGit";
+import { ignoreReportedError } from "../../lib/errors";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { BranchCompare, BranchInfo, FileDiff, Repository, UserInfo } from "../../types/git";
 import { BranchRow } from "./BranchRow";
@@ -175,7 +176,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
       await operation();
       await refreshRepo(repo.path);
       await reloadRepo(repo);
-    }).catch(() => {});
+    }).catch(ignoreReportedError);
   }
 
   function switchBranch(repo: Repository, branches: BranchInfo[], branch: BranchInfo) {

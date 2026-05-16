@@ -2,6 +2,10 @@
 name = "gitpulse"
 version = "0.1.0"
 edition = "2021"
+description = "A VS Code-inspired Git GUI built with Tauri, Rust, and React."
+authors = ["hassan-mehedi"]
+license = "MIT"
+repository = "git@github.com:hassan-mehedi/gitpulse.git"
 
 [lib]
 name = "gitpulse_lib"
