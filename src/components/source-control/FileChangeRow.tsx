@@ -60,6 +60,7 @@ function FileChangeRowImpl({
     change.oldPath && (change.status === "R" || change.status === "C")
       ? `${change.oldPath.split("/").pop() ?? change.oldPath} -> ${name}`
       : name;
+  const discardLabel = change.status === "?" ? "Delete Untracked Item" : "Discard Changes";
 
   return (
     <div
@@ -107,8 +108,8 @@ function FileChangeRowImpl({
                 event.stopPropagation();
                 onDiscard(repo, change);
               }}
-              title="Discard Changes"
-              aria-label="Discard Changes"
+              title={discardLabel}
+              aria-label={discardLabel}
               type="button"
             >
               <Codicon name="discard" size={14} />

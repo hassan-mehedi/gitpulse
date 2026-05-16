@@ -8,6 +8,7 @@ import { useSettingsStore } from "../../stores/settings";
 import {
   gitAddToGitignore,
   gitClone,
+  gitCleanUntracked,
   gitDiffPatchFile,
   gitDiscardFile,
   gitInit,
@@ -127,6 +128,18 @@ export function SourceControlPanel({
     (repo: Repository, change: FileChange) => {
       setActiveRepo(repo.id);
       runGit(async () => {
+        if (change.status === "?") {
+          await gitCleanUntracked(repo.path, [change.path]);
+          await refreshRepo(repo.path);
+          pushNotification({
+            id: createId(),
+            tone: "info",
+            title: "Untracked item deleted",
+            message: change.path
+          });
+          return;
+        }
+
         const patch =
           change.status === "?" ? "" : await gitDiffPatchFile(repo.path, change.path);
         await gitDiscardFile(repo.path, change.path);
@@ -523,7 +536,7 @@ export function SourceControlPanel({
                 {
                   danger: true,
                   disabled: menuTarget.staged,
-                  label: "Discard Changes",
+                  label: menuTarget.change.status === "?" ? "Delete Untracked Item" : "Discard Changes",
                   onSelect: () => requestDiscard(menuTarget.repo, menuTarget.change)
                 }
               ]
@@ -556,14 +569,21 @@ export function SourceControlPanel({
       />
       <ConfirmModal
         isOpen={discardTarget !== null}
-        title="Discard Changes"
+        title={discardTarget?.change.status === "?" ? "Delete Untracked Item" : "Discard Changes"}
         body={
-          <>
-            Discard changes in <strong>{discardTarget?.change.path}</strong>? Tracked changes can be
-            restored from the notification that appears after discard.
-          </>
+          discardTarget?.change.status === "?" ? (
+            <>
+              Permanently delete untracked file or folder <strong>{discardTarget.change.path}</strong>?
+              Folders are deleted recursively. This cannot be undone by GitPulse.
+            </>
+          ) : (
+            <>
+              Discard changes in <strong>{discardTarget?.change.path}</strong>? Tracked changes can be
+              restored from the notification that appears after discard.
+            </>
+          )
         }
-        confirmLabel="Discard"
+        confirmLabel={discardTarget?.change.status === "?" ? "Delete Permanently" : "Discard"}
         danger
         onConfirm={() => {
           if (discardTarget) {

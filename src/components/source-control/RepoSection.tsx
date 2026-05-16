@@ -224,9 +224,9 @@ export function RepoSection({
       />
       <ConfirmModal
         isOpen={confirmDiscardAll}
-        title="Discard All Changes"
-        body="Discard all unstaged changes? Tracked changes can be restored from the notification that appears after discard."
-        confirmLabel="Discard All"
+        title="Discard All Tracked Changes"
+        body="Discard all unstaged tracked changes? They can be restored from the notification that appears after discard."
+        confirmLabel="Discard Tracked"
         danger
         onConfirm={discardAllWithUndo}
         onClose={() => setConfirmDiscardAll(false)}
@@ -295,7 +295,7 @@ export function RepoSection({
               actions={[
                 {
                   icon: "discard",
-                  label: "Discard All Changes",
+                  label: "Discard All Tracked Changes",
                   onClick: () => setConfirmDiscardAll(true)
                 },
                 {

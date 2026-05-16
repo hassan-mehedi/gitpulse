@@ -575,6 +575,10 @@ export async function gitDiscardAll(repoPath: string): Promise<void> {
   return gitInvoke("git_discard_all", { repoPath });
 }
 
+export async function gitCleanUntracked(repoPath: string, paths: string[]): Promise<void> {
+  return gitInvoke("git_clean_untracked", { repoPath, paths });
+}
+
 export async function gitDiffPatchFile(repoPath: string, file: string): Promise<string> {
   return gitInvoke("git_diff_patch_file", { repoPath, file });
 }

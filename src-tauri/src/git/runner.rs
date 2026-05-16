@@ -11,8 +11,8 @@ fn emit_output(repo_path: &Path, args: &[&str], message: String, status: &str) {
     let payload = ProgressPayload {
         repo_path: repo_path.display().to_string(),
         operation: args.first().copied().unwrap_or("git").to_string(),
-        command: args.iter().map(|arg| (*arg).to_string()).collect(),
-        message,
+        command: redact_args(args),
+        message: redact_secrets(&message),
         percent: if status == "completed" {
             Some(100)
         } else {
@@ -66,8 +66,8 @@ impl GitRunner {
             }
 
             Err(GitError::CommandFailed {
-                args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stderr,
+                args: redact_args(args),
+                stderr: redact_secrets(&stderr),
                 code: output.status.code(),
             })
         }
@@ -114,8 +114,8 @@ impl GitRunner {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
             emit_output(repo_path, args, stderr.clone(), "failed");
             Err(GitError::CommandFailed {
-                args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stderr,
+                args: redact_args(args),
+                stderr: redact_secrets(&stderr),
                 code: output.status.code(),
             })
         }
@@ -148,7 +148,7 @@ impl GitRunner {
         let payload = ProgressPayload {
             repo_path: repo_path.display().to_string(),
             operation: operation.to_string(),
-            command: args.iter().map(|arg| (*arg).to_string()).collect(),
+            command: redact_args(args),
             message: "Started".to_string(),
             percent: None,
             status: "started".to_string(),
@@ -200,7 +200,7 @@ impl GitRunner {
                         repo_path: repo_path_for_stderr.clone(),
                         operation: operation_for_stderr.clone(),
                         command: Vec::new(),
-                        message: trimmed.to_string(),
+                        message: redact_secrets(trimmed),
                         percent: extract_percent(trimmed),
                         status: "running".to_string(),
                     },
@@ -225,7 +225,7 @@ impl GitRunner {
                 ProgressPayload {
                     repo_path: repo_path.display().to_string(),
                     operation: operation.to_string(),
-                    command: args.iter().map(|arg| (*arg).to_string()).collect(),
+                    command: redact_args(args),
                     message: "Completed".to_string(),
                     percent: Some(100),
                     status: "completed".to_string(),
@@ -238,11 +238,11 @@ impl GitRunner {
                 ProgressPayload {
                     repo_path: repo_path.display().to_string(),
                     operation: operation.to_string(),
-                    command: args.iter().map(|arg| (*arg).to_string()).collect(),
+                    command: redact_args(args),
                     message: if stderr_output.is_empty() {
                         "Failed".to_string()
                     } else {
-                        stderr_output.clone()
+                        redact_secrets(&stderr_output)
                     },
                     percent: None,
                     status: "failed".to_string(),
@@ -258,12 +258,46 @@ impl GitRunner {
             }
 
             Err(GitError::CommandFailed {
-                args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stderr: stderr_output,
+                args: redact_args(args),
+                stderr: redact_secrets(&stderr_output),
                 code: status.code(),
             })
         }
     }
+}
+
+fn redact_args(args: &[&str]) -> Vec<String> {
+    args.iter().map(|arg| redact_secrets(arg)).collect()
+}
+
+fn redact_secrets(value: &str) -> String {
+    let mut output = value.to_string();
+    for scheme in ["https://", "http://", "ssh://"] {
+        output = redact_url_credentials(output, scheme);
+    }
+    output
+}
+
+fn redact_url_credentials(mut value: String, scheme: &str) -> String {
+    let mut search_start = 0;
+    while let Some(relative_scheme_start) = value[search_start..].find(scheme) {
+        let scheme_start = search_start + relative_scheme_start;
+        let credentials_start = scheme_start + scheme.len();
+        let segment_end = value[credentials_start..]
+            .find(|char: char| char.is_whitespace() || matches!(char, '/' | '\'' | '"' | ')' | '('))
+            .map(|relative_end| credentials_start + relative_end)
+            .unwrap_or(value.len());
+
+        let Some(relative_at) = value[credentials_start..segment_end].rfind('@') else {
+            search_start = credentials_start;
+            continue;
+        };
+
+        let at = credentials_start + relative_at;
+        value.replace_range(credentials_start..at, "****");
+        search_start = credentials_start + "****@".len();
+    }
+    value
 }
 
 fn extract_percent(line: &str) -> Option<u8> {
@@ -279,4 +313,33 @@ fn extract_percent(line: &str) -> Option<u8> {
 
     let number = digits.into_iter().rev().collect::<String>().parse().ok()?;
     Some(number)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_secrets;
+
+    #[test]
+    fn redacts_url_credentials_without_touching_public_urls() {
+        assert_eq!(
+            redact_secrets("https://user:token@example.com/org/repo.git"),
+            "https://****@example.com/org/repo.git"
+        );
+        assert_eq!(
+            redact_secrets("ssh://git:secret@example.com/repo.git"),
+            "ssh://****@example.com/repo.git"
+        );
+        assert_eq!(
+            redact_secrets("https://example.com/org/repo.git"),
+            "https://example.com/org/repo.git"
+        );
+    }
+
+    #[test]
+    fn redacts_multiple_urls_in_one_message() {
+        assert_eq!(
+            redact_secrets("push https://user:one@example.com/a then http://token@example.com/b"),
+            "push https://****@example.com/a then http://****@example.com/b"
+        );
+    }
 }
