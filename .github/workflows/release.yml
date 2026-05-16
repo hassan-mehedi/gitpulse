@@ -27,22 +27,39 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=app-v$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Generate release notes from commits
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ steps.version.outputs.tag }} --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
       - id: create
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          NOTES_FILE: ${{ steps.cliff.outputs.changelog }}
         run: |
-          # Reuse an existing draft if one is present for this tag, otherwise create one.
+          # Fall back to a placeholder if no conventional commits were found.
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "_No notable changes._" > "$NOTES_FILE"
+          fi
+
           EXISTING=$(gh release view "$TAG" --json id,isDraft --jq 'select(.isDraft == true) | .id' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
-            echo "Reusing existing draft release for $TAG"
+            echo "Reusing existing draft release for $TAG; refreshing notes."
+            gh release edit "$TAG" \
+              --title "GitPulse v$VERSION" \
+              --notes-file "$NOTES_FILE"
             RELEASE_ID="$EXISTING"
           else
             gh release create "$TAG" \
               --draft \
               --title "GitPulse v$VERSION" \
-              --generate-notes
+              --notes-file "$NOTES_FILE"
             RELEASE_ID=$(gh release view "$TAG" --json id --jq .id)
           fi
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"

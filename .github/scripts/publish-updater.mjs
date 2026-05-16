@@ -59,7 +59,14 @@ function platformFor(name) {
   return null;
 }
 
-const release = await ghJson(`/repos/${repo}/releases/tags/${tag}`);
+// /releases/tags/{tag} only returns published releases. List with auth instead,
+// which includes drafts, and find the one matching our tag.
+const releases = await ghJson(`/repos/${repo}/releases?per_page=100`);
+const release = releases.find((r) => r.tag_name === tag);
+if (!release) {
+  console.error(`No release (draft or published) found for tag ${tag}.`);
+  process.exit(1);
+}
 const assets = release.assets || [];
 if (assets.length === 0) {
   console.error(`No assets found on release ${tag}.`);
