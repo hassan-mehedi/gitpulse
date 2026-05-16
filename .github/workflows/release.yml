@@ -6,10 +6,49 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=app-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Reuse an existing draft if one is present for this tag, otherwise create one.
+          EXISTING=$(gh release view "$TAG" --json id,isDraft --jq 'select(.isDraft == true) | .id' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "Reusing existing draft release for $TAG"
+            RELEASE_ID="$EXISTING"
+          else
+            gh release create "$TAG" \
+              --draft \
+              --title "GitPulse v$VERSION" \
+              --generate-notes
+            RELEASE_ID=$(gh release view "$TAG" --json id --jq .id)
+          fi
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
   build:
-    permissions:
-      contents: write
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -57,17 +96,27 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and publish
+      - name: Build and upload bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: app-v__VERSION__
-          releaseName: "GitPulse v__VERSION__"
-          releaseBody: "See the assets below to download and install. Unsigned builds — on macOS right-click the app and choose Open; on Windows click 'More info → Run anyway' at the SmartScreen prompt."
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: true
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
+
+  publish-updater:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate and upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/publish-updater.mjs
