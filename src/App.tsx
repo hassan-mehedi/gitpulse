@@ -9,7 +9,6 @@ import { useRuntimeStore } from "./stores/runtime";
 import { useFileWatcher } from "./hooks/useFileWatcher";
 import { applyTheme } from "./lib/theme";
 import { useAutoFetch } from "./hooks/useAutoFetch";
-import { useAutoUpdater } from "./hooks/useAutoUpdater";
 import { createId } from "./lib/ids";
 import { useOutputStore } from "./stores/output";
 import { isTauriRuntime } from "./lib/runtime";
@@ -27,7 +26,6 @@ export default function App() {
 
   useFileWatcher();
   useAutoFetch();
-  useAutoUpdater();
 
   useEffect(() => {
     function onOutput(event: Event) {

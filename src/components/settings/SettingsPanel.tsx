@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useSettingsStore } from "../../stores/settings";
 import { useRuntimeStore } from "../../stores/runtime";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { useNotificationStore } from "../../stores/notifications";
 import { useRepo } from "../../hooks/useRepo";
 import { formatIdentity, resolveCommitIdentity, validateIdentityFields } from "../../lib/commitIdentity";
 import { gitGetUserInfo } from "../../lib/git";
 import { THEME_OPTIONS, type ThemeMode } from "../../lib/theme";
+import { checkForUpdate, openReleasePage } from "../../lib/updates";
+import { createId } from "../../lib/ids";
 import type { UserInfo } from "../../types/git";
 
 export function SettingsPanel() {
@@ -453,11 +456,93 @@ export function SettingsPanel() {
             <span className="settings-readonly">{gitVersion ?? "Detecting…"}</span>
           </SettingRow>
           <SettingRow label="GitPulse">
-            <span className="settings-readonly">0.1.0 — dev</span>
+            <UpdateCheck />
           </SettingRow>
         </section>
       </div>
     </>
+  );
+}
+
+function UpdateCheck() {
+  const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const [status, setStatus] = useState<
+    | { kind: "idle"; version: string | null }
+    | { kind: "checking" }
+    | { kind: "up-to-date"; version: string }
+    | { kind: "available"; current: string; latest: string; url: string | null }
+    | { kind: "error"; message: string }
+  >({ kind: "idle", version: null });
+
+  async function runCheck() {
+    setStatus({ kind: "checking" });
+    try {
+      const result = await checkForUpdate();
+      if (result.hasUpdate && result.latestVersion) {
+        setStatus({
+          kind: "available",
+          current: result.currentVersion,
+          latest: result.latestVersion,
+          url: result.releaseUrl
+        });
+        pushNotification({
+          id: createId(),
+          title: `GitPulse v${result.latestVersion} is available`,
+          message: `You are on v${result.currentVersion}.`,
+          tone: "info",
+          actionLabel: result.releaseUrl ? "Open release page" : undefined,
+          onAction: result.releaseUrl
+            ? () => {
+                void openReleasePage(result.releaseUrl!);
+              }
+            : undefined
+        });
+      } else {
+        setStatus({ kind: "up-to-date", version: result.currentVersion });
+      }
+    } catch (err) {
+      setStatus({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  const label = (() => {
+    switch (status.kind) {
+      case "idle":
+        return status.version ? `v${status.version}` : "—";
+      case "checking":
+        return "Checking…";
+      case "up-to-date":
+        return `v${status.version} — up to date`;
+      case "available":
+        return `v${status.current} → v${status.latest} available`;
+      case "error":
+        return `Check failed: ${status.message}`;
+    }
+  })();
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <span className="settings-readonly">{label}</span>
+      <button
+        type="button"
+        className="vscode-button"
+        onClick={() => void runCheck()}
+        disabled={status.kind === "checking"}
+      >
+        {status.kind === "available" && status.url ? "Open release page" : "Check for updates"}
+      </button>
+      {status.kind === "available" && status.url ? (
+        <button
+          type="button"
+          className="vscode-button vscode-button--primary"
+          onClick={() => {
+            void openReleasePage(status.url!);
+          }}
+        >
+          Open release page
+        </button>
+      ) : null}
+    </div>
   );
 }
 
