@@ -7,7 +7,9 @@ pub mod workspace;
 use tauri::{Emitter, Manager};
 
 pub fn run() {
-    tracing_subscriber::fmt::init();
+    // Note: do not call tracing_subscriber::fmt::init() here — it claims
+    // `log::set_logger`, which tauri_plugin_log also needs. Logging is owned
+    // by tauri_plugin_log (registered below); tracing macros become no-ops.
 
     let mut builder = tauri::Builder::default();
 
