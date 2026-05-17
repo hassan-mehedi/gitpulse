@@ -17,5 +17,6 @@ pub mod staging;
 pub mod stash;
 pub mod status;
 pub mod tag;
+pub mod updates;
 pub mod workspace;
 pub mod worktree;

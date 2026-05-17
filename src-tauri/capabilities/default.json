@@ -15,8 +15,10 @@
     "core:window:allow-set-title",
     "dialog:default",
     "store:default",
-    "updater:default",
     "log:default",
-    "process:default"
+    {
+      "identifier": "shell:allow-open",
+      "allow": [{ "url": "https://github.com/**" }]
+    }
   ]
 }

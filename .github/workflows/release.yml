@@ -43,7 +43,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           NOTES_FILE: ${{ steps.cliff.outputs.changelog }}
         run: |
-          # Fall back to a placeholder if no conventional commits were found.
           if [ ! -s "$NOTES_FILE" ]; then
             echo "_No notable changes._" > "$NOTES_FILE"
           fi
@@ -117,61 +116,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          # Must be true so tauri-action generates signed updater bundles.
-          # The per-platform latest.json it tries to publish is overwritten
-          # at the end by the publish-updater job with a merged manifest.
-          includeUpdaterJson: true
           args: ${{ matrix.args }}
-
-      - name: Upload signatures and updater bundles
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.create-release.outputs.tag }}
-        run: |
-          set -eu
-          # tauri-action uploads the primary bundles (.deb/.rpm/.AppImage/.dmg/.exe)
-          # but NOT signature files, and on macOS NOT the .app.tar.gz updater bundle.
-          # Upload them here so publish-updater can assemble latest.json.
-          tmp=$(mktemp -d)
-          uploaded=0
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            name=$(basename "$f")
-            # On macOS, the two arch builds emit identically-named .app.tar.gz
-            # files. Insert the target triple before the extension so they
-            # don't collide on the release.
-            case "$name" in
-              *.app.tar.gz|*.app.tar.gz.sig)
-                triple=$(echo "$f" | sed -nE 's|.*/target/([^/]+)/release/.*|\1|p')
-                if [ -n "$triple" ] && ! echo "$name" | grep -q "$triple"; then
-                  renamed=$(echo "$name" | sed "s/\.app\.tar\.gz/_${triple}.app.tar.gz/")
-                  cp "$f" "$tmp/$renamed"
-                  f="$tmp/$renamed"
-                  name="$renamed"
-                fi
-                ;;
-            esac
-            echo "Uploading $name"
-            gh release upload "$TAG" "$f" --clobber
-            uploaded=$((uploaded + 1))
-          done < <(find src-tauri/target -type f \( -name "*.sig" -o -name "*.app.tar.gz" \) 2>/dev/null || true)
-          echo "Uploaded $uploaded extra updater artifacts."
-
-  publish-updater:
-    needs: [create-release, build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate and upload latest.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.create-release.outputs.tag }}
-          VERSION: ${{ needs.create-release.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: node .github/scripts/publish-updater.mjs

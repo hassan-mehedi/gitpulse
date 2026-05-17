@@ -49,11 +49,5 @@
                 "installMode": "perMachine"
             }
         }
-    },
-    "plugins": {
-        "updater": {
-            "endpoints": ["https://github.com/hassan-mehedi/gitpulse/releases/latest/download/latest.json"],
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYxQ0Q4ODA0MzZGQzQ4NzAKUldSd1NQdzJCSWpOOGZLUXQxbmdBdWM5TTBKb3A2bUxZdXk3V29vMGhNVXBLcmMzMW5qdjlJZkMK"
-        }
     }
 }
