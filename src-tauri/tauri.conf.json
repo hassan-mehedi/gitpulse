@@ -41,7 +41,18 @@
     "longDescription": "GitPulse is a cross-platform desktop Git client with source control, diffing, branch management, commit graph, blame, file history, stashes, worktrees, and remote sync.",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libayatana-appindicator-gtk3"
+        ]
       }
     },
     "macOS": {
