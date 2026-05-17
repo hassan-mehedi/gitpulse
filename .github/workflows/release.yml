@@ -117,5 +117,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
+          # __VERSION__ is substituted by tauri-action from tauri.conf.json at
+          # run time — no dependency on cross-job outputs.
+          tagName: app-v__VERSION__
+          releaseDraft: true
           args: ${{ matrix.args }}
