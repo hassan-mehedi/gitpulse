@@ -4,7 +4,9 @@ import { isTauriRuntime } from "./runtime";
 const SECRETS_FILE = "secrets.json";
 const LOCAL_STORAGE_KEY = "gitpulse-secrets";
 
-const secretsStore = isTauriRuntime() ? new LazyStore(SECRETS_FILE, { autoSave: 100 }) : null;
+const secretsStore = isTauriRuntime()
+  ? new LazyStore(SECRETS_FILE, { defaults: {}, autoSave: 100 })
+  : null;
 
 function aiKeyName(provider: string) {
   return `ai.${provider}.apiKey`;
