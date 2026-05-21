@@ -19,6 +19,15 @@ import { createId } from "../../lib/ids";
 import type { UserInfo, Repository } from "../../types/git";
 import type { AiCommitProvider, AiCommitStyle, CommitIdentityProfile } from "../../stores/settings";
 
+const SETTINGS_NAV: { id: string; label: string }[] = [
+  { id: "application", label: "Application" },
+  { id: "auto-fetch", label: "Auto Fetch" },
+  { id: "git", label: "Git" },
+  { id: "ai", label: "AI Commit Messages" },
+  { id: "identities", label: "Commit Identities" },
+  { id: "about", label: "About" }
+];
+
 const AI_PROVIDER_OPTIONS: { value: AiCommitProvider; label: string; hint: string }[] = [
   { value: "ollama", label: "Ollama", hint: "Local — no API key" },
   { value: "openai", label: "OpenAI", hint: "api.openai.com" },
@@ -91,6 +100,15 @@ export function SettingsPanel() {
     };
   }, [activeRepo]);
 
+  const [activeSection, setActiveSection] = useState<string>(SETTINGS_NAV[0]!.id);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset the content pane to the top whenever the active section changes,
+  // so a previous section's scroll position doesn't leak into the new one.
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [activeSection]);
+
   return (
     <>
       <div className="view-title">
@@ -98,6 +116,21 @@ export function SettingsPanel() {
       </div>
 
       <div className="scm-body settings-panel">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {SETTINGS_NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`settings-nav__item${activeSection === item.id ? " is-active" : ""}`}
+              onClick={() => setActiveSection(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="settings-content" ref={contentRef}>
+        {activeSection === "application" ? (
         <section className="settings-section">
           <div className="settings-section__title">Application</div>
           <SettingRow label="Theme" hint="Color palette used across the UI.">
@@ -108,7 +141,9 @@ export function SettingsPanel() {
             />
           </SettingRow>
         </section>
+        ) : null}
 
+        {activeSection === "auto-fetch" ? (
         <section className="settings-section">
           <div className="settings-section__title">Auto Fetch</div>
           <SettingRow
@@ -133,7 +168,9 @@ export function SettingsPanel() {
             />
           </SettingRow>
         </section>
+        ) : null}
 
+        {activeSection === "git" ? (
         <section className="settings-section">
           <div className="settings-section__title">Git</div>
           <SettingRow
@@ -195,15 +232,19 @@ export function SettingsPanel() {
             />
           </SettingRow>
         </section>
+        ) : null}
 
-        <AiCommitSection />
+        {activeSection === "ai" ? <AiCommitSection /> : null}
 
-        <CommitIdentitySection
-          activeRepo={activeRepo}
-          gitUser={gitUser}
-          repositories={repositories}
-        />
+        {activeSection === "identities" ? (
+          <CommitIdentitySection
+            activeRepo={activeRepo}
+            gitUser={gitUser}
+            repositories={repositories}
+          />
+        ) : null}
 
+        {activeSection === "about" ? (
         <section className="settings-section">
           <div className="settings-section__title">About</div>
           <SettingRow label="Git binary">
@@ -213,6 +254,8 @@ export function SettingsPanel() {
             <UpdateCheck />
           </SettingRow>
         </section>
+        ) : null}
+        </div>
       </div>
     </>
   );
@@ -244,6 +287,7 @@ function AiCommitSection() {
     | { kind: "ok"; message: string }
     | { kind: "fail"; message: string }
   >({ kind: "idle" });
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const needsApiKey = providerNeedsApiKey(provider);
   const showsBaseUrl = providerShowsBaseUrl(provider);
@@ -335,17 +379,30 @@ function AiCommitSection() {
                 API key
               </label>
               <div className="ai-config-card__field-with-status">
-                <input
-                  id="ai-api-key"
-                  className="settings-control"
-                  disabled={disabled}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  placeholder={`${provider} API key`}
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={apiKey}
-                />
+                <div className="ai-config-card__api-key-input">
+                  <input
+                    id="ai-api-key"
+                    className="settings-control"
+                    disabled={disabled}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder={`${provider} API key`}
+                    type={showApiKey ? "text" : "password"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={apiKey}
+                  />
+                  <button
+                    type="button"
+                    className="ai-config-card__reveal-toggle"
+                    disabled={disabled}
+                    onClick={() => setShowApiKey((value) => !value)}
+                    title={showApiKey ? "Hide API key" : "Show API key"}
+                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                    aria-pressed={showApiKey}
+                  >
+                    <Codicon name={showApiKey ? "eye-closed" : "eye"} size={14} />
+                  </button>
+                </div>
                 <ApiKeyStatus state={saveState} hasValue={apiKey.trim().length > 0} />
               </div>
             </div>
