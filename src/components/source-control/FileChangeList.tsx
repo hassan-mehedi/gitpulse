@@ -229,7 +229,14 @@ function TreeBody({
   onContextMenu
 }: TreeBodyProps) {
   const entries: FileTreeEntry<FileChange>[] = useMemo(
-    () => changes.map((change) => ({ path: change.path, data: change })),
+    () =>
+      changes.map((change) => {
+        // Untracked directories arrive as "dir/" — strip the trailing slash
+        // for tree-building so they land as a single leaf at the directory
+        // level instead of producing an empty-named child node.
+        const path = change.path.endsWith("/") ? change.path.slice(0, -1) : change.path;
+        return { path, data: change };
+      }),
     [changes]
   );
 

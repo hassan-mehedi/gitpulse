@@ -53,14 +53,25 @@ function FileChangeRowImpl({
   onDiscard,
   onContextMenu
 }: FileChangeRowProps) {
-  const segments = change.path.split("/");
-  const name = segments.pop() ?? change.path;
+  // git status --porcelain=v2 reports an untracked directory as a single
+  // entry with a trailing slash. Treat it as a folder so the row gets a
+  // folder icon and a sensible name.
+  const isFolder = change.path.endsWith("/");
+  const normalizedPath = isFolder ? change.path.slice(0, -1) : change.path;
+  const segments = normalizedPath.split("/");
+  const name = segments.pop() ?? normalizedPath;
   const directory = segments.join("/");
   const displayName =
     change.oldPath && (change.status === "R" || change.status === "C")
       ? `${change.oldPath.split("/").pop() ?? change.oldPath} -> ${name}`
-      : name;
-  const discardLabel = change.status === "?" ? "Delete Untracked Item" : "Discard Changes";
+      : isFolder
+        ? `${name}/`
+        : name;
+  const discardLabel = isFolder
+    ? "Delete Untracked Folder"
+    : change.status === "?"
+      ? "Delete Untracked Item"
+      : "Discard Changes";
 
   return (
     <div
@@ -73,7 +84,11 @@ function FileChangeRowImpl({
       style={indent > 0 ? { paddingLeft: `${22 + indent * 12}px` } : undefined}
       role="treeitem"
     >
-      <FileIcon path={change.path} size={16} className="scm-row__icon" />
+      {isFolder ? (
+        <Codicon name="folder" size={16} className="scm-row__icon" />
+      ) : (
+        <FileIcon path={change.path} size={16} className="scm-row__icon" />
+      )}
       <span
         className="scm-row__name"
         title={change.oldPath ? `${change.oldPath} -> ${change.path}` : change.path}
