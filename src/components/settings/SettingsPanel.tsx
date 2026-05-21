@@ -1,15 +1,39 @@
-import { useEffect, useRef, useState } from "react";
-import { useSettingsStore } from "../../stores/settings";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSettingsStore, type ApiKeySaveState } from "../../stores/settings";
 import { useRuntimeStore } from "../../stores/runtime";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useNotificationStore } from "../../stores/notifications";
 import { useRepo } from "../../hooks/useRepo";
-import { formatIdentity, resolveCommitIdentity, validateIdentityFields } from "../../lib/commitIdentity";
+import { Codicon } from "../shared/Codicon";
+import {
+  formatIdentity,
+  resolveCommitIdentity,
+  validateIdentityFields
+} from "../../lib/commitIdentity";
 import { gitGetUserInfo } from "../../lib/git";
 import { THEME_OPTIONS, type ThemeMode } from "../../lib/theme";
 import { checkForUpdate, openReleasePage } from "../../lib/updates";
+import { generateCommitMessage } from "../../lib/aiCommit";
+import { errorMessage } from "../../lib/errors";
 import { createId } from "../../lib/ids";
-import type { UserInfo } from "../../types/git";
+import type { UserInfo, Repository } from "../../types/git";
+import type { AiCommitProvider, AiCommitStyle, CommitIdentityProfile } from "../../stores/settings";
+
+const AI_PROVIDER_OPTIONS: { value: AiCommitProvider; label: string; hint: string }[] = [
+  { value: "ollama", label: "Ollama", hint: "Local — no API key" },
+  { value: "openai", label: "OpenAI", hint: "api.openai.com" },
+  { value: "anthropic", label: "Anthropic", hint: "api.anthropic.com" },
+  { value: "deepseek", label: "DeepSeek", hint: "api.deepseek.com" },
+  { value: "openai-compatible", label: "OpenAI-compat", hint: "Custom base URL" }
+];
+
+function providerNeedsApiKey(provider: AiCommitProvider) {
+  return provider !== "ollama";
+}
+
+function providerShowsBaseUrl(provider: AiCommitProvider) {
+  return provider === "ollama" || provider === "openai-compatible";
+}
 
 export function SettingsPanel() {
   const { activeRepo } = useRepo();
@@ -23,14 +47,6 @@ export function SettingsPanel() {
   const confirmSyncBeforeOperation = useSettingsStore(
     (state) => state.confirmSyncBeforeOperation
   );
-  const aiCommitEnabled = useSettingsStore((state) => state.aiCommitEnabled);
-  const aiCommitProvider = useSettingsStore((state) => state.aiCommitProvider);
-  const aiCommitApiKey = useSettingsStore((state) => state.aiCommitApiKey);
-  const aiCommitBaseUrl = useSettingsStore((state) => state.aiCommitBaseUrl);
-  const aiCommitModel = useSettingsStore((state) => state.aiCommitModel);
-  const aiCommitStyle = useSettingsStore((state) => state.aiCommitStyle);
-  const aiCommitIncludeBody = useSettingsStore((state) => state.aiCommitIncludeBody);
-  const aiCommitMaxDiffChars = useSettingsStore((state) => state.aiCommitMaxDiffChars);
   const commitIdentities = useSettingsStore((state) => state.commitIdentities);
   const repoIdentityAssignments = useSettingsStore((state) => state.repoIdentityAssignments);
   const setTheme = useSettingsStore((state) => state.setTheme);
@@ -45,24 +61,9 @@ export function SettingsPanel() {
   const setConfirmSyncBeforeOperation = useSettingsStore(
     (state) => state.setConfirmSyncBeforeOperation
   );
-  const setAiCommitEnabled = useSettingsStore((state) => state.setAiCommitEnabled);
-  const setAiCommitProvider = useSettingsStore((state) => state.setAiCommitProvider);
-  const setAiCommitApiKey = useSettingsStore((state) => state.setAiCommitApiKey);
-  const setAiCommitBaseUrl = useSettingsStore((state) => state.setAiCommitBaseUrl);
-  const setAiCommitModel = useSettingsStore((state) => state.setAiCommitModel);
-  const setAiCommitStyle = useSettingsStore((state) => state.setAiCommitStyle);
-  const setAiCommitIncludeBody = useSettingsStore((state) => state.setAiCommitIncludeBody);
-  const setAiCommitMaxDiffChars = useSettingsStore((state) => state.setAiCommitMaxDiffChars);
-  const addCommitIdentity = useSettingsStore((state) => state.addCommitIdentity);
-  const removeCommitIdentity = useSettingsStore((state) => state.removeCommitIdentity);
-  const assignRepoIdentity = useSettingsStore((state) => state.assignRepoIdentity);
   const gitVersion = useRuntimeStore((state) => state.gitVersion);
   const repositories = useWorkspaceStore((state) => state.repositories);
   const [gitUser, setGitUser] = useState<UserInfo | null>(null);
-  const [identityLabel, setIdentityLabel] = useState("");
-  const [identityName, setIdentityName] = useState("");
-  const [identityEmail, setIdentityEmail] = useState("");
-  const [identityError, setIdentityError] = useState<string | null>(null);
   const effectiveIdentity = resolveCommitIdentity(
     activeRepo?.path,
     commitIdentities,
@@ -89,34 +90,6 @@ export function SettingsPanel() {
       cancelled = true;
     };
   }, [activeRepo]);
-
-  function addIdentity() {
-    const error = validateIdentityFields(identityLabel, identityName, identityEmail);
-    if (error) {
-      setIdentityError(error);
-      return;
-    }
-    const identity = addCommitIdentity({
-      label: identityLabel.trim(),
-      name: identityName.trim(),
-      email: identityEmail.trim()
-    });
-    if (activeRepo && !repoIdentityAssignments[activeRepo.path]) {
-      assignRepoIdentity(activeRepo.path, identity.id);
-    }
-    setIdentityLabel("");
-    setIdentityName("");
-    setIdentityEmail("");
-    setIdentityError(null);
-  }
-
-  function importActiveGitConfig() {
-    if (!gitUser?.name || !gitUser.email) return;
-    setIdentityLabel(activeRepo ? `${activeRepo.name} identity` : "Git config identity");
-    setIdentityName(gitUser.name);
-    setIdentityEmail(gitUser.email);
-    setIdentityError(null);
-  }
 
   return (
     <>
@@ -164,44 +137,13 @@ export function SettingsPanel() {
         <section className="settings-section">
           <div className="settings-section__title">Git</div>
           <SettingRow
-            label="Commit identity for this repository"
-            hint={
-              activeRepo
-                ? "GitPulse uses the selected identity for commits in this repository only."
-                : "Open a repository to assign an identity."
-            }
-          >
-            <SettingsSelect
-              disabled={!activeRepo}
-              onChange={(value) =>
-                activeRepo
-                  ? assignRepoIdentity(activeRepo.path, value || null)
-                  : undefined
-              }
-              options={[
-                {
-                  value: "",
-                  label:
-                    gitUser?.name && gitUser.email
-                      ? `Use Git config: ${formatIdentity(gitUser.name, gitUser.email)}`
-                      : "No GitPulse identity assigned"
-                },
-                ...commitIdentities.map((identity) => ({
-                  value: identity.id,
-                  label: `${identity.label} — ${formatIdentity(identity.name, identity.email)}`
-                }))
-              ]}
-              value={activeRepo ? repoIdentityAssignments[activeRepo.path] ?? "" : ""}
-            />
-          </SettingRow>
-          <SettingRow
-            label="Effective identity"
+            label="Effective commit identity"
             hint={
               effectiveIdentity.source === "gitpulse"
-                ? "GitPulse overrides repository Git config for commits."
+                ? "GitPulse identity overrides this repository's Git config."
                 : effectiveIdentity.source === "git-config"
-                  ? "GitPulse is using this repository's Git config."
-                  : "Commits will fail until Git config or a GitPulse identity is available."
+                  ? "Using this repository's Git config."
+                  : "No identity available — commits will fail until one is configured below."
             }
           >
             <span className="settings-readonly">{effectiveIdentity.label}</span>
@@ -254,201 +196,13 @@ export function SettingsPanel() {
           </SettingRow>
         </section>
 
-        <section className="settings-section">
-          <div className="settings-section__title">AI Commit Messages</div>
-          <SettingRow
-            label="Enable AI commit messages"
-            hint="Generate a suggested subject and optional body from the staged diff."
-          >
-            <SettingsCheckbox checked={aiCommitEnabled} onChange={setAiCommitEnabled} />
-          </SettingRow>
-          <SettingRow label="Provider">
-            <SettingsSelect
-              disabled={!aiCommitEnabled}
-              onChange={(value) => setAiCommitProvider(value as typeof aiCommitProvider)}
-              options={[
-                { value: "ollama", label: "Ollama" },
-                { value: "openai", label: "OpenAI" },
-                { value: "anthropic", label: "Anthropic" },
-                { value: "deepseek", label: "DeepSeek" },
-                { value: "openai-compatible", label: "OpenAI-compatible" }
-              ]}
-              value={aiCommitProvider}
-            />
-          </SettingRow>
-          <SettingRow
-            label="Model"
-            hint={
-              aiCommitProvider === "ollama"
-                ? "Name of a local Ollama model."
-                : "Provider model ID."
-            }
-          >
-            <input
-              className="settings-control"
-              disabled={!aiCommitEnabled}
-              onChange={(event) => setAiCommitModel(event.target.value)}
-              placeholder={
-                aiCommitProvider === "ollama"
-                  ? "llama3.2"
-                  : aiCommitProvider === "anthropic"
-                    ? "claude-sonnet-4-..."
-                    : aiCommitProvider === "deepseek"
-                      ? "deepseek-v4-flash"
-                    : "model-id"
-              }
-              value={aiCommitModel}
-            />
-          </SettingRow>
-          {aiCommitProvider !== "openai" &&
-          aiCommitProvider !== "anthropic" &&
-          aiCommitProvider !== "deepseek" ? (
-            <SettingRow
-              label="Base URL"
-              hint={
-                aiCommitProvider === "ollama"
-                  ? "Local Ollama server URL."
-                  : "Server URL ending before `/responses`."
-              }
-            >
-              <input
-                className="settings-control"
-                disabled={!aiCommitEnabled}
-                onChange={(event) => setAiCommitBaseUrl(event.target.value)}
-                placeholder={
-                  aiCommitProvider === "ollama"
-                    ? "http://localhost:11434"
-                    : "https://example.com/v1"
-                }
-                value={aiCommitBaseUrl}
-              />
-            </SettingRow>
-          ) : null}
-          {aiCommitProvider !== "ollama" ? (
-            <SettingRow label="API key" hint="Stored in the operating system credential store.">
-              <input
-                className="settings-control"
-                disabled={!aiCommitEnabled}
-                onChange={(event) => setAiCommitApiKey(event.target.value)}
-                placeholder="API key"
-                type="password"
-                value={aiCommitApiKey}
-              />
-            </SettingRow>
-          ) : null}
-          <SettingRow label="Message style">
-            <SettingsSelect
-              disabled={!aiCommitEnabled}
-              onChange={(value) => setAiCommitStyle(value as typeof aiCommitStyle)}
-              options={[
-                { value: "conventional", label: "Conventional Commit" },
-                { value: "plain", label: "Plain" }
-              ]}
-              value={aiCommitStyle}
-            />
-          </SettingRow>
-          <SettingRow label="Include description" hint="Allow the model to add a short commit body.">
-            <SettingsCheckbox
-              checked={aiCommitIncludeBody}
-              disabled={!aiCommitEnabled}
-              onChange={setAiCommitIncludeBody}
-            />
-          </SettingRow>
-          <SettingRow
-            label="Maximum diff size"
-            hint="Characters sent from the staged diff. Keep local models near 8000 unless they have a larger context window."
-          >
-            <input
-              className="settings-control settings-control--narrow"
-              disabled={!aiCommitEnabled}
-              min={2000}
-              max={100000}
-              onChange={(event) => setAiCommitMaxDiffChars(Number(event.target.value))}
-              type="number"
-              value={aiCommitMaxDiffChars}
-            />
-          </SettingRow>
-        </section>
+        <AiCommitSection />
 
-        <section className="settings-section">
-          <div className="settings-section__title">Commit Identities</div>
-          <div className="identity-manager">
-            {commitIdentities.length === 0 ? (
-              <div className="identity-manager__empty">
-                Create at least one GitPulse identity to make commit authorship explicit.
-              </div>
-            ) : (
-              <div className="identity-manager__list">
-                {commitIdentities.map((identity) => (
-                  <div className="identity-card" key={identity.id}>
-                    <div>
-                      <div className="identity-card__label">{identity.label}</div>
-                      <div className="identity-card__meta">
-                        {formatIdentity(identity.name, identity.email)}
-                      </div>
-                    </div>
-                    <button
-                      className="vscode-button vscode-button--secondary"
-                      onClick={() => removeCommitIdentity(identity.id)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {repositories.length > 0 ? (
-              <div className="identity-assignments">
-                {repositories.map((repo) => {
-                  const assigned = commitIdentities.find(
-                    (identity) => identity.id === repoIdentityAssignments[repo.path]
-                  );
-                  return (
-                    <div className="identity-assignment" key={repo.path}>
-                      <span>{repo.name}</span>
-                      <span>{assigned?.label ?? "Git config"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-            <div className="identity-form">
-              <input
-                className="settings-control"
-                onChange={(event) => setIdentityLabel(event.target.value)}
-                placeholder="Label, e.g. Work GitLab"
-                value={identityLabel}
-              />
-              <input
-                className="settings-control"
-                onChange={(event) => setIdentityName(event.target.value)}
-                placeholder="Git user.name"
-                value={identityName}
-              />
-              <input
-                className="settings-control"
-                onChange={(event) => setIdentityEmail(event.target.value)}
-                placeholder="Git user.email"
-                value={identityEmail}
-              />
-              {identityError ? <div className="identity-form__error">{identityError}</div> : null}
-              <div className="identity-form__actions">
-                <button className="vscode-button vscode-button--primary" onClick={addIdentity} type="button">
-                  Add Identity
-                </button>
-                <button
-                  className="vscode-button vscode-button--secondary"
-                  disabled={!gitUser?.name || !gitUser.email}
-                  onClick={importActiveGitConfig}
-                  type="button"
-                >
-                  Import Active Git Config
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <CommitIdentitySection
+          activeRepo={activeRepo}
+          gitUser={gitUser}
+          repositories={repositories}
+        />
 
         <section className="settings-section">
           <div className="settings-section__title">About</div>
@@ -461,6 +215,493 @@ export function SettingsPanel() {
         </section>
       </div>
     </>
+  );
+}
+
+function AiCommitSection() {
+  const enabled = useSettingsStore((state) => state.aiCommitEnabled);
+  const provider = useSettingsStore((state) => state.aiCommitProvider);
+  const apiKey = useSettingsStore((state) => state.aiCommitApiKey);
+  const saveState = useSettingsStore((state) => state.aiCommitApiKeySaveState);
+  const baseUrl = useSettingsStore((state) => state.aiCommitBaseUrl);
+  const model = useSettingsStore((state) => state.aiCommitModel);
+  const style = useSettingsStore((state) => state.aiCommitStyle);
+  const includeBody = useSettingsStore((state) => state.aiCommitIncludeBody);
+  const maxDiff = useSettingsStore((state) => state.aiCommitMaxDiffChars);
+
+  const setEnabled = useSettingsStore((state) => state.setAiCommitEnabled);
+  const setProvider = useSettingsStore((state) => state.setAiCommitProvider);
+  const setApiKey = useSettingsStore((state) => state.setAiCommitApiKey);
+  const setBaseUrl = useSettingsStore((state) => state.setAiCommitBaseUrl);
+  const setModel = useSettingsStore((state) => state.setAiCommitModel);
+  const setStyle = useSettingsStore((state) => state.setAiCommitStyle);
+  const setIncludeBody = useSettingsStore((state) => state.setAiCommitIncludeBody);
+  const setMaxDiff = useSettingsStore((state) => state.setAiCommitMaxDiffChars);
+
+  const [testState, setTestState] = useState<
+    | { kind: "idle" }
+    | { kind: "running" }
+    | { kind: "ok"; message: string }
+    | { kind: "fail"; message: string }
+  >({ kind: "idle" });
+
+  const needsApiKey = providerNeedsApiKey(provider);
+  const showsBaseUrl = providerShowsBaseUrl(provider);
+  const disabled = !enabled;
+
+  async function runTest() {
+    setTestState({ kind: "running" });
+    try {
+      const sampleDiff =
+        "diff --git a/README.md b/README.md\n@@ -1,1 +1,1 @@\n-Hello world.\n+Hello GitPulse.\n";
+      const result = await generateCommitMessage(sampleDiff, {
+        provider,
+        apiKey,
+        baseUrl,
+        model,
+        style,
+        includeBody,
+        maxDiffChars: maxDiff
+      });
+      const preview = result.subject || "(empty)";
+      setTestState({ kind: "ok", message: `Connection OK — sample subject: ${preview}` });
+    } catch (error) {
+      setTestState({ kind: "fail", message: errorMessage(error) });
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="settings-section__title">AI Commit Messages</div>
+
+      <SettingRow
+        label="Enable AI commit messages"
+        hint="Generate a suggested subject and optional body from the staged diff."
+      >
+        <SettingsCheckbox checked={enabled} onChange={setEnabled} />
+      </SettingRow>
+
+      <div className="ai-provider-block">
+        <div className="ai-provider-block__heading">Provider</div>
+        <div className="ai-provider-chooser">
+          {AI_PROVIDER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`ai-provider-chooser__chip${provider === option.value ? " is-active" : ""}`}
+              disabled={disabled}
+              onClick={() => setProvider(option.value)}
+            >
+              <span className="ai-provider-chooser__label">{option.label}</span>
+              <span className="ai-provider-chooser__hint">{option.hint}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="ai-config-card">
+          <div className="ai-config-card__row">
+            <label className="ai-config-card__label" htmlFor="ai-model">
+              Model
+            </label>
+            <input
+              id="ai-model"
+              className="settings-control"
+              disabled={disabled}
+              onChange={(event) => setModel(event.target.value)}
+              placeholder={modelPlaceholder(provider)}
+              value={model}
+            />
+          </div>
+
+          {showsBaseUrl ? (
+            <div className="ai-config-card__row">
+              <label className="ai-config-card__label" htmlFor="ai-base-url">
+                Base URL
+              </label>
+              <input
+                id="ai-base-url"
+                className="settings-control"
+                disabled={disabled}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                placeholder={baseUrlPlaceholder(provider)}
+                value={baseUrl}
+              />
+            </div>
+          ) : null}
+
+          {needsApiKey ? (
+            <div className="ai-config-card__row">
+              <label className="ai-config-card__label" htmlFor="ai-api-key">
+                API key
+              </label>
+              <div className="ai-config-card__field-with-status">
+                <input
+                  id="ai-api-key"
+                  className="settings-control"
+                  disabled={disabled}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder={`${provider} API key`}
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={apiKey}
+                />
+                <ApiKeyStatus state={saveState} hasValue={apiKey.trim().length > 0} />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="ai-config-card__row">
+            <label className="ai-config-card__label">Message style</label>
+            <SettingsSelect
+              disabled={disabled}
+              onChange={(value) => setStyle(value as AiCommitStyle)}
+              options={[
+                { value: "conventional", label: "Conventional Commit" },
+                { value: "plain", label: "Plain" }
+              ]}
+              value={style}
+            />
+          </div>
+
+          <div className="ai-config-card__row">
+            <label className="ai-config-card__label">Include description</label>
+            <SettingsCheckbox
+              checked={includeBody}
+              disabled={disabled}
+              onChange={setIncludeBody}
+            />
+          </div>
+
+          <div className="ai-config-card__row">
+            <label className="ai-config-card__label" htmlFor="ai-max-diff">
+              Maximum diff size
+            </label>
+            <input
+              id="ai-max-diff"
+              className="settings-control settings-control--narrow"
+              disabled={disabled}
+              min={2000}
+              max={100000}
+              onChange={(event) => setMaxDiff(Number(event.target.value))}
+              type="number"
+              value={maxDiff}
+            />
+          </div>
+
+          <div className="ai-config-card__test">
+            <button
+              type="button"
+              className="vscode-button vscode-button--secondary"
+              disabled={
+                disabled ||
+                testState.kind === "running" ||
+                !model.trim() ||
+                (needsApiKey && !apiKey.trim())
+              }
+              onClick={() => void runTest()}
+            >
+              {testState.kind === "running" ? "Testing…" : "Test connection"}
+            </button>
+            {testState.kind === "ok" ? (
+              <span className="ai-config-card__test-result is-ok" title={testState.message}>
+                <Codicon name="check" size={12} /> Connected
+              </span>
+            ) : null}
+            {testState.kind === "fail" ? (
+              <span className="ai-config-card__test-result is-fail" title={testState.message}>
+                <Codicon name="error" size={12} /> {truncate(testState.message, 80)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ApiKeyStatus({ state, hasValue }: { state: ApiKeySaveState; hasValue: boolean }) {
+  if (state.kind === "saving") {
+    return (
+      <span className="ai-config-card__save-state is-saving">
+        <Codicon name="sync" size={12} /> Saving…
+      </span>
+    );
+  }
+  if (state.kind === "saved") {
+    return (
+      <span className="ai-config-card__save-state is-saved">
+        <Codicon name="check" size={12} /> Saved
+      </span>
+    );
+  }
+  if (state.kind === "error") {
+    return (
+      <span
+        className="ai-config-card__save-state is-error"
+        title={state.message}
+      >
+        <Codicon name="error" size={12} /> Save failed
+      </span>
+    );
+  }
+  if (hasValue) {
+    return <span className="ai-config-card__save-state is-stored">Stored</span>;
+  }
+  return null;
+}
+
+function modelPlaceholder(provider: AiCommitProvider) {
+  switch (provider) {
+    case "ollama":
+      return "llama3.2";
+    case "anthropic":
+      return "claude-sonnet-4-...";
+    case "deepseek":
+      return "deepseek-chat";
+    case "openai":
+      return "gpt-4o-mini";
+    default:
+      return "model-id";
+  }
+}
+
+function baseUrlPlaceholder(provider: AiCommitProvider) {
+  return provider === "ollama" ? "http://localhost:11434" : "https://example.com/v1";
+}
+
+function truncate(value: string, max: number) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+interface CommitIdentitySectionProps {
+  activeRepo: Repository | null;
+  gitUser: UserInfo | null;
+  repositories: Repository[];
+}
+
+function CommitIdentitySection({
+  activeRepo,
+  gitUser,
+  repositories
+}: CommitIdentitySectionProps) {
+  const commitIdentities = useSettingsStore((state) => state.commitIdentities);
+  const repoIdentityAssignments = useSettingsStore(
+    (state) => state.repoIdentityAssignments
+  );
+  const addCommitIdentity = useSettingsStore((state) => state.addCommitIdentity);
+  const updateCommitIdentity = useSettingsStore((state) => state.updateCommitIdentity);
+  const removeCommitIdentity = useSettingsStore((state) => state.removeCommitIdentity);
+  const assignRepoIdentity = useSettingsStore((state) => state.assignRepoIdentity);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  // Open the form by default when there are no identities yet.
+  useEffect(() => {
+    if (commitIdentities.length === 0) {
+      setShowAddForm(true);
+    }
+  }, [commitIdentities.length]);
+
+  const gitConfigSummary = useMemo(() => {
+    if (gitUser?.name && gitUser.email) {
+      return `Use Git config: ${formatIdentity(gitUser.name, gitUser.email)}`;
+    }
+    return "Use Git config";
+  }, [gitUser]);
+
+  return (
+    <section className="settings-section">
+      <div className="settings-section__title">Commit Identities</div>
+
+      <div className="identity-manager">
+        {commitIdentities.length === 0 ? (
+          <div className="identity-manager__empty">
+            Create at least one GitPulse identity to commit under a name and email that
+            differs from your Git config. Each open repository can be assigned its own
+            identity below.
+          </div>
+        ) : (
+          <div className="identity-manager__list">
+            {commitIdentities.map((identity) =>
+              editingId === identity.id ? (
+                <IdentityEditor
+                  key={identity.id}
+                  identity={identity}
+                  defaultName={gitUser?.name}
+                  defaultEmail={gitUser?.email}
+                  submitLabel="Save"
+                  onCancel={() => setEditingId(null)}
+                  onSubmit={(next) => {
+                    updateCommitIdentity(identity.id, next);
+                    setEditingId(null);
+                  }}
+                />
+              ) : (
+                <div className="identity-card" key={identity.id}>
+                  <div className="identity-card__body">
+                    <div className="identity-card__label">{identity.label}</div>
+                    <div className="identity-card__meta">
+                      {formatIdentity(identity.name, identity.email)}
+                    </div>
+                  </div>
+                  <div className="identity-card__actions">
+                    <button
+                      className="vscode-button vscode-button--secondary"
+                      onClick={() => setEditingId(identity.id)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="vscode-button vscode-button--secondary"
+                      onClick={() => removeCommitIdentity(identity.id)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
+        {showAddForm ? (
+          <IdentityEditor
+            defaultLabel={activeRepo ? `${activeRepo.name} identity` : ""}
+            defaultName={gitUser?.name}
+            defaultEmail={gitUser?.email}
+            submitLabel="Add Identity"
+            onCancel={commitIdentities.length === 0 ? undefined : () => setShowAddForm(false)}
+            onSubmit={(next) => {
+              const identity = addCommitIdentity(next);
+              if (activeRepo && !repoIdentityAssignments[activeRepo.path]) {
+                assignRepoIdentity(activeRepo.path, identity.id);
+              }
+              if (commitIdentities.length > 0) {
+                setShowAddForm(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="vscode-button vscode-button--secondary identity-manager__add-toggle"
+            onClick={() => setShowAddForm(true)}
+          >
+            <Codicon name="add" size={12} /> Add identity
+          </button>
+        )}
+
+        {repositories.length > 0 ? (
+          <div className="identity-assignments-table">
+            <div className="identity-assignments-table__heading">
+              Per-repository assignment
+            </div>
+            {repositories.map((repo) => (
+              <div className="identity-assignments-table__row" key={repo.path}>
+                <div className="identity-assignments-table__repo" title={repo.path}>
+                  {repo.name}
+                </div>
+                <div className="identity-assignments-table__select">
+                  <SettingsSelect
+                    onChange={(value) =>
+                      assignRepoIdentity(repo.path, value === "" ? null : value)
+                    }
+                    options={[
+                      { value: "", label: gitConfigSummary },
+                      ...commitIdentities.map((identity) => ({
+                        value: identity.id,
+                        label: `${identity.label} — ${formatIdentity(identity.name, identity.email)}`
+                      }))
+                    ]}
+                    value={repoIdentityAssignments[repo.path] ?? ""}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+interface IdentityEditorProps {
+  identity?: CommitIdentityProfile;
+  defaultLabel?: string;
+  defaultName?: string;
+  defaultEmail?: string;
+  submitLabel: string;
+  onSubmit: (next: { label: string; name: string; email: string }) => void;
+  onCancel?: () => void;
+}
+
+function IdentityEditor({
+  identity,
+  defaultLabel,
+  defaultName,
+  defaultEmail,
+  submitLabel,
+  onSubmit,
+  onCancel
+}: IdentityEditorProps) {
+  const [label, setLabel] = useState(identity?.label ?? defaultLabel ?? "");
+  const [name, setName] = useState(identity?.name ?? defaultName ?? "");
+  const [email, setEmail] = useState(identity?.email ?? defaultEmail ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit() {
+    const message = validateIdentityFields(label, name, email);
+    if (message) {
+      setError(message);
+      return;
+    }
+    onSubmit({ label: label.trim(), name: name.trim(), email: email.trim() });
+  }
+
+  return (
+    <div className="identity-form">
+      <input
+        className="settings-control"
+        onChange={(event) => setLabel(event.target.value)}
+        placeholder="Label, e.g. Work GitLab"
+        value={label}
+      />
+      <input
+        className="settings-control"
+        onChange={(event) => setName(event.target.value)}
+        placeholder="Git user.name"
+        value={name}
+      />
+      <input
+        className="settings-control"
+        onChange={(event) => setEmail(event.target.value)}
+        placeholder="Git user.email"
+        value={email}
+      />
+      {error ? <div className="identity-form__error">{error}</div> : null}
+      <div className="identity-form__actions">
+        <button
+          className="vscode-button vscode-button--primary"
+          onClick={submit}
+          type="button"
+        >
+          {submitLabel}
+        </button>
+        {onCancel ? (
+          <button
+            className="vscode-button vscode-button--secondary"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

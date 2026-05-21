@@ -53,6 +53,12 @@ interface PersistedSettings {
 
 type PersistedStoreDefaults = Record<string, unknown> & PersistedSettings;
 
+export type ApiKeySaveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string };
+
 interface SettingsStore {
   theme: ThemeMode;
   autoFetch: boolean;
@@ -69,6 +75,7 @@ interface SettingsStore {
   aiCommitProvider: AiCommitProvider;
   aiCommitProviderConfigs: AiCommitProviderConfigs;
   aiCommitApiKey: string;
+  aiCommitApiKeySaveState: ApiKeySaveState;
   aiCommitBaseUrl: string;
   aiCommitModel: string;
   aiCommitStyle: AiCommitStyle;
@@ -135,6 +142,7 @@ const settingsStore = isTauriRuntime()
 export const useSettingsStore = create<SettingsStore>((set) => ({
   ...DEFAULT_SETTINGS,
   aiCommitApiKey: "",
+  aiCommitApiKeySaveState: { kind: "idle" } as ApiKeySaveState,
   hydrated: false,
   async hydrate() {
     if (settingsStore) {
@@ -380,20 +388,31 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       aiCommitProvider: value,
       aiCommitBaseUrl: config.baseUrl,
       aiCommitModel: config.model,
-      aiCommitMaxDiffChars: config.maxDiffChars
+      aiCommitMaxDiffChars: config.maxDiffChars,
+      aiCommitApiKeySaveState: { kind: "idle" }
     });
     persistSettingsSafely({ aiCommitProvider: value });
     void loadAiApiKey(value).then((aiCommitApiKey) => set({ aiCommitApiKey }));
   },
   setAiCommitApiKey(value) {
-    set({ aiCommitApiKey: value });
+    set({ aiCommitApiKey: value, aiCommitApiKeySaveState: { kind: "saving" } });
     const provider = useSettingsStore.getState().aiCommitProvider;
-    void setAiApiKey(provider, value).catch((error) =>
-      reportBackgroundError(error, {
-        operation: "Save AI API key",
-        title: "Settings save failed"
+    void setAiApiKey(provider, value)
+      .then(() => {
+        // Only mark "saved" if this is still the value the user expects.
+        if (useSettingsStore.getState().aiCommitApiKey === value) {
+          set({ aiCommitApiKeySaveState: { kind: "saved", at: Date.now() } });
+        }
       })
-    );
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        set({ aiCommitApiKeySaveState: { kind: "error", message } });
+        reportBackgroundError(error, {
+          operation: "Save AI API key",
+          title: "Settings save failed",
+          notify: false
+        });
+      });
   },
   setAiCommitBaseUrl(value) {
     set((state) => {

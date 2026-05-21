@@ -2397,20 +2397,6 @@ body.is-resizing-sidebar * {
   gap: 6px;
 }
 
-.identity-assignments {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.identity-assignment {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-}
-
 .misc-panel__field-label {
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
@@ -2421,10 +2407,23 @@ body.is-resizing-sidebar * {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px;
+  padding: 8px 10px;
   border: 1px solid var(--vscode-panel-border);
   border-radius: 4px;
   background: var(--vscode-editorWidget-background);
+}
+
+.identity-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.identity-card__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .identity-card__label {
@@ -2439,11 +2438,220 @@ body.is-resizing-sidebar * {
   font-size: 12px;
 }
 
+.identity-manager__add-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.identity-assignments-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.identity-assignments-table__heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 2px;
+}
+
+.identity-assignments-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  align-items: center;
+  gap: 12px;
+}
+
+.identity-assignments-table__repo {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-assignments-table__select {
+  min-width: 0;
+}
+
 .identity-form,
 .identity-onboarding__content {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.identity-manager .identity-form {
+  padding: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.ai-provider-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 16px 0;
+}
+
+.ai-provider-block__heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ai-provider-chooser {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-provider-chooser__chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 130px;
+  padding: 6px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ai-provider-chooser__chip:hover:not(:disabled) {
+  border-color: var(--vscode-focusBorder);
+}
+
+.ai-provider-chooser__chip.is-active {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.ai-provider-chooser__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-provider-chooser__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-provider-chooser__hint {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.ai-provider-chooser__chip.is-active .ai-provider-chooser__hint {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.ai-config-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-top: 4px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.ai-config-card__row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-config-card__label {
+  font-size: 13px;
+  color: var(--vscode-foreground);
+}
+
+.ai-config-card__field-with-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-config-card__field-with-status .settings-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-config-card__save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.ai-config-card__save-state.is-saving {
+  color: var(--vscode-descriptionForeground);
+}
+
+.ai-config-card__save-state.is-saved {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.ai-config-card__save-state.is-stored {
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-panel-border);
+  padding: 1px 6px;
+}
+
+.ai-config-card__save-state.is-error {
+  color: var(--vscode-errorForeground);
+}
+
+.ai-config-card__test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.ai-config-card__test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-config-card__test-result.is-ok {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.ai-config-card__test-result.is-fail {
+  color: var(--vscode-errorForeground);
 }
 
 .identity-form__actions {

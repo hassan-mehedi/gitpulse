@@ -45,8 +45,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::repo::git_detect_repo,
             commands::ai::ai_generate_commit_message,
-            commands::secrets::ai_get_api_key,
-            commands::secrets::ai_set_api_key,
             commands::repo::git_init,
             commands::repo::git_clone,
             commands::repo::git_get_config,
