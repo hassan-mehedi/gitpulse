@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 ignore = "0.4"
 notify = "7"
-notify-debouncer-full = "0.4"
+notify-debouncer-full = "0.7"
 reqwest = { version = "0.13", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 shell-words = "1"
