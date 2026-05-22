@@ -1,6 +1,6 @@
 [package]
 name = "gitpulse"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A VS Code-inspired Git GUI built with Tauri, Rust, and React."
 authors = ["hassan-mehedi"]

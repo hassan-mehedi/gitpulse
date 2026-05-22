@@ -164,6 +164,24 @@ pub fn parse_diff(output: &str) -> Result<FileDiff, GitError> {
     let mut is_binary = false;
 
     for line in output.lines() {
+        // `git diff` on an unmerged path emits a combined diff (`diff --cc`
+        // or `diff --combined`) with multi-parent `@@@` hunk headers. We
+        // can't render that as a unified diff, so skip the body — callers
+        // should route conflicts to the merge editor instead.
+        if line.starts_with("diff --cc ") || line.starts_with("diff --combined ") {
+            return Ok(FileDiff {
+                file: line
+                    .splitn(3, ' ')
+                    .nth(2)
+                    .unwrap_or_default()
+                    .to_string(),
+                old_file: None,
+                status: Some("U".to_string()),
+                hunks: Vec::new(),
+                is_binary: false,
+            });
+        }
+
         if let Some(rest) = line.strip_prefix("diff --git a/") {
             if let Some(hunk) = current_hunk.take() {
                 hunks.push(hunk);
@@ -868,6 +886,28 @@ Binary files a/image.png and b/image.png differ\n";
         let diff = parse_diff(output).expect("binary diff should parse");
         assert!(diff.is_binary);
         assert!(diff.hunks.is_empty());
+    }
+
+    #[test]
+    fn parse_diff_handles_combined_diff_for_unmerged_path() {
+        let output = "\
+diff --cc file.txt\n\
+index d791e9b,00dbdcf..0000000\n\
+--- a/file.txt\n\
++++ b/file.txt\n\
+@@@ -1,3 -1,3 +1,7 @@@\n\
+  line1\n\
+++<<<<<<< HEAD\n\
+ +MAIN\n\
+++=======\n\
++ FEATURE\n\
+++>>>>>>> feature\n\
+  line3\n";
+        let diff = parse_diff(output).expect("combined diff should not error");
+        assert_eq!(diff.file, "file.txt");
+        assert_eq!(diff.status.as_deref(), Some("U"));
+        assert!(diff.hunks.is_empty());
+        assert!(!diff.is_binary);
     }
 
     #[test]

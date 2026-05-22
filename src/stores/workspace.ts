@@ -220,6 +220,21 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
   async openDiff(repo, change, staged) {
+    // Unmerged files have no stage-0 blob, so `git diff` emits a combined
+    // diff (`@@@ ... @@@`) that the unified-diff parser can't handle. Route
+    // straight to the merge editor with an empty FileDiff — DiffViewer
+    // branches on status === "U" and renders MergeEditor instead.
+    if (change.status === "U") {
+      const placeholder: FileDiff = {
+        file: change.path,
+        status: "U",
+        hunks: [],
+        isBinary: false
+      };
+      set({ activeRepoId: repo.id });
+      useDiffStore.getState().setActiveDiff(repo, change, staged, placeholder);
+      return;
+    }
     const fileDiff: FileDiff = await gitDiffFile(repo.path, change.path, staged);
     set({ activeRepoId: repo.id });
     useDiffStore.getState().setActiveDiff(repo, change, staged, fileDiff);
