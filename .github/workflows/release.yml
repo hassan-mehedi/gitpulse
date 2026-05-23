@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "screenshot.png"
   workflow_dispatch:
 
 permissions:
@@ -16,6 +24,7 @@ jobs:
       release_id: ${{ steps.create.outputs.release_id }}
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      skip: ${{ steps.create.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,7 +36,25 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=app-v$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Check whether tag is already published
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Returns "true" only for an *existing, non-draft* release.
+          # Drafts and missing releases both leave PUBLISHED empty so the
+          # build proceeds (drafts get refreshed below).
+          PUBLISHED=$(gh release view "$TAG" --json isDraft --jq 'select(.isDraft == false) | "true"' 2>/dev/null || true)
+          if [ "$PUBLISHED" = "true" ]; then
+            echo "::notice::Release $TAG is already published; skipping build to avoid tag collision. Bump the version in src-tauri/tauri.conf.json to ship a new release."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate release notes from commits
+        if: steps.check.outputs.published != 'true'
         id: cliff
         uses: orhun/git-cliff-action@v4
         with:
@@ -42,7 +69,14 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           NOTES_FILE: ${{ steps.cliff.outputs.changelog }}
+          PUBLISHED: ${{ steps.check.outputs.published }}
         run: |
+          if [ "$PUBLISHED" = "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "release_id=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ ! -s "$NOTES_FILE" ]; then
             echo "_No notable changes._" > "$NOTES_FILE"
           fi
@@ -61,10 +95,12 @@ jobs:
               --notes-file "$NOTES_FILE"
             RELEASE_ID=$(gh release view "$TAG" --json id --jq .id)
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
   build:
     needs: create-release
+    if: needs.create-release.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
