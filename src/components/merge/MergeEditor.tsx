@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Codicon } from "../shared/Codicon";
+import { ConfirmModal } from "../shared/ConfirmModal";
 import {
   gitAbortMerge,
   gitContinueMerge,
@@ -38,11 +39,51 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [activeConflict, setActiveConflict] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const panesContainerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef<Array<HTMLDivElement | null>>([]);
   const isSyncingScroll = useRef(false);
   const draftKey = `${repoPath}:${filePath}`;
   const saveDraft = useMergeDraftStore((state) => state.setDraft);
   const clearDraft = useMergeDraftStore((state) => state.clearDraft);
+
+  const [paneFractions, setPaneFractions] = useState<[number, number, number]>(
+    () => loadStoredPaneFractions()
+  );
+  const fractionsAtDragStartRef = useRef<[number, number, number]>(paneFractions);
+  const [isAbortConfirmOpen, setIsAbortConfirmOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        PANE_FRACTIONS_STORAGE_KEY,
+        JSON.stringify(paneFractions)
+      );
+    } catch {
+      // localStorage may be unavailable (private mode); silent.
+    }
+  }, [paneFractions]);
+
+  function handleSashStart() {
+    fractionsAtDragStartRef.current = paneFractions;
+  }
+
+  function handleSashDrag(sashIndex: 0 | 1, dx: number) {
+    const container = panesContainerRef.current;
+    if (!container) return;
+    const width = container.clientWidth;
+    if (width <= 0) return;
+    const deltaFraction = dx / width;
+    const [a, b, c] = fractionsAtDragStartRef.current;
+    const MIN = 0.1;
+    if (sashIndex === 0) {
+      const newA = clamp(a + deltaFraction, MIN, a + b - MIN);
+      setPaneFractions([newA, a + b - newA, c]);
+    } else {
+      const newB = clamp(b + deltaFraction, MIN, b + c - MIN);
+      setPaneFractions([a, newB, b + c - newB]);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -138,15 +179,6 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
     setChoices((state) => ({ ...state, [id]: choice }));
   }
 
-  function acceptAll(choice: ConflictChoice) {
-    const next: Record<number, ConflictChoice> = {};
-    for (const region of conflictRegions) {
-      next[region.region.id] = choice;
-    }
-    setIsResultEdited(false);
-    setChoices(next);
-  }
-
   function syncScroll(sourceIndex: number) {
     if (isSyncingScroll.current) return;
     const source = paneRefs.current[sourceIndex];
@@ -188,15 +220,17 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
     });
   }
 
-  async function handleAbortMerge() {
-    if (!window.confirm("Abort the in-progress merge? Uncommitted resolutions will be lost.")) {
-      return;
-    }
+  async function performAbortMerge() {
     await runGit(async () => {
       await gitAbortMerge(repoPath);
       clearDraft(draftKey);
       await refreshRepo(repoPath);
     });
+  }
+
+  function resetConflictChoices() {
+    setChoices({});
+    setIsResultEdited(false);
   }
 
   const pathParts = filePath.split("/");
@@ -240,40 +274,19 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
           </button>
           <span className="merge-editor__divider" aria-hidden />
           <button
-            className="vscode-button"
-            onClick={() => acceptAll("ours")}
-            disabled={conflictCount === 0}
-            title="Accept All Current"
+            className="vscode-button vscode-button--ghost"
+            onClick={() => {
+              if (Object.keys(choices).length === 0 && !isResultEdited) return;
+              setIsResetConfirmOpen(true);
+            }}
+            disabled={
+              conflictCount === 0 ||
+              (Object.keys(choices).length === 0 && !isResultEdited)
+            }
+            title="Reset all conflict choices and manual edits in this file"
             type="button"
           >
-            Accept All Current
-          </button>
-          <button
-            className="vscode-button"
-            onClick={() => acceptAll("theirs")}
-            disabled={conflictCount === 0}
-            title="Accept All Incoming"
-            type="button"
-          >
-            Accept All Incoming
-          </button>
-          <button
-            className="vscode-button"
-            onClick={() => acceptAll("both-theirs-first")}
-            disabled={conflictCount === 0}
-            title="Accept All Both (Incoming First)"
-            type="button"
-          >
-            Accept Both (Incoming First)
-          </button>
-          <button
-            className="vscode-button"
-            onClick={() => acceptAll("both-ours-first")}
-            disabled={conflictCount === 0}
-            title="Accept All Both (Current First)"
-            type="button"
-          >
-            Accept Both (Current First)
+            <Codicon name="discard" size={14} /> Reset
           </button>
         </div>
       </div>
@@ -284,7 +297,17 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
         <div className="merge-editor__loading">No conflicts detected in this file.</div>
       ) : (
         <>
-          <div className="merge-editor__panes">
+          <div
+            className="merge-editor__panes"
+            ref={panesContainerRef}
+            style={
+              {
+                "--pane-1": `${paneFractions[0]}fr`,
+                "--pane-2": `${paneFractions[1]}fr`,
+                "--pane-3": `${paneFractions[2]}fr`
+              } as React.CSSProperties
+            }
+          >
             <MergePane
               segments={segments}
               side="theirs"
@@ -299,6 +322,10 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
                 paneRefs.current[0] = node;
               }}
               onScroll={() => syncScroll(0)}
+            />
+            <MergePaneSash
+              onStart={handleSashStart}
+              onDrag={(dx) => handleSashDrag(0, dx)}
             />
             <MergePane
               segments={segments}
@@ -315,18 +342,19 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
               }}
               onScroll={() => syncScroll(1)}
             />
+            <MergePaneSash
+              onStart={handleSashStart}
+              onDrag={(dx) => handleSashDrag(1, dx)}
+            />
             <MergeResultPane
               content={resultDraft}
               hasConflictMarkers={hasConflictMarkers(resultDraft)}
               isManualEdit={isResultEdited}
-              activeConflict={activeConflict}
               label="Result"
               onChange={(value) => {
                 setResultDraft(value);
                 setIsResultEdited(true);
               }}
-              onChoose={chooseFor}
-              regions={conflictRegions.map((segment) => segment.region)}
               filePath={filePath}
               theme={theme}
               bodyRef={(node) => {
@@ -346,7 +374,7 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
           <div className="merge-editor__footer">
             <button
               className="vscode-button vscode-button--danger"
-              onClick={() => void handleAbortMerge()}
+              onClick={() => setIsAbortConfirmOpen(true)}
               type="button"
             >
               <Codicon name="discard" size={14} /> Abort Merge
@@ -370,6 +398,46 @@ export function MergeEditor({ filePath, repoPath }: MergeEditorProps) {
           </div>
         </>
       )}
+      <ConfirmModal
+        isOpen={isAbortConfirmOpen}
+        title="Abort merge"
+        body={
+          <>
+            <p>
+              Abort the in-progress merge? Your working tree and HEAD will be
+              restored to the state before the merge started.
+            </p>
+            <p>
+              All uncommitted resolutions in <strong>every</strong> conflicted
+              file will be discarded.
+            </p>
+          </>
+        }
+        confirmLabel="Abort Merge"
+        danger
+        onConfirm={() => void performAbortMerge()}
+        onClose={() => setIsAbortConfirmOpen(false)}
+      />
+      <ConfirmModal
+        isOpen={isResetConfirmOpen}
+        title="Reset conflict resolution"
+        body={
+          <>
+            <p>
+              Discard your accept choices and manual edits in this file and
+              restore the original conflict markers?
+            </p>
+            <p>
+              Other files in the merge are not affected. The merge stays in
+              progress.
+            </p>
+          </>
+        }
+        confirmLabel="Reset"
+        danger
+        onConfirm={resetConflictChoices}
+        onClose={() => setIsResetConfirmOpen(false)}
+      />
     </div>
   );
 }
@@ -470,18 +538,7 @@ function MergePane({
               />
             );
           }
-          return (
-            <ResultConflict
-              key={`c-${region.id}`}
-              regionId={region.id}
-              ours={region.ours}
-              theirs={region.theirs}
-              choice={choice}
-              active={isActive}
-              onActivate={() => onActivate(region.id)}
-              onChoose={onChoose}
-            />
-          );
+          return null;
         })}
       </div>
     </section>
@@ -493,14 +550,11 @@ interface MergeResultPaneProps {
   hasConflictMarkers: boolean;
   isManualEdit: boolean;
   label: string;
-  regions: Array<{ id: number; ours: string; theirs: string }>;
-  activeConflict: number | null;
   filePath: string;
   theme: ReturnType<typeof useSettingsStore.getState>["theme"];
   bodyRef: (node: HTMLDivElement | null) => void;
   onScroll: () => void;
   onChange: (value: string) => void;
-  onChoose: (id: number, choice: ConflictChoice) => void;
 }
 
 function MergeResultPane({
@@ -508,21 +562,215 @@ function MergeResultPane({
   hasConflictMarkers: containsConflictMarkers,
   isManualEdit,
   label,
-  regions,
-  activeConflict,
   filePath,
   theme,
   bodyRef,
   onScroll,
-  onChange,
-  onChoose
+  onChange
 }: MergeResultPaneProps) {
-  const activeRegion = regions.find((region) => region.id === activeConflict) ?? regions[0];
   const lineCount = Math.max(1, content.split("\n").length);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  function choose(choice: ConflictChoice) {
-    if (!activeRegion) return;
-    onChoose(activeRegion.id, choice);
+  // Custom undo/redo stack. Native textarea undo gets reset every time the
+  // controlled `value` prop is updated programmatically (Accept Incoming,
+  // Reset, the resultPreview sync effect), so we maintain our own.
+  const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
+  const lastSnapshotTimeRef = useRef(0);
+  const lastCommittedRef = useRef(content);
+  const UNDO_GROUPING_MS = 500;
+  const UNDO_MAX = 200;
+
+  // Detect external content changes (Accept buttons, Reset, file switch) and
+  // clear our undo history so undo can't take you across that boundary into
+  // a state that doesn't belong to the current "edit session".
+  useEffect(() => {
+    if (content !== lastCommittedRef.current) {
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      lastSnapshotTimeRef.current = 0;
+      lastCommittedRef.current = content;
+    }
+  }, [content]);
+
+  function commitChange(nextContent: string, nextSelection?: { start: number; end: number }) {
+    const now = Date.now();
+    const top = undoStackRef.current[undoStackRef.current.length - 1];
+    const outsideGroupingWindow = now - lastSnapshotTimeRef.current >= UNDO_GROUPING_MS;
+    if (top !== content && (outsideGroupingWindow || undoStackRef.current.length === 0)) {
+      undoStackRef.current.push(content);
+      if (undoStackRef.current.length > UNDO_MAX) undoStackRef.current.shift();
+    }
+    redoStackRef.current = [];
+    lastSnapshotTimeRef.current = now;
+    lastCommittedRef.current = nextContent;
+    onChange(nextContent);
+    if (nextSelection) {
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.setSelectionRange(nextSelection.start, nextSelection.end);
+      });
+    }
+  }
+
+  function undo() {
+    if (undoStackRef.current.length === 0) return;
+    const previous = undoStackRef.current.pop()!;
+    redoStackRef.current.push(content);
+    if (redoStackRef.current.length > UNDO_MAX) redoStackRef.current.shift();
+    lastSnapshotTimeRef.current = 0;
+    lastCommittedRef.current = previous;
+    onChange(previous);
+  }
+
+  function redo() {
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current.pop()!;
+    undoStackRef.current.push(content);
+    if (undoStackRef.current.length > UNDO_MAX) undoStackRef.current.shift();
+    lastSnapshotTimeRef.current = 0;
+    lastCommittedRef.current = next;
+    onChange(next);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const isMod = event.ctrlKey || event.metaKey;
+
+    // VS Code parity: Ctrl/Cmd+C or Ctrl/Cmd+X with no selection acts on
+    // the current line (including its trailing newline). We expand the
+    // textarea selection here, then let the browser's native copy/cut
+    // handle the clipboard part — that path is the one we already know
+    // works. For copy, restore the caret on the next frame so the cursor
+    // doesn't jump.
+    if (
+      isMod &&
+      !event.shiftKey &&
+      !event.altKey &&
+      (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "x")
+    ) {
+      const textarea = event.currentTarget;
+      if (textarea.selectionStart === textarea.selectionEnd) {
+        const value = textarea.value;
+        const caret = textarea.selectionStart;
+        const lineStart = value.lastIndexOf("\n", caret - 1) + 1;
+        let lineEnd = value.indexOf("\n", caret);
+        if (lineEnd === -1) {
+          lineEnd = value.length;
+        } else {
+          lineEnd += 1; // include the trailing newline
+        }
+        if (lineStart === lineEnd) {
+          // Empty line with no trailing newline (end of file) — nothing to do.
+          return;
+        }
+        textarea.setSelectionRange(lineStart, lineEnd);
+        if (event.key.toLowerCase() === "c") {
+          // Copy doesn't mutate, so restore caret after the native copy runs.
+          requestAnimationFrame(() => {
+            const node = textareaRef.current;
+            if (!node) return;
+            node.setSelectionRange(caret, caret);
+          });
+        }
+        // Fall through — native cut/copy uses the expanded selection. The
+        // textarea's onChange (for cut) goes through commitChange, so undo
+        // still works.
+      }
+      return;
+    }
+
+    // Ctrl/Cmd+Z — undo
+    if (isMod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      undo();
+      return;
+    }
+    // Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z — redo
+    if (
+      isMod &&
+      !event.altKey &&
+      (event.key.toLowerCase() === "y" ||
+        (event.shiftKey && event.key.toLowerCase() === "z"))
+    ) {
+      event.preventDefault();
+      redo();
+      return;
+    }
+
+    if (event.key !== "Tab" || isMod || event.altKey) {
+      return;
+    }
+    const textarea = event.currentTarget;
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const TAB = "\t";
+
+    // Multi-line selection: indent or outdent every line in the selection.
+    const selectedRegion = value.slice(start, end);
+    if (start !== end && selectedRegion.includes("\n")) {
+      event.preventDefault();
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const head = value.slice(0, lineStart);
+      const body = value.slice(lineStart, end);
+      const tail = value.slice(end);
+
+      let nextBody: string;
+      let firstLineDelta = 0;
+      if (event.shiftKey) {
+        const lines = body.split("\n");
+        const outdented = lines.map((line, idx) => {
+          if (line.startsWith(TAB)) {
+            if (idx === 0) firstLineDelta = -1;
+            return line.slice(1);
+          }
+          const spaces = line.match(/^ {1,2}/);
+          if (spaces) {
+            if (idx === 0) firstLineDelta = -spaces[0].length;
+            return line.slice(spaces[0].length);
+          }
+          return line;
+        });
+        nextBody = outdented.join("\n");
+      } else {
+        const lines = body.split("\n");
+        firstLineDelta = 1;
+        nextBody = lines.map((line) => TAB + line).join("\n");
+      }
+
+      const totalDelta = nextBody.length - body.length;
+      commitChange(head + nextBody + tail, {
+        start: start + firstLineDelta,
+        end: end + totalDelta
+      });
+      return;
+    }
+
+    if (event.shiftKey) {
+      // Shift+Tab on a single line — strip leading tab or 1–2 spaces if any.
+      event.preventDefault();
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const rest = value.slice(lineStart);
+      let removed = 0;
+      if (rest.startsWith(TAB)) {
+        removed = 1;
+      } else {
+        const spaces = rest.match(/^ {1,2}/);
+        if (spaces) removed = spaces[0].length;
+      }
+      if (removed === 0) return;
+      const next = value.slice(0, lineStart) + value.slice(lineStart + removed);
+      const caret = Math.max(lineStart, start - removed);
+      commitChange(next, { start: caret, end: caret });
+      return;
+    }
+
+    // Plain Tab — insert a tab character (or replace a single-line selection).
+    event.preventDefault();
+    const next = value.slice(0, start) + TAB + value.slice(end);
+    const caret = start + TAB.length;
+    commitChange(next, { start: caret, end: caret });
   }
 
   return (
@@ -538,44 +786,6 @@ function MergeResultPane({
         </span>
       </div>
       <div className="merge-pane__body merge-pane__body--result" ref={bodyRef} onScroll={onScroll}>
-        {activeRegion ? (
-          <div className="merge-conflict__codelens merge-conflict__codelens--result">
-            <button
-              className="merge-codelens-action"
-              onClick={() => choose("ours")}
-              type="button"
-            >
-              Accept Current
-            </button>
-            <span className="merge-codelens-sep">|</span>
-            <button
-              className="merge-codelens-action"
-              onClick={() => choose("theirs")}
-              type="button"
-            >
-              Accept Incoming
-            </button>
-            <span className="merge-codelens-sep">|</span>
-            <button
-              className="merge-codelens-action"
-              onClick={() => choose("both-theirs-first")}
-              type="button"
-            >
-              Accept Both (Incoming First)
-            </button>
-            <span className="merge-codelens-sep">|</span>
-            <button
-              className="merge-codelens-action"
-              onClick={() => choose("both-ours-first")}
-              type="button"
-            >
-              Accept Both (Current First)
-            </button>
-            <span className="merge-codelens-label">
-              Conflict {activeRegion.id + 1}
-            </span>
-          </div>
-        ) : null}
         <div className="merge-result-editor">
           <div className="merge-result-editor__gutter" aria-hidden>
             {Array.from({ length: lineCount }, (_, index) => (
@@ -590,9 +800,11 @@ function MergeResultPane({
               className="merge-result-editor__highlight"
             />
             <textarea
+              ref={textareaRef}
               className="merge-result-editor__textarea"
               value={content}
-              onChange={(event) => onChange(event.target.value)}
+              onChange={(event) => commitChange(event.target.value)}
+              onKeyDown={handleKeyDown}
               rows={lineCount}
               spellCheck={false}
             />
@@ -686,119 +898,76 @@ function ConflictBlock({
   );
 }
 
-interface ResultConflictProps {
-  regionId: number;
-  ours: string;
-  theirs: string;
-  choice: ConflictChoice | undefined;
-  active: boolean;
-  onActivate: () => void;
-  onChoose: (id: number, choice: ConflictChoice) => void;
+const PANE_FRACTIONS_STORAGE_KEY = "gitpulse:mergePaneFractions";
+
+function loadStoredPaneFractions(): [number, number, number] {
+  const fallback: [number, number, number] = [1 / 3, 1 / 3, 1 / 3];
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = window.localStorage.getItem(PANE_FRACTIONS_STORAGE_KEY);
+    if (!stored) return fallback;
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed) || parsed.length !== 3) return fallback;
+    const values = parsed.map((n) => Number(n));
+    if (!values.every((n) => Number.isFinite(n) && n > 0)) return fallback;
+    const sum = values[0]! + values[1]! + values[2]!;
+    return [values[0]! / sum, values[1]! / sum, values[2]! / sum];
+  } catch {
+    return fallback;
+  }
 }
 
-function ResultConflict({
-  regionId,
-  ours,
-  theirs,
-  choice,
-  active,
-  onActivate,
-  onChoose
-}: ResultConflictProps) {
-  const classes = [
-    "merge-conflict",
-    "merge-conflict--result",
-    active ? "is-active" : "",
-    choice ? "is-resolved" : "is-unresolved"
-  ]
-    .filter(Boolean)
-    .join(" ");
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
 
-  function choose(value: ConflictChoice) {
-    onActivate();
-    onChoose(regionId, value);
+interface MergePaneSashProps {
+  onStart: () => void;
+  onDrag: (dx: number) => void;
+}
+
+function MergePaneSash({ onStart, onDrag }: MergePaneSashProps) {
+  const startXRef = useRef(0);
+  const draggingRef = useRef(false);
+
+  const handleMove = useCallback(
+    (event: PointerEvent) => {
+      if (!draggingRef.current) return;
+      onDrag(event.clientX - startXRef.current);
+    },
+    [onDrag]
+  );
+
+  const handleUp = useCallback(() => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    document.body.classList.remove("is-resizing-sidebar");
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [handleMove, handleUp]);
+
+  function handleDown(event: React.PointerEvent<HTMLDivElement>) {
+    draggingRef.current = true;
+    startXRef.current = event.clientX;
+    document.body.classList.add("is-resizing-sidebar");
+    onStart();
+    event.preventDefault();
   }
 
   return (
     <div
-      className={classes}
-      data-conflict-id={regionId}
-      onClick={onActivate}
-    >
-      <div className="merge-conflict__codelens">
-        <button
-          className={`merge-codelens-action${choice === "ours" ? " is-selected" : ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            choose("ours");
-          }}
-          type="button"
-        >
-          Accept Current
-        </button>
-        <span className="merge-codelens-sep">|</span>
-        <button
-          className={`merge-codelens-action${choice === "theirs" ? " is-selected" : ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            choose("theirs");
-          }}
-          type="button"
-        >
-          Accept Incoming
-        </button>
-        <span className="merge-codelens-sep">|</span>
-        <button
-          className={`merge-codelens-action${
-            choice === "both-theirs-first" ? " is-selected" : ""
-          }`}
-          onClick={(event) => {
-            event.stopPropagation();
-            choose("both-theirs-first");
-          }}
-          type="button"
-        >
-          Accept Both (Incoming First)
-        </button>
-        <span className="merge-codelens-sep">|</span>
-        <button
-          className={`merge-codelens-action${
-            choice === "both-ours-first" ? " is-selected" : ""
-          }`}
-          onClick={(event) => {
-            event.stopPropagation();
-            choose("both-ours-first");
-          }}
-          type="button"
-        >
-          Accept Both (Current First)
-        </button>
-        <span className="merge-codelens-label">Conflict {regionId + 1}</span>
-      </div>
-      {choice === "ours" ? (
-        <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
-      ) : choice === "theirs" ? (
-        <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
-      ) : choice === "both-ours-first" ? (
-        <>
-          <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
-          <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
-        </>
-      ) : choice === "both-theirs-first" ? (
-        <>
-          <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
-          <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
-        </>
-      ) : (
-        <>
-          <div className="merge-conflict__marker">&lt;&lt;&lt;&lt;&lt;&lt;&lt; Current</div>
-          <pre className="merge-pane__code merge-pane__code--ours">{ours || "(empty)"}</pre>
-          <div className="merge-conflict__marker">=======</div>
-          <pre className="merge-pane__code merge-pane__code--theirs">{theirs || "(empty)"}</pre>
-          <div className="merge-conflict__marker">&gt;&gt;&gt;&gt;&gt;&gt;&gt; Incoming</div>
-        </>
-      )}
-    </div>
+      className="merge-pane-sash"
+      onPointerDown={handleDown}
+      role="separator"
+      aria-orientation="vertical"
+    />
   );
 }
 

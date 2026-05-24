@@ -1,6 +1,6 @@
 {
   "name": "gitpulse",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A VS Code-inspired Git GUI built with Tauri, Rust, and React.",
   "author": "hassan-mehedi",
   "license": "MIT",

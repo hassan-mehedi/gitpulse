@@ -9,7 +9,11 @@ pub async fn branches(repo_path: &Path) -> Result<Vec<BranchInfo>, GitError> {
     // %(refname) gives the FULL ref (`refs/heads/<name>` or `refs/remotes/<name>`)
     // so we can reliably classify local vs. remote branches. `%(refname:short)`
     // strips both prefixes, losing the local/remote distinction.
-    let format = "%(refname)%x1f%(HEAD)%x1f%(upstream:short)%x1f%(objectname)%x1f%(committerdate:iso8601)%x1f%(authoremail)";
+    //
+    // Hex escape is `%XX` for `for-each-ref` / `branch --format` (unlike `git log`'s
+    // `%xXX`). Using the wrong syntax makes git emit the literal text "%x1f",
+    // which breaks the parser and silently drops every branch.
+    let format = "%(refname)%1f%(HEAD)%1f%(upstream:short)%1f%(objectname)%1f%(committerdate:iso8601)%1f%(authoremail)";
     let output = GitRunner::run(repo_path, &["branch", "-a", "--format", format]).await?;
     let mut branches = parse_branches(&output);
 
@@ -147,4 +151,25 @@ pub async fn compare(repo_path: &Path, left: &str, right: &str) -> Result<Branch
 
 fn is_named_branch(branch: &str) -> bool {
     !branch.is_empty() && branch != "HEAD" && !branch.starts_with('(')
+}
+
+#[cfg(test)]
+mod tests {
+    /// Regression for a silent-drop bug: `git branch --format` uses for-each-ref
+    /// escape syntax (`%XX`), not the `%xXX` syntax of `git log --format`. The
+    /// wrong form makes git emit the literal text "%x1f" — `parse_branches`
+    /// then can't find any separators and quietly returns no branches.
+    #[test]
+    fn branch_format_uses_correct_hex_escape() {
+        let source = include_str!("branch.rs");
+        let format_line = source
+            .lines()
+            .find(|line| line.contains("let format ="))
+            .expect("format string declaration");
+        assert!(
+            !format_line.contains("%x1f"),
+            "branch --format must use %1f, not %x1f (which git emits literally)"
+        );
+        assert!(format_line.contains("%1f"));
+    }
 }

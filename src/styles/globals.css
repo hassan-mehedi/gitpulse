@@ -936,6 +936,7 @@ button:disabled {
   bottom: calc(100% + 4px);
   right: 0;
   min-width: 220px;
+  max-width: 480px;
   padding: 4px 0;
   background: var(--vscode-menu-background);
   color: var(--vscode-menu-foreground);
@@ -945,16 +946,19 @@ button:disabled {
 }
 
 .dropdown-menu__item {
-  display: flex;
-  align-items: center;
+  display: block;
   width: 100%;
   height: 22px;
+  line-height: 22px;
   padding: 0 12px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
@@ -1236,9 +1240,38 @@ button:disabled {
   padding: 0 8px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
-  background: var(--vscode-input-background);
+  background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   font: inherit;
+}
+
+/* Native <select> chevron treatment — applied to every native select that
+   doesn't already use the button-based SettingsSelect. Uses an inline SVG so
+   no extra asset is needed; colour is hardcoded to match
+   `--vscode-descriptionForeground` (close enough on both themes). */
+select.select-input,
+select.branches-filter__select,
+select.rebase-row__action {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23cccccc' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  cursor: pointer;
+}
+
+select.select-input:hover,
+select.branches-filter__select:hover,
+select.rebase-row__action:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+select.select-input:focus,
+select.branches-filter__select:focus,
+select.rebase-row__action:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .repo-selector {
@@ -1251,8 +1284,6 @@ button:disabled {
 .repo-selector__select {
   width: 280px;
   height: 24px;
-  padding-right: 24px;
-  background: var(--vscode-input-background);
 }
 
 .commit-textarea {
@@ -1447,6 +1478,13 @@ body.is-resizing-sidebar * {
   top: calc(100% + 4px);
   right: 0;
   bottom: auto;
+  /* The view-title dropdown lives inside `.left-panel { overflow: hidden }`,
+     so it can't extend wider than the sidebar without being clipped.
+     Cap to the actual sidebar width (set as --sidebar-width by AppShell),
+     so paths ellipse cleanly instead of bleeding off-panel. The 16px buffer
+     leaves room for the trigger button's left padding. */
+  min-width: 160px;
+  max-width: min(480px, calc(var(--sidebar-width, 320px) - 16px));
 }
 
 .view-action {
@@ -1808,7 +1846,7 @@ body.is-resizing-sidebar * {
   min-width: 74px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
-  background: var(--vscode-input-background);
+  background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   font: inherit;
   font-size: 12px;
@@ -3352,10 +3390,28 @@ body.is-resizing-sidebar * {
   padding: 0 4px;
   border: 1px solid var(--vscode-input-border);
   border-radius: 2px;
-  background: var(--vscode-input-background);
+  background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   font: inherit;
   font-size: 11px;
+}
+
+.rebase-row__message {
+  width: 100%;
+  min-height: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.rebase-row__message:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .rebase-row__sha {

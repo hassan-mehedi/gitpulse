@@ -75,6 +75,8 @@ Open Settings any time from the gear icon in the bottom-left of the sidebar.
 
 ### Source control
 
+![Source control](docs/scm.gif)
+
 The sidebar splits changes into three buckets:
 
 - **Merge Changes** — files with unresolved conflicts (only shown during a merge). Clicking one opens the inline merge editor; see [Resolving conflicts](#resolving-conflicts).
@@ -103,6 +105,8 @@ Type a message in the box at the top of the source control panel and press **Ctr
 
 ### Commit graph
 
+![Commit graph](docs/git-graph.gif)
+
 Open the **Graph** view from the activity bar (left rail). It's virtualized, so it stays smooth on repos with hundreds of thousands of commits. From a commit row you can:
 
 - View the diff and changed files
@@ -113,15 +117,25 @@ Open the **Graph** view from the activity bar (left rail). It's virtualized, so 
 
 Filter by author, branch, tag, or message using the toolbar.
 
+#### Interactive rebase
+
+![Interactive rebase](docs/interactive-rebase.gif)
+
+From a commit in the graph choose *Rebase ▸ Interactive*. Reorder, squash, fixup, edit, drop, or reword commits with drag-and-drop, then *Start Rebase*. GitPulse handles conflicts inline via the merge editor (see [Resolving conflicts](#resolving-conflicts)) and you can abort at any point from the rebase status banner.
+
 ### Blame and file history
 
 Right-click any file in the source control or explorer panel → *Open Blame* or *Show File History*. Both work on the full history of the file (including across renames).
 
 ### Stash, worktrees, remotes, tags
 
-All accessible from the activity bar. Stash supports filtering by name and message; worktrees can be created, switched, and pruned without leaving the app.
+![Worktrees](docs/worktree.gif)
+
+All accessible from the activity bar. Stash supports filtering by name and message; worktrees can be created, switched, and pruned without leaving the app. The **File History** panel pairs naturally with worktrees: pick a file, scroll its commits, and the diff for that specific file renders below — drag the sash between the commit list and the diff to resize.
 
 ### Resolving conflicts
+
+![Merge conflict editor](docs/merge-conflict.gif)
 
 When a merge or pull leaves conflicts, the conflicted files appear in the **Merge Changes** section. Click one to open the merge editor, which shows:
 
@@ -131,6 +145,8 @@ When a merge or pull leaves conflicts, the conflicted files appear in the **Merg
 Mark a file as resolved by staging it. Once everything is staged, the commit button changes to *Continue Merge*.
 
 ## AI commit messages
+
+![AI commit message generation](docs/ai-commit-message.gif)
 
 GitPulse can generate a commit message from your staged diff. Configure providers in **Settings → AI Commit Messages**.
 

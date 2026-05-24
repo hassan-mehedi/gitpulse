@@ -770,10 +770,39 @@
 
 .merge-editor__panes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(0, var(--pane-1, 1fr)) 4px
+    minmax(0, var(--pane-2, 1fr)) 4px
+    minmax(0, var(--pane-3, 1fr));
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.merge-pane-sash {
+  position: relative;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+
+.merge-pane-sash::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1px;
+  width: 1px;
+  background: transparent;
+  transition: background 120ms;
+}
+
+.merge-pane-sash:hover::before,
+.is-resizing-sidebar .merge-pane-sash::before {
+  background: var(--vscode-focusBorder);
 }
 
 .merge-pane {

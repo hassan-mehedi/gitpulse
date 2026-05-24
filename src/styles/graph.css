@@ -248,9 +248,13 @@
 .graph-toolbar__ref-menu {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  /* Anchored to the filter button's left edge so the menu opens rightward
+     into the open panel space. `right: 0` would extend leftward and be
+     clipped by `.left-panel { overflow: hidden }` in narrow sidebars. */
+  left: 0;
   z-index: 30;
   min-width: 220px;
+  max-width: calc(var(--sidebar-width, 320px) - 16px);
   max-height: 280px;
   overflow: auto;
   padding: 6px;
@@ -644,6 +648,57 @@
   gap: 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 13px;
+}
+
+/* File-history split: commit list on top, detail+diff on bottom, with a
+   draggable horizontal sash between them. */
+.file-history__split {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-history__list {
+  min-height: 96px;
+  border-bottom: 1px solid var(--vscode-editorGroup-border);
+}
+
+.file-history__detail {
+  flex: 1 1 0;
+  min-height: 120px;
+  border-left: none;
+}
+
+.file-history__sash {
+  flex: 0 0 4px;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  user-select: none;
+  touch-action: none;
+}
+
+.file-history__sash::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  bottom: -2px;
+}
+
+.file-history__sash:hover,
+.file-history__sash.is-dragging {
+  background: var(--vscode-focusBorder, var(--vscode-sash-hoverBorder));
+}
+
+.file-history__diff-section .diff-viewer__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Commit detail editor surface (lives in content-panel) */
