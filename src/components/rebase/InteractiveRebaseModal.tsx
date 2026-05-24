@@ -202,6 +202,7 @@ export function InteractiveRebaseModal({
                         : "Squashed commit message"}
                     </span>
                     <textarea
+                      className="rebase-row__message"
                       value={row.message}
                       onChange={(event) => setMessage(row.sha, event.target.value)}
                       rows={3}

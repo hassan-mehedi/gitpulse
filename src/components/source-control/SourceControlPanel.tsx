@@ -31,6 +31,7 @@ import { RepoSection } from "./RepoSection";
 import { InputModal } from "../shared/InputModal";
 import { ConfirmModal } from "../shared/ConfirmModal";
 import { useNotificationStore } from "../../stores/notifications";
+import { progressId, useProgressStore } from "../../stores/progress";
 import { createId } from "../../lib/ids";
 import { ignoreReportedError, reportBackgroundError } from "../../lib/errors";
 import type { ActivityView, FileChange, Repository } from "../../types/git";
@@ -64,6 +65,8 @@ export function SourceControlPanel({
   const activeDiffRepo = useDiffStore((state) => state.activeRepo);
   const runGit = useGit();
   const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const upsertProgress = useProgressStore((state) => state.upsertProgress);
+  const removeProgress = useProgressStore((state) => state.removeProgress);
 
   const [viewMode, setViewMode] = useState<"tree" | "list">("list");
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
@@ -236,12 +239,29 @@ export function SourceControlPanel({
   }
 
   async function handleRefreshAll() {
-    await Promise.all(repositories.map((repo) => refreshRepo(repo.path))).catch((error) => {
+    if (repositories.length === 0) return;
+    const toastId = progressId({ repoPath: "*", operation: "Refresh repositories" });
+    const message =
+      repositories.length === 1
+        ? `Refreshing ${repositories[0]!.name ?? repositories[0]!.path.split("/").pop() ?? "repository"}…`
+        : `Refreshing ${repositories.length} repositories…`;
+    upsertProgress({
+      repoPath: "*",
+      operation: "Refresh repositories",
+      command: ["git", "status"],
+      message,
+      status: "running"
+    });
+    try {
+      await Promise.all(repositories.map((repo) => refreshRepo(repo.path)));
+    } catch (error) {
       reportBackgroundError(error, {
         operation: "Refresh repositories",
         title: "Refresh failed"
       });
-    });
+    } finally {
+      removeProgress(toastId);
+    }
   }
 
   function withActiveRepo(operation: (repo: Repository) => Promise<unknown>) {

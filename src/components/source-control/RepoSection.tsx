@@ -6,6 +6,7 @@ import { useGit } from "../../hooks/useGit";
 import { useSettingsStore } from "../../stores/settings";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useNotificationStore } from "../../stores/notifications";
+import { progressId, useProgressStore } from "../../stores/progress";
 import { createId } from "../../lib/ids";
 import { ignoreReportedError } from "../../lib/errors";
 import { gitDiscardAll, gitFetchAll, gitPatchApply, gitPatchCreate, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
@@ -53,6 +54,8 @@ export function RepoSection({
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const pushNotification = useNotificationStore((state) => state.pushNotification);
+  const upsertProgress = useProgressStore((state) => state.upsertProgress);
+  const removeProgress = useProgressStore((state) => state.removeProgress);
   const [collapsed, setCollapsed] = useState(false);
   const [confirmForcePush, setConfirmForcePush] = useState(false);
   const [confirmSync, setConfirmSync] = useState(false);
@@ -142,7 +145,25 @@ export function RepoSection({
             </button>
             <button
               className="repo-section__action"
-              onClick={() => withRefresh(() => Promise.resolve())}
+              onClick={() => {
+                const toastId = progressId({
+                  repoPath: repo.path,
+                  operation: "Refresh repository"
+                });
+                upsertProgress({
+                  repoPath: repo.path,
+                  operation: "Refresh repository",
+                  command: ["git", "status"],
+                  message: `Refreshing ${repo.name}…`,
+                  status: "running"
+                });
+                runGit(async () => {
+                  setActiveRepo(repo.id);
+                  await refreshRepo(repo.path);
+                })
+                  .catch(ignoreReportedError)
+                  .finally(() => removeProgress(toastId));
+              }}
               title="Refresh"
               aria-label={`Refresh ${repo.name}`}
               type="button"

@@ -31,6 +31,7 @@ import { findTrackedLocalBranch, inferLocalBranchName } from "../../lib/branches
 import { useGit } from "../../hooks/useGit";
 import { ignoreReportedError } from "../../lib/errors";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { progressId, useProgressStore } from "../../stores/progress";
 import type { BranchCompare, BranchInfo, FileDiff, Repository, UserInfo } from "../../types/git";
 import { BranchRow } from "./BranchRow";
 
@@ -113,8 +114,23 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
     }));
   }, []);
 
+  const upsertProgress = useProgressStore((state) => state.upsertProgress);
+  const removeProgress = useProgressStore((state) => state.removeProgress);
+
   const reloadRepo = useCallback(
-    async (repo: Repository) => {
+    async (repo: Repository, options: { announce?: boolean } = {}) => {
+      const { announce = false } = options;
+      const repoLabel = repo.name ?? repo.path.split("/").pop() ?? repo.path;
+      const toastId = progressId({ repoPath: repo.path, operation: "Refresh branches" });
+      if (announce) {
+        upsertProgress({
+          repoPath: repo.path,
+          operation: "Refresh branches",
+          command: ["git", "branch", "-a"],
+          message: `Refreshing branches in ${repoLabel}…`,
+          status: "running"
+        });
+      }
       setRepoState(repo.path, { isLoading: true, loadError: null });
       try {
         const branches = await gitBranches(repo.path);
@@ -135,9 +151,13 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
           isLoading: false,
           loadError: detail
         });
+      } finally {
+        if (announce) {
+          removeProgress(toastId);
+        }
       }
     },
-    [setRepoState]
+    [removeProgress, setRepoState, upsertProgress]
   );
 
   useEffect(() => {
@@ -504,7 +524,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
             className="view-action"
             onClick={() => {
               for (const repo of repositories) {
-                void reloadRepo(repo);
+                void reloadRepo(repo, { announce: true });
               }
             }}
             title="Refresh All"
@@ -596,7 +616,7 @@ export function BranchManager({ onOpenBranchPicker }: BranchManagerProps) {
                       </button>
                       <button
                         className="repo-section__action"
-                        onClick={() => void reloadRepo(repo)}
+                        onClick={() => void reloadRepo(repo, { announce: true })}
                         title="Refresh"
                         aria-label={`Refresh ${repo.name} branches`}
                         type="button"

@@ -6,8 +6,11 @@ use crate::git::runner::GitRunner;
 use crate::git::types::{OperationResult, TagInfo};
 
 pub async fn list(repo_path: &Path) -> Result<Vec<TagInfo>, GitError> {
+    // `tag -l --format` uses for-each-ref syntax, so the hex escape is `%XX`
+    // (not `%xXX` like `git log --format`). Using `%x1f` here ships the literal
+    // text "%x1f" in the output, which breaks `parse_tags`.
     let format =
-        "%(refname:short)%x1f%(objectname)%x1f%(subject)%x1f%(objecttype)%x1f%(taggername)%x1f%(creatordate:iso8601)";
+        "%(refname:short)%1f%(objectname)%1f%(subject)%1f%(objecttype)%1f%(taggername)%1f%(creatordate:iso8601)";
     let output = GitRunner::run(repo_path, &["tag", "-l", "--format", format]).await?;
     Ok(parse_tags(&output))
 }

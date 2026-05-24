@@ -53,7 +53,12 @@ export function AppShell() {
     const parsed = stored ? Number(stored) : 300;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
   });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage?.getItem("gitpulse:sidebarCollapsed") === "true";
+  });
   const fullPageView = activeView === "blame" || activeView === "misc" || activeView === "settings";
+  const sidebarHidden = fullPageView || sidebarCollapsed;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -63,6 +68,33 @@ export function AppShell() {
       // localStorage may be unavailable (private mode); silent.
     }
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "gitpulse:sidebarCollapsed",
+        sidebarCollapsed ? "true" : "false"
+      );
+    } catch {
+      // localStorage may be unavailable (private mode); silent.
+    }
+  }, [sidebarCollapsed]);
+
+  // Click on an activity bar icon: switch view (and re-show the sidebar), or
+  // toggle the sidebar if the same view is already active. Matches VS Code's
+  // behaviour for clicking the active item.
+  function handleActivitySelect(view: ActivityView) {
+    if (view === activeView) {
+      const targetIsFullPage = view === "blame" || view === "misc" || view === "settings";
+      if (!targetIsFullPage) {
+        setSidebarCollapsed((collapsed) => !collapsed);
+      }
+      return;
+    }
+    setActiveView(view);
+    setSidebarCollapsed(false);
+  }
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -177,7 +209,12 @@ export function AppShell() {
       const key = event.key.toLowerCase();
       if (key === "g") {
         event.preventDefault();
-        setActiveView("source-control");
+        if (activeView === "source-control" && !sidebarCollapsed) {
+          setSidebarCollapsed(true);
+        } else {
+          setActiveView("source-control");
+          setSidebarCollapsed(false);
+        }
       } else if (key === "b") {
         event.preventDefault();
         setBranchPickerCreateMode(false);
@@ -216,7 +253,7 @@ export function AppShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [awaitingShortcutChord, refreshActiveDiff, refreshRepo, runGit]);
+  }, [activeView, awaitingShortcutChord, refreshActiveDiff, refreshRepo, runGit, sidebarCollapsed]);
 
   function openBranchPickerForRepo(repoId?: string | null, createMode = false) {
     const resolvedRepoId = repoId ?? useWorkspaceStore.getState().activeRepoId ?? null;
@@ -233,18 +270,18 @@ export function AppShell() {
       <TitleBar />
       <div
         className={`main-layout${
-          fullPageView ? " main-layout--no-sidebar" : ""
+          sidebarHidden ? " main-layout--no-sidebar" : ""
         }`}
         style={
-          fullPageView
+          sidebarHidden
             ? undefined
             : ({
                 "--sidebar-width": `${sidebarWidth}px`
               } as React.CSSProperties)
         }
       >
-        <ActivityBar activeView={activeView} onNavigate={setActiveView} />
-        {fullPageView ? null : (
+        <ActivityBar activeView={activeView} onSelect={handleActivitySelect} />
+        {sidebarHidden ? null : (
           <>
             <section className="left-panel">
               {activeView === "branches" ? (

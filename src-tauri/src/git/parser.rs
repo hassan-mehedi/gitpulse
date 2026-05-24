@@ -46,6 +46,22 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
             let index_status = xy.chars().next().unwrap_or('.');
             let worktree_status = xy.chars().nth(1).unwrap_or('.');
 
+            // Unmerged paths have no stage-0 blob — staging concepts don't
+            // apply. Surface them ONLY in `changes` with status "U" so the
+            // UI's Merge Changes section is the single source of truth.
+            // Treating them as "also staged" duplicates the row into the
+            // Staged Changes section and confuses the resolve flow.
+            if line.starts_with("u ") || index_status == 'U' || worktree_status == 'U' {
+                has_conflicts = true;
+                changes.push(FileChange {
+                    path,
+                    old_path,
+                    status: "U".to_string(),
+                    staged: false,
+                });
+                continue;
+            }
+
             if index_status != '.' {
                 staged.push(FileChange {
                     path: path.clone(),
@@ -56,10 +72,6 @@ pub fn parse_status(output: &str, stash_count: usize) -> Result<RepoStatus, GitE
             }
 
             if worktree_status != '.' {
-                if worktree_status == 'U' || index_status == 'U' {
-                    has_conflicts = true;
-                }
-
                 changes.push(FileChange {
                     path,
                     old_path,
@@ -149,6 +161,47 @@ mod status_tests {
         .expect("status should parse");
 
         assert_eq!(status.changes[0].path, "conflicted file.md");
+        assert!(status.has_conflicts);
+    }
+
+    #[test]
+    fn unmerged_paths_only_appear_in_changes_not_staged() {
+        // u UU records used to double-up into both `staged` and `changes`,
+        // which surfaced the conflicted file in the SCM panel's Staged
+        // Changes section as well as Merge Changes. Unmerged paths have
+        // no stage-0 blob, so "staged" is meaningless for them.
+        let status = parse_status(
+            "# branch.head main\nu UU N... 100644 100644 100644 100644 abc def ghi list.ts",
+            0,
+        )
+        .expect("status should parse");
+
+        assert!(
+            status.staged.is_empty(),
+            "unmerged file should not appear in staged: {:?}",
+            status.staged
+        );
+        assert_eq!(status.changes.len(), 1);
+        assert_eq!(status.changes[0].path, "list.ts");
+        assert_eq!(status.changes[0].status, "U");
+        assert!(status.has_conflicts);
+    }
+
+    #[test]
+    fn unmerged_alongside_normal_staged_file_keeps_each_in_one_bucket() {
+        let status = parse_status(
+            "# branch.head main\n\
+             1 M. N... 100644 100644 100644 abc def src/keep.ts\n\
+             u UU N... 100644 100644 100644 100644 abc def ghi src/conflict.ts",
+            0,
+        )
+        .expect("status should parse");
+
+        assert_eq!(status.staged.len(), 1);
+        assert_eq!(status.staged[0].path, "src/keep.ts");
+        assert_eq!(status.changes.len(), 1);
+        assert_eq!(status.changes[0].path, "src/conflict.ts");
+        assert_eq!(status.changes[0].status, "U");
         assert!(status.has_conflicts);
     }
 }

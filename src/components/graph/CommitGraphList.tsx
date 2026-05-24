@@ -6,6 +6,7 @@ import { ConfirmModal } from "../shared/ConfirmModal";
 import { useGit } from "../../hooks/useGit";
 import { useGraphStore } from "../../stores/graph";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { progressId, useProgressStore } from "../../stores/progress";
 import {
   gitCherryPick,
   gitCreateBranch,
@@ -87,6 +88,8 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
     setRepoId,
     setIncludeAll
   } = useGraphStore();
+  const upsertProgress = useProgressStore((state) => state.upsertProgress);
+  const removeProgress = useProgressStore((state) => state.removeProgress);
 
   const selectedRepo =
     repositories.find((repo) => repo.id === repoId) ?? repositories[0] ?? null;
@@ -290,9 +293,28 @@ export function CommitGraphList({ onNavigateToView }: CommitGraphListProps) {
         sinceDays={sinceDays}
         onSinceDaysChange={setSinceDays}
         onReload={() => {
-          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined)).catch(
-            ignoreReportedError
-          );
+          const toastId = progressId({
+            repoPath: selectedRepo.path,
+            operation: "Reload commit graph"
+          });
+          upsertProgress({
+            repoPath: selectedRepo.path,
+            operation: "Reload commit graph",
+            command: ["git", "log", "--graph"],
+            message: `Reloading commit graph for ${selectedRepo.name}…`,
+            status: "running"
+          });
+          // Hold the toast for at least 350ms even if `loadGraph` resolves
+          // sooner — otherwise the upsert + remove can collapse into one
+          // render batch on small repos and the toast never paints.
+          const start = Date.now();
+          void runGit(() => loadGraph(selectedRepo, pathQuery.trim() || undefined))
+            .catch(ignoreReportedError)
+            .finally(() => {
+              const elapsed = Date.now() - start;
+              const remaining = Math.max(0, 350 - elapsed);
+              window.setTimeout(() => removeProgress(toastId), remaining);
+            });
         }}
         query={query}
         includeAll={includeAll}

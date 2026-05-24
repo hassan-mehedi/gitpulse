@@ -20,10 +20,11 @@ const items: Item[] = [
 
 interface ActivityBarProps {
   activeView: ActivityView;
-  onNavigate: (view: ActivityView) => void;
+  /** Called with the clicked view. Caller decides whether to navigate or toggle. */
+  onSelect: (view: ActivityView) => void;
 }
 
-export function ActivityBar({ activeView, onNavigate }: ActivityBarProps) {
+export function ActivityBar({ activeView, onSelect }: ActivityBarProps) {
   const repositories = useWorkspaceStore((state) => state.repositories);
   const totalChanges = repositories.reduce(
     (sum, repo) => sum + repo.changes.length + repo.staged.length,
@@ -38,7 +39,7 @@ export function ActivityBar({ activeView, onNavigate }: ActivityBarProps) {
       <button
         key={item.key}
         className={`activity-bar__item${isActive ? " is-active" : ""}`}
-        onClick={() => onNavigate(item.key)}
+        onClick={() => onSelect(item.key)}
         title={item.label}
         aria-label={item.label}
         aria-pressed={isActive}
