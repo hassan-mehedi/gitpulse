@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitPulse - VS Code-inspired Git client</title>
+    <meta
+      name="description"
+      content="GitPulse is a fast, native-feeling desktop Git client with source control, a virtualized commit graph, interactive rebase, blame, worktrees, merge conflict tools, and optional AI commit messages."
+    />
+    <meta name="theme-color" content="#111111" />
+    <meta property="og:title" content="GitPulse - VS Code-inspired Git client" />
+    <meta
+      property="og:description"
+      content="A cross-platform desktop Git GUI built with Tauri, React, and Rust."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="screenshot.png" />
+    <link rel="icon" href="app-icon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111111;
+        --panel: #181818;
+        --panel-2: #1f1f1f;
+        --panel-3: #252526;
+        --line: #2b2b2b;
+        --line-bright: #3c3c3c;
+        --text: #f2f2f2;
+        --muted: #a7a7a7;
+        --dim: #777777;
+        --blue: #0078d4;
+        --blue-2: #4daafc;
+        --green: #73c991;
+        --yellow: #e2c08d;
+        --red: #f48771;
+        --violet: #cba6f7;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+        --radius: 8px;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 48px 48px,
+          linear-gradient(180deg, rgba(0, 120, 212, 0.16), transparent 560px),
+          var(--bg);
+        color: var(--text);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(0, 120, 212, 0.22), transparent 34rem),
+          radial-gradient(circle at 80% 0%, rgba(115, 201, 145, 0.12), transparent 28rem),
+          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 100% 4px;
+        mask-image: linear-gradient(to bottom, black, transparent 72%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+      }
+
+      .page {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .container {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(17, 17, 17, 0.78);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav__inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 68px;
+        gap: 24px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+      }
+
+      .nav__links {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .nav__links a:hover {
+        color: var(--text);
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 17px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        background: var(--panel-3);
+        color: var(--text);
+        font-weight: 650;
+        line-height: 1;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.24);
+        background: #303030;
+      }
+
+      .button--primary {
+        border-color: #1688df;
+        background: var(--blue);
+        color: #ffffff;
+        box-shadow: 0 16px 40px rgba(0, 120, 212, 0.32);
+      }
+
+      .button--primary:hover {
+        background: #0b86e8;
+      }
+
+      .hero {
+        padding: 68px 0 58px;
+      }
+
+      .hero__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.82fr) minmax(360px, 1.18fr);
+        align-items: center;
+        gap: 48px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        width: fit-content;
+        margin: 0 0 18px;
+        padding: 6px 10px;
+        border: 1px solid rgba(77, 170, 252, 0.28);
+        border-radius: 999px;
+        background: rgba(0, 120, 212, 0.1);
+        color: #cce8ff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+      }
+
+      .pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 6px rgba(115, 201, 145, 0.14);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 22px;
+        font-size: clamp(3rem, 5.5vw, 5rem);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .hero__lead {
+        max-width: 680px;
+        margin-bottom: 30px;
+        color: #d0d0d0;
+        font-size: clamp(1.1rem, 2vw, 1.35rem);
+      }
+
+      .hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+
+      .hero__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .tag {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        padding: 5px 10px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .window {
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .window::before {
+        content: "";
+        display: block;
+        height: 34px;
+        background:
+          radial-gradient(circle, #f48771 0 5px, transparent 6px) 16px 17px / 18px 18px no-repeat,
+          radial-gradient(circle, #e2c08d 0 5px, transparent 6px) 38px 17px / 18px 18px no-repeat,
+          radial-gradient(circle, #73c991 0 5px, transparent 6px) 60px 17px / 18px 18px no-repeat,
+          linear-gradient(#181818, #181818);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .window img {
+        width: 100%;
+        aspect-ratio: 1920 / 1046;
+        object-fit: cover;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        margin-top: 34px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--line);
+      }
+
+      .stat {
+        min-height: 116px;
+        padding: 22px;
+        background: rgba(24, 24, 24, 0.86);
+      }
+
+      .stat strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 1.65rem;
+        line-height: 1;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .section {
+        padding: 76px 0;
+      }
+
+      .section--tight {
+        padding-top: 34px;
+      }
+
+      .section__head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(300px, 0.58fr);
+        align-items: end;
+        gap: 36px;
+        margin-bottom: 30px;
+      }
+
+      h2 {
+        margin-bottom: 0;
+        font-size: clamp(2rem, 4vw, 3.7rem);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .section__head p,
+      .section__intro {
+        color: var(--muted);
+        font-size: 1.02rem;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--line);
+      }
+
+      .feature {
+        min-height: 228px;
+        padding: 24px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 46%),
+          var(--panel);
+      }
+
+      .feature__index {
+        display: block;
+        margin-bottom: 34px;
+        color: var(--blue-2);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.78rem;
+      }
+
+      .feature h3 {
+        margin-bottom: 10px;
+        font-size: 1.17rem;
+      }
+
+      .feature p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .showcase {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 22px;
+      }
+
+      .demo {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--panel);
+      }
+
+      .demo img {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .demo__body {
+        padding: 20px;
+      }
+
+      .demo h3 {
+        margin-bottom: 7px;
+        font-size: 1.05rem;
+      }
+
+      .demo p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .download-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(330px, 0.72fr);
+        gap: 1px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--line);
+      }
+
+      .download-panel > * {
+        background: var(--panel);
+      }
+
+      .download-main {
+        padding: 34px;
+      }
+
+      .download-main h2 {
+        margin-bottom: 16px;
+      }
+
+      .download-main p {
+        max-width: 700px;
+        color: var(--muted);
+      }
+
+      .release-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .release-card {
+        padding: 16px;
+        border: 1px solid var(--line-bright);
+        border-radius: 6px;
+        background: #1f1f1f;
+      }
+
+      .release-card strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .release-card span {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .download-notes {
+        padding: 34px;
+      }
+
+      .note {
+        display: grid;
+        grid-template-columns: 10px minmax(0, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+        color: var(--muted);
+        font-size: 0.93rem;
+      }
+
+      .note::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        margin-top: 8px;
+        border-radius: 50%;
+        background: var(--yellow);
+      }
+
+      .privacy {
+        display: grid;
+        grid-template-columns: minmax(0, 0.74fr) minmax(360px, 1fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .privacy__copy {
+        padding: 32px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background:
+          radial-gradient(circle at 20% 20%, rgba(115, 201, 145, 0.14), transparent 32%),
+          var(--panel);
+      }
+
+      .privacy__copy p {
+        color: var(--muted);
+      }
+
+      .terminal {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #0d0d0d;
+        overflow: hidden;
+      }
+
+      .terminal__bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 38px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--dim);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.78rem;
+      }
+
+      .terminal pre {
+        margin: 0;
+        padding: 22px;
+        overflow-x: auto;
+        color: #d7d7d7;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.86rem;
+        line-height: 1.7;
+      }
+
+      .terminal .green {
+        color: var(--green);
+      }
+
+      .terminal .blue {
+        color: var(--blue-2);
+      }
+
+      .terminal .muted {
+        color: var(--dim);
+      }
+
+      .faq {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+      }
+
+      summary {
+        cursor: pointer;
+        padding: 18px 20px;
+        font-weight: 700;
+      }
+
+      details p {
+        margin: 0;
+        padding: 0 20px 20px;
+        color: var(--muted);
+      }
+
+      .cta {
+        padding: 56px;
+        border: 1px solid rgba(77, 170, 252, 0.26);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(135deg, rgba(0, 120, 212, 0.22), rgba(115, 201, 145, 0.08)),
+          var(--panel);
+        text-align: center;
+      }
+
+      .cta h2 {
+        margin-bottom: 16px;
+      }
+
+      .cta p {
+        max-width: 680px;
+        margin: 0 auto 24px;
+        color: #d0d0d0;
+      }
+
+      .footer {
+        padding: 34px 0 46px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+      }
+
+      .footer__inner {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .footer a {
+        color: var(--text);
+      }
+
+      @media (max-width: 980px) {
+        .hero__grid,
+        .section__head,
+        .download-panel,
+        .privacy {
+          grid-template-columns: 1fr;
+        }
+
+        .feature-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .release-list,
+        .stats {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .nav__links {
+          display: none;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .container {
+          width: min(100% - 28px, 1180px);
+        }
+
+        .nav__inner {
+          gap: 12px;
+        }
+
+        .nav .button {
+          width: auto;
+          min-width: 136px;
+        }
+
+        .hero {
+          padding-top: 62px;
+        }
+
+        .hero__grid {
+          gap: 32px;
+        }
+
+        .hero__actions,
+        .footer__inner {
+          flex-direction: column;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .feature-grid,
+        .showcase,
+        .release-list,
+        .stats,
+        .faq {
+          grid-template-columns: 1fr;
+        }
+
+        .download-main,
+        .download-notes,
+        .privacy__copy,
+        .cta {
+          padding: 24px;
+        }
+
+        h1 {
+          font-size: clamp(3rem, 17vw, 4.4rem);
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .hero__copy,
+        .window,
+        .section {
+          animation: rise 680ms ease both;
+        }
+
+        .window {
+          animation-delay: 120ms;
+        }
+
+        @keyframes rise {
+          from {
+            opacity: 0;
+            transform: translateY(18px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="nav">
+        <div class="container nav__inner">
+          <a class="brand" href="#top" aria-label="GitPulse home">
+            <img src="app-icon.svg" alt="" />
+            <span>GitPulse</span>
+          </a>
+          <nav class="nav__links" aria-label="Primary navigation">
+            <a href="#features">Features</a>
+            <a href="#demos">Demos</a>
+            <a href="#download">Download</a>
+            <a href="#privacy">Privacy</a>
+            <a href="https://github.com/hassan-mehedi/gitpulse">GitHub</a>
+          </nav>
+          <a class="button button--primary" href="https://github.com/hassan-mehedi/gitpulse/releases/latest">
+            Download
+          </a>
+        </div>
+      </header>
+
+      <main id="top">
+        <section class="hero">
+          <div class="container hero__grid">
+            <div class="hero__copy">
+              <p class="eyebrow"><span class="pulse"></span>Desktop Git client for developers</p>
+              <h1>Git without leaving your flow.</h1>
+              <p class="hero__lead">
+                GitPulse is a VS Code-inspired desktop Git GUI built with Tauri, React, and Rust.
+                It pairs familiar source-control workflows with a fast commit graph, rebase tools,
+                blame, file history, worktrees, and optional AI commit messages.
+              </p>
+              <div class="hero__actions">
+                <a class="button button--primary" href="https://github.com/hassan-mehedi/gitpulse/releases/latest">
+                  Download latest release
+                </a>
+                <a class="button" href="https://github.com/hassan-mehedi/gitpulse">
+                  View source on GitHub
+                </a>
+              </div>
+              <div class="hero__meta" aria-label="Highlights">
+                <span class="tag">Windows</span>
+                <span class="tag">macOS</span>
+                <span class="tag">Linux</span>
+                <span class="tag">MIT licensed</span>
+              </div>
+            </div>
+
+            <div class="window" aria-label="GitPulse application screenshot">
+              <img src="screenshot.png" alt="GitPulse desktop app showing source control and a diff view" />
+            </div>
+          </div>
+
+          <div class="container stats" aria-label="Product summary">
+            <div class="stat">
+              <strong>3</strong>
+              <span>major desktop platforms with release bundles</span>
+            </div>
+            <div class="stat">
+              <strong>100k+</strong>
+              <span>commit histories targeted by the virtualized graph</span>
+            </div>
+            <div class="stat">
+              <strong>0</strong>
+              <span>telemetry, analytics, or remote configuration sync</span>
+            </div>
+            <div class="stat">
+              <strong>Local</strong>
+              <span>Ollama path for private AI commit messages</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section--tight" id="features">
+          <div class="container">
+            <div class="section__head">
+              <h2>A Git workbench shaped like the editor you already know.</h2>
+              <p>
+                GitPulse keeps common commits fast, then gives you deeper tools when history,
+                branches, conflicts, or large repositories need more than a sidebar.
+              </p>
+            </div>
+
+            <div class="feature-grid">
+              <article class="feature">
+                <span class="feature__index">01 / Source control</span>
+                <h3>Stage exactly what you mean</h3>
+                <p>
+                  Split or inline diffs, whitespace controls, word highlights, binary previews,
+                  and per-hunk or selected-line staging from the gutter.
+                </p>
+              </article>
+              <article class="feature">
+                <span class="feature__index">02 / Commit graph</span>
+                <h3>Move through large histories</h3>
+                <p>
+                  A virtualized graph stays responsive on deep repositories, with filters for
+                  author, branch, tag, and message.
+                </p>
+              </article>
+              <article class="feature">
+                <span class="feature__index">03 / Rebase</span>
+                <h3>Rewrite history visually</h3>
+                <p>
+                  Reorder, squash, fixup, edit, drop, or reword commits with drag and drop, then
+                  handle conflicts inline if they happen.
+                </p>
+              </article>
+              <article class="feature">
+                <span class="feature__index">04 / Blame and history</span>
+                <h3>Follow code across time</h3>
+                <p>
+                  Open blame or file history from a file context menu, including history that
+                  crosses renames.
+                </p>
+              </article>
+              <article class="feature">
+                <span class="feature__index">05 / Worktrees</span>
+                <h3>Switch tasks without stashing</h3>
+                <p>
+                  Create, switch, and prune worktrees alongside stashes, remotes, tags, and
+                  repository maintenance tools.
+                </p>
+              </article>
+              <article class="feature">
+                <span class="feature__index">06 / AI commits</span>
+                <h3>Draft messages from staged diffs</h3>
+                <p>
+                  Use Ollama locally for a free private path, or configure OpenAI, Anthropic,
+                  DeepSeek, or any OpenAI-compatible provider.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="demos">
+          <div class="container">
+            <div class="section__head">
+              <h2>Built around real Git operations.</h2>
+              <p>
+                The landing page uses the same product captures as the README, so visitors see
+                the actual desktop app instead of abstract placeholders.
+              </p>
+            </div>
+
+            <div class="showcase">
+              <article class="demo">
+                <img loading="lazy" src="scm.gif" alt="GitPulse source control staging workflow" />
+                <div class="demo__body">
+                  <h3>Source control and diffs</h3>
+                  <p>Stage, unstage, discard, review split diffs, and commit without changing mental models.</p>
+                </div>
+              </article>
+              <article class="demo">
+                <img loading="lazy" src="git-graph.gif" alt="GitPulse commit graph workflow" />
+                <div class="demo__body">
+                  <h3>Virtualized commit graph</h3>
+                  <p>Inspect commits, compare changes, cherry-pick, revert, reset, and recover from reflog.</p>
+                </div>
+              </article>
+              <article class="demo">
+                <img loading="lazy" src="interactive-rebase.gif" alt="GitPulse interactive rebase workflow" />
+                <div class="demo__body">
+                  <h3>Interactive rebase</h3>
+                  <p>Plan a cleanup visually, then continue, abort, or resolve conflicts from the same app.</p>
+                </div>
+              </article>
+              <article class="demo">
+                <img loading="lazy" src="merge-conflict.gif" alt="GitPulse merge conflict editor" />
+                <div class="demo__body">
+                  <h3>Merge conflict editor</h3>
+                  <p>Accept current, incoming, or both, then edit the result and stage resolved files.</p>
+                </div>
+              </article>
+              <article class="demo">
+                <img loading="lazy" src="worktree.gif" alt="GitPulse worktree management workflow" />
+                <div class="demo__body">
+                  <h3>Worktrees and file history</h3>
+                  <p>Keep parallel tasks clean while browsing file-specific commits and diffs.</p>
+                </div>
+              </article>
+              <article class="demo">
+                <img loading="lazy" src="ai-commit-message.gif" alt="GitPulse AI commit message generation" />
+                <div class="demo__body">
+                  <h3>AI commit message drafts</h3>
+                  <p>Generate a draft from staged changes, reroll it, and edit before committing.</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="download">
+          <div class="container download-panel">
+            <div class="download-main">
+              <p class="eyebrow"><span class="pulse"></span>Latest release</p>
+              <h2>Download GitPulse from GitHub Releases.</h2>
+              <p>
+                Release bundles are published on GitHub. The download button always sends users to
+                the latest published GitPulse release so they can choose the right installer for
+                their operating system.
+              </p>
+              <div class="hero__actions">
+                <a class="button button--primary" href="https://github.com/hassan-mehedi/gitpulse/releases/latest">
+                  Open latest release
+                </a>
+                <a class="button" href="https://github.com/hassan-mehedi/gitpulse/releases">
+                  Browse all releases
+                </a>
+              </div>
+
+              <div class="release-list" aria-label="Available release formats">
+                <div class="release-card">
+                  <strong>Linux</strong>
+                  <span>.deb, .rpm, and .AppImage bundles</span>
+                </div>
+                <div class="release-card">
+                  <strong>macOS</strong>
+                  <span>.dmg builds for Intel and Apple Silicon</span>
+                </div>
+                <div class="release-card">
+                  <strong>Windows</strong>
+                  <span>x64 setup installer</span>
+                </div>
+              </div>
+            </div>
+
+            <aside class="download-notes" aria-label="Install notes">
+              <div class="note">GitPulse shells out to system Git, so Git must be installed and available on PATH.</div>
+              <div class="note">Linux AppImage users need WebKitGTK 4.1, GTK 3, and Ayatana AppIndicator available.</div>
+              <div class="note">macOS and Windows builds are currently unsigned, so Gatekeeper or SmartScreen may show a first-run warning.</div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="section" id="privacy">
+          <div class="container privacy">
+            <div class="privacy__copy">
+              <p class="eyebrow"><span class="pulse"></span>Local by default</p>
+              <h2>No analytics. No telemetry. No remote sync.</h2>
+              <p>
+                GitPulse stores app settings, commit identities, AI provider configuration, and
+                secrets locally. AI API keys stay on your machine and are only sent to the provider
+                you configure.
+              </p>
+              <p>
+                For AI commit messages, Ollama gives you a fully local route: no API key, no hosted
+                model call, and your staged diff stays on your laptop.
+              </p>
+            </div>
+
+            <div class="terminal" aria-label="Local data locations">
+              <div class="terminal__bar">
+                <span>gitpulse://local-data</span>
+                <span>read-only</span>
+              </div>
+              <pre><code><span class="muted"># Settings</span>
+<span class="green">settings.json</span> in the app data directory
+
+<span class="muted"># AI provider secrets</span>
+<span class="green">secrets.json</span> in the app data directory
+
+<span class="muted"># Linux</span>
+<span class="blue">~/.local/share/com.gitpulse.app/</span>
+
+<span class="muted"># macOS</span>
+<span class="blue">~/Library/Application Support/com.gitpulse.app/</span>
+
+<span class="muted"># Windows</span>
+<span class="blue">%APPDATA%\com.gitpulse.app\</span></code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="faq">
+          <div class="container">
+            <div class="section__head">
+              <h2>Install notes before you start.</h2>
+              <p>
+                Most setup issues are platform prerequisites or unsigned-bundle prompts. These are
+                the same notes users see in the project README.
+              </p>
+            </div>
+
+            <div class="faq">
+              <details open>
+                <summary>What do I need before installing?</summary>
+                <p>Install Git and make sure <code>git --version</code> works in a fresh terminal.</p>
+              </details>
+              <details>
+                <summary>Why does macOS block the app?</summary>
+                <p>The macOS bundles are not code-signed yet. Right-click GitPulse in Applications, choose Open, then confirm Open again.</p>
+              </details>
+              <details>
+                <summary>Why does Windows SmartScreen warn me?</summary>
+                <p>The Windows installer is currently unsigned. Click More info, then Run anyway if you trust the release.</p>
+              </details>
+              <details>
+                <summary>What Linux packages are required?</summary>
+                <p>The AppImage expects WebKitGTK 4.1, GTK 3, Ayatana AppIndicator 3, and Git on PATH.</p>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container cta">
+            <h2>Give GitPulse a real repository.</h2>
+            <p>
+              Open a project folder, stage a hunk, browse the graph, and resolve a conflict without
+              leaving the desktop client.
+            </p>
+            <a class="button button--primary" href="https://github.com/hassan-mehedi/gitpulse/releases/latest">
+              Download latest release
+            </a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer__inner">
+          <span>GitPulse is MIT licensed software by hassan-mehedi.</span>
+          <span>
+            <a href="https://github.com/hassan-mehedi/gitpulse">GitHub</a>
+            &nbsp;/&nbsp;
+            <a href="https://github.com/hassan-mehedi/gitpulse/releases/latest">Latest release</a>
+          </span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
