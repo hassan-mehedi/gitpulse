@@ -135,6 +135,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...workspace,
         isLoading: false
       });
+      if (workspace.workspaceFilePath) {
+        useSettingsStore.getState().rememberWorkspace(workspace.workspaceFilePath);
+      }
       for (const repo of workspace.repositories) {
         useSettingsStore.getState().rememberRepository(repo.path);
       }
@@ -152,6 +155,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         ...workspace,
         isLoading: false
       });
+      if (path.endsWith(".code-workspace")) {
+        useSettingsStore.getState().rememberWorkspace(path);
+      }
       for (const repo of workspace.repositories) {
         useSettingsStore.getState().rememberRepository(repo.path);
       }

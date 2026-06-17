@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DiffHunk as DiffHunkType } from "../../types/git";
 import type { ThemeMode } from "../../lib/theme";
 import { highlightLines } from "../../lib/highlight";
@@ -14,6 +14,7 @@ interface DiffHunkProps {
   isActive: boolean;
   mode: "split" | "inline";
   theme: ThemeMode;
+  enableHighlight?: boolean;
   onFocus: () => void;
   allowLineSelection?: boolean;
   selectedLineIndices: number[];
@@ -30,6 +31,7 @@ export function DiffHunk({
   isActive,
   mode,
   theme,
+  enableHighlight = true,
   onFocus,
   allowLineSelection = true,
   selectedLineIndices,
@@ -43,12 +45,20 @@ export function DiffHunk({
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => line.lineType !== "remove");
   const selected = new Set(selectedLineIndices);
-  const comparisons = buildLineComparisons(hunk.lines);
+  const comparisons = useMemo(
+    () => (enableHighlight ? buildLineComparisons(hunk.lines) : new Map<number, string>()),
+    [enableHighlight, hunk.lines]
+  );
   const [highlightedHtml, setHighlightedHtml] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setHighlightedHtml([]);
+    if (!enableHighlight) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const codes = hunk.lines.map((line) => line.content.slice(1));
     void highlightLines(filePath, codes, theme).then((next) => {
       if (!cancelled) setHighlightedHtml(next);
@@ -56,7 +66,7 @@ export function DiffHunk({
     return () => {
       cancelled = true;
     };
-  }, [filePath, hunk.lines, theme]);
+  }, [enableHighlight, filePath, hunk.lines, theme]);
 
   return (
     <section className={`diff-hunk ${isActive ? "is-active" : ""}`} onMouseEnter={onFocus}>
@@ -81,6 +91,7 @@ export function DiffHunk({
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
+                  enableHighlight={enableHighlight}
                   compareContent={comparisons.get(index)}
                   highlightedHtml={highlightedHtml[index]}
                 />
@@ -103,6 +114,7 @@ export function DiffHunk({
                   selectable={allowLineSelection && line.lineType !== "context"}
                   selected={selected.has(index)}
                   theme={theme}
+                  enableHighlight={enableHighlight}
                   compareContent={comparisons.get(index)}
                   highlightedHtml={highlightedHtml[index]}
                 />
@@ -125,6 +137,7 @@ export function DiffHunk({
               selectable={allowLineSelection && line.lineType !== "context"}
               selected={selected.has(index)}
               theme={theme}
+              enableHighlight={enableHighlight}
               compareContent={comparisons.get(index)}
               highlightedHtml={highlightedHtml[index]}
             />

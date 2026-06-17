@@ -1640,6 +1640,7 @@ body.is-resizing-sidebar * {
 .scm-section {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .scm-section__header {
@@ -1720,6 +1721,8 @@ body.is-resizing-sidebar * {
 .scm-section__body {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .scm-section__body--virtualized {
@@ -1743,6 +1746,8 @@ body.is-resizing-sidebar * {
 .file-tree {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .file-tree__directory {
@@ -1750,6 +1755,7 @@ body.is-resizing-sidebar * {
   align-items: center;
   gap: 4px;
   width: 100%;
+  min-width: 0;
   height: 22px;
   padding: 0 8px;
   border: 0;
@@ -1776,6 +1782,7 @@ body.is-resizing-sidebar * {
 }
 
 .file-tree__directory-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1783,6 +1790,8 @@ body.is-resizing-sidebar * {
 
 .file-tree__leaf {
   display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Inside a tree leaf, the SCM row shouldn't add its own 22 px chevron-column
@@ -1990,6 +1999,8 @@ body.is-resizing-sidebar * {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
   height: 22px;
   padding: 0 8px;
   color: var(--vscode-sideBar-foreground);
@@ -2019,7 +2030,9 @@ body.is-resizing-sidebar * {
 }
 
 .scm-row__name {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2043,6 +2056,7 @@ body.is-resizing-sidebar * {
   display: inline-flex;
   align-items: center;
   gap: 0;
+  flex: 0 0 auto;
   margin-left: auto;
   opacity: 0;
   transition: opacity 120ms ease;

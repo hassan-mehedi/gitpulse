@@ -54,3 +54,47 @@ async fn show_stage(repo_path: &Path, stage: usize, file: &str) -> Result<String
         Err(error) => Err(error),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{content, list, mark_resolved, set_content};
+    use crate::git::test_utils::TestRepo;
+
+    #[tokio::test]
+    async fn writes_and_marks_conflicted_file_resolved() {
+        let repo = TestRepo::new("conflict-resolve");
+        repo.write("shared.txt", "base\n");
+        repo.commit_all("base");
+
+        repo.git(&["checkout", "-b", "feature"]);
+        repo.write("shared.txt", "incoming\n");
+        repo.commit_all("incoming");
+
+        repo.git(&["checkout", "main"]);
+        repo.write("shared.txt", "current\n");
+        repo.commit_all("current");
+
+        let merge = repo.git_output(&["merge", "feature"]);
+        assert!(!merge.status.success(), "merge should produce a conflict");
+
+        let conflicts = list(repo.path()).await.expect("list conflicts");
+        assert_eq!(conflicts, vec!["shared.txt".to_string()]);
+
+        let conflict = content(repo.path(), "shared.txt")
+            .await
+            .expect("read conflict content");
+        assert!(conflict.raw.contains("<<<<<<<"));
+        assert!(conflict.ours.contains("current"));
+        assert!(conflict.theirs.contains("incoming"));
+
+        set_content(repo.path(), "shared.txt", "current\nincoming\n")
+            .await
+            .expect("write resolved content");
+        mark_resolved(repo.path(), "shared.txt")
+            .await
+            .expect("mark resolved");
+
+        let conflicts = list(repo.path()).await.expect("list conflicts after add");
+        assert!(conflicts.is_empty(), "{conflicts:?}");
+    }
+}

@@ -14,6 +14,7 @@ interface DiffLineProps {
   selected?: boolean;
   selectable?: boolean;
   theme: ThemeMode;
+  enableHighlight?: boolean;
   compareContent?: string;
   highlightedHtml?: string;
   onToggle?: () => void;
@@ -29,6 +30,7 @@ function DiffLineImpl({
   selected,
   selectable,
   theme,
+  enableHighlight = true,
   compareContent,
   highlightedHtml,
   onToggle,
@@ -68,6 +70,8 @@ function DiffLineImpl({
             className="diff-line__content"
             dangerouslySetInnerHTML={{ __html: highlightedHtml }}
           />
+        ) : !enableHighlight ? (
+          <span className="diff-line__content">{code}</span>
         ) : (
           <HighlightedLineContent content={code} filePath={filePath} theme={theme} />
         )}

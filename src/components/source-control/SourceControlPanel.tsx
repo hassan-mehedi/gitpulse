@@ -59,6 +59,7 @@ export function SourceControlPanel({
   const setActiveRepo = useWorkspaceStore((state) => state.setActiveRepo);
   const activeRepoId = useWorkspaceStore((state) => state.activeRepoId);
   const recentRepositoryPaths = useSettingsStore((state) => state.recentRepositoryPaths);
+  const recentWorkspacePaths = useSettingsStore((state) => state.recentWorkspacePaths);
   const openDiff = useWorkspaceStore((state) => state.openDiff);
   const activeChange = useDiffStore((state) => state.activeChange);
   const activeStaged = useDiffStore((state) => state.staged);
@@ -376,6 +377,27 @@ export function SourceControlPanel({
                   Refresh
                 </button>
                 <div className="dropdown-menu__separator" role="separator" />
+                {recentWorkspacePaths.length > 0 ? (
+                  <>
+                    <div className="dropdown-menu__label">Recent Workspaces</div>
+                    {recentWorkspacePaths.map((path) => (
+                      <button
+                        className="dropdown-menu__item"
+                        key={path}
+                        onClick={() => {
+                          setOverflowOpen(false);
+                          void loadTarget(path);
+                        }}
+                        role="menuitem"
+                        title={path}
+                        type="button"
+                      >
+                        {path}
+                      </button>
+                    ))}
+                    <div className="dropdown-menu__separator" role="separator" />
+                  </>
+                ) : null}
                 {recentRepositoryPaths.length > 0 ? (
                   <>
                     <div className="dropdown-menu__label">Recent Repositories</div>
@@ -492,6 +514,22 @@ export function SourceControlPanel({
             >
               Open Workspace
             </button>
+            {recentWorkspacePaths.length > 0 ? (
+              <div className="scm-welcome__recent">
+                <div className="scm-welcome__recent-title">Recent Workspaces</div>
+                {recentWorkspacePaths.map((workspacePath) => (
+                  <button
+                    className="scm-welcome__recent-item"
+                    key={workspacePath}
+                    onClick={() => void loadTarget(workspacePath)}
+                    title={workspacePath}
+                    type="button"
+                  >
+                    {workspacePath}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {recentRepositoryPaths.length > 0 ? (
               <div className="scm-welcome__recent">
                 <div className="scm-welcome__recent-title">Recent Repositories</div>
