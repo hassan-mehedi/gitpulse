@@ -9,7 +9,15 @@ use crate::git::types::{DiffStat, FileDiff, RepoStatus};
 
 pub async fn status(repo_path: &Path) -> Result<RepoStatus, GitError> {
     let (output, stash_output) = tokio::join!(
-        GitRunner::run(repo_path, &["status", "--porcelain=v2", "--branch"]),
+        GitRunner::run(
+            repo_path,
+            &[
+                "status",
+                "--porcelain=v2",
+                "--branch",
+                "--untracked-files=all",
+            ],
+        ),
         GitRunner::run(repo_path, &["stash", "list", "--format=%gd"])
     );
     let output = output?;
@@ -85,4 +93,27 @@ pub async fn diff_stat(repo_path: &Path, staged: bool) -> Result<DiffStat, GitEr
     };
     let output = GitRunner::run(repo_path, &args).await?;
     Ok(parse_diff_stat(&output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::status;
+    use crate::git::test_utils::TestRepo;
+
+    #[tokio::test]
+    async fn status_expands_untracked_nested_directories_to_files() {
+        let repo = TestRepo::new("status-untracked-nested");
+        repo.write("new-folder/nested/file.txt", "hello\n");
+
+        let status = status(repo.path()).await.expect("status should load");
+        let paths = status
+            .changes
+            .iter()
+            .map(|change| change.path.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(paths.contains(&"new-folder/nested/file.txt"), "{paths:?}");
+        assert!(!paths.contains(&"new-folder/"), "{paths:?}");
+        assert!(!paths.contains(&"new-folder/nested/"), "{paths:?}");
+    }
 }

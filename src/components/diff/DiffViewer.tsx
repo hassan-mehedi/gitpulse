@@ -21,6 +21,7 @@ import { ignoreReportedError } from "../../lib/errors";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { useDiffStore } from "../../stores/diff";
 import { useSettingsStore } from "../../stores/settings";
+import { useMergeDraftStore } from "../../stores/mergeDrafts";
 import { FileHistoryPanel } from "../source-control/FileHistoryPanel";
 import { MergeEditor } from "../merge/MergeEditor";
 import { DiffGutter } from "./DiffGutter";
@@ -31,6 +32,9 @@ import type { ActivityView, FileDiff } from "../../types/git";
 interface DiffViewerProps {
   activeView: ActivityView;
 }
+
+const LARGE_DIFF_RENDER_LINE_LIMIT = 5000;
+const LARGE_DIFF_HIGHLIGHT_LINE_LIMIT = 1200;
 
 export function DiffViewer({ activeView }: DiffViewerProps) {
   const activeChange = useDiffStore((state) => state.activeChange);
@@ -47,12 +51,14 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const setActiveHunkIndex = useDiffStore((state) => state.setActiveHunkIndex);
   const refreshActiveDiff = useDiffStore((state) => state.refreshActiveDiff);
   const refreshRepo = useWorkspaceStore((state) => state.refreshRepo);
+  const clearMergeDraft = useMergeDraftStore((state) => state.clearDraft);
   const theme = useSettingsStore((state) => state.theme);
   const runGit = useGit();
   const [selectedLinesByHunk, setSelectedLinesByHunk] = useState<Record<number, number[]>>({});
   const [surface, setSurface] = useState<"diff" | "history">("diff");
   const [showOutline, setShowOutline] = useState(false);
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+  const [forceRenderLargeDiff, setForceRenderLargeDiff] = useState(false);
   const [whitespaceDiff, setWhitespaceDiff] = useState<FileDiff | null>(null);
   const [binaryPreview, setBinaryPreview] = useState<{ url: string; kind: "image" | "binary"; size: number } | null>(null);
   const diffState = ignoreWhitespace ? whitespaceDiff ?? activeDiff : activeDiff;
@@ -75,6 +81,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
 
   useEffect(() => {
     setIgnoreWhitespace(false);
+    setForceRenderLargeDiff(false);
     setWhitespaceDiff(null);
     setBinaryPreview(null);
   }, [activeFilePath, activeRepo?.path, staged]);
@@ -158,6 +165,10 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const diff = diffState ?? activeDiff;
   const repo = activeRepo;
   const filePath = activeFilePath;
+  const renderedLineCount = diff.hunks.reduce((total, hunk) => total + hunk.lines.length, 0);
+  const isLargeDiff = renderedLineCount > LARGE_DIFF_RENDER_LINE_LIMIT;
+  const enableRichLineFeatures =
+    !isLargeDiff && renderedLineCount <= LARGE_DIFF_HIGHLIGHT_LINE_LIMIT;
 
   async function applyHunkAction(action: "stage" | "unstage" | "discard") {
     if (!activeHunk || !activeChange || isReadOnly) {
@@ -309,6 +320,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
       if (!resolved) return;
       await gitSetConflictContent(repoState.path, activeChange.path, resolved);
       await gitMarkResolved(repoState.path, activeChange.path);
+      clearMergeDraft(`${repoState.path}:${activeChange.path}`);
       await refreshRepo(repoState.path);
       await refreshActiveDiff();
     });
@@ -509,18 +521,27 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
                   "No textual changes to display."
                 )}
               </div>
+            ) : isLargeDiff && !forceRenderLargeDiff ? (
+              <LargeDiffNotice
+                lineCount={renderedLineCount}
+                hunkCount={diff.hunks.length}
+                onOpenFile={() => openActiveFile()}
+                onRevealFile={revealActiveFile}
+                onRenderAnyway={() => setForceRenderLargeDiff(true)}
+              />
             ) : (
               diff.hunks.map((hunk, index) => (
                 <DiffHunk
                   filePath={filePath}
                   repoPath={repo.path}
-                  enableBlame={!isReadOnly}
+                  enableBlame={!isReadOnly && enableRichLineFeatures}
                   key={`${hunk.header}-${index}`}
                   hunk={hunk}
                   hunkIndex={index}
                   isActive={index === activeHunkIndex}
                   mode={mode}
                   theme={theme}
+                  enableHighlight={enableRichLineFeatures}
                   onFocus={() => setActiveHunkIndex(index)}
                   onToggleLine={toggleLineSelection}
                   onOpenLine={openActiveFile}
@@ -579,6 +600,45 @@ function GraphDiffPlaceholder() {
   return (
     <div className="commit-detail__diff-placeholder">
       Select a file on the left to view its diff.
+    </div>
+  );
+}
+
+function LargeDiffNotice({
+  lineCount,
+  hunkCount,
+  onOpenFile,
+  onRevealFile,
+  onRenderAnyway
+}: {
+  lineCount: number;
+  hunkCount: number;
+  onOpenFile: () => void;
+  onRevealFile: () => void;
+  onRenderAnyway: () => void;
+}) {
+  return (
+    <div className="large-diff-notice">
+      <Codicon name="warning" size={24} />
+      <div className="large-diff-notice__body">
+        <div className="large-diff-notice__title">Large diff</div>
+        <div className="large-diff-notice__meta">
+          {lineCount.toLocaleString()} lines across {hunkCount.toLocaleString()} hunks
+        </div>
+      </div>
+      <div className="large-diff-notice__actions">
+        <button className="vscode-button" onClick={onOpenFile} type="button">
+          <Codicon name="file-code" size={14} />
+          Open File
+        </button>
+        <button className="vscode-button" onClick={onRevealFile} type="button">
+          <Codicon name="folder-opened" size={14} />
+          Reveal
+        </button>
+        <button className="vscode-button vscode-button--primary" onClick={onRenderAnyway} type="button">
+          Render Anyway
+        </button>
+      </div>
     </div>
   );
 }

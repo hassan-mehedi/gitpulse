@@ -301,6 +301,45 @@
   background: var(--vscode-editor-background);
 }
 
+.large-diff-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: center;
+  max-width: 520px;
+  margin: 48px auto;
+  padding: 16px;
+  border: 1px solid var(--vscode-editorGroup-border);
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+}
+
+.large-diff-notice > .codicon {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.large-diff-notice__body {
+  min-width: 0;
+}
+
+.large-diff-notice__title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.large-diff-notice__meta {
+  margin-top: 2px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.large-diff-notice__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .conflict-quickfix {
   display: flex;
   align-items: center;

@@ -14,5 +14,7 @@ pub mod staging;
 pub mod stash;
 pub mod status;
 pub mod tag;
+#[cfg(test)]
+pub mod test_utils;
 pub mod types;
 pub mod worktree;

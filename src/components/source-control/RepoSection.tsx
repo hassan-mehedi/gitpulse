@@ -9,7 +9,20 @@ import { useNotificationStore } from "../../stores/notifications";
 import { progressId, useProgressStore } from "../../stores/progress";
 import { createId } from "../../lib/ids";
 import { ignoreReportedError } from "../../lib/errors";
-import { gitDiscardAll, gitFetchAll, gitPatchApply, gitPatchCreate, gitPull, gitPush, gitStageAll, gitSync, gitUnstageAll } from "../../lib/git";
+import { selectPublishRemote } from "../../lib/branches";
+import {
+  gitDiscardAll,
+  gitFetchAll,
+  gitListRemotes,
+  gitPatchApply,
+  gitPatchCreate,
+  gitPull,
+  gitPush,
+  gitPushSetUpstream,
+  gitStageAll,
+  gitSync,
+  gitUnstageAll
+} from "../../lib/git";
 import { CommitInput } from "./CommitInput";
 import { FileChangeList } from "./FileChangeList";
 import { StashSection } from "./StashSection";
@@ -68,6 +81,8 @@ export function RepoSection({
   const hasChanges = regular.length > 0;
   const hasStashes = repo.stashCount > 0;
   const isWorkingTreeClean = !hasConflicts && !hasStaged && !hasChanges;
+  const canPublishBranch = !repo.upstream && repo.branch !== "HEAD";
+  const showPublishPrompt = isWorkingTreeClean && canPublishBranch;
   const showSyncPrompt = isWorkingTreeClean && (repo.ahead > 0 || repo.behind > 0);
 
   function withRefresh(operation: () => Promise<unknown>) {
@@ -84,6 +99,23 @@ export function RepoSection({
       return;
     }
     withRefresh(() => syncOperation(repo));
+  }
+
+  function publishBranch() {
+    withRefresh(async () => {
+      const remotes = await gitListRemotes(repo.path);
+      const remote = selectPublishRemote(remotes);
+      if (!remote) {
+        pushNotification({
+          id: createId(),
+          tone: "error",
+          title: "Publish failed",
+          message: "No Git remote is configured for this repository."
+        });
+        return;
+      }
+      await gitPushSetUpstream(repo.path, remote.name, repo.branch);
+    });
   }
 
   function discardAllWithUndo() {
@@ -256,7 +288,9 @@ export function RepoSection({
 
       {!collapsed ? (
         <>
-          {showSyncPrompt ? (
+          {showPublishPrompt ? (
+            <PublishPrompt repo={repo} onPublish={publishBranch} />
+          ) : showSyncPrompt ? (
             <SyncPrompt repo={repo} onSync={requestSync} />
           ) : (
             <CommitInput repo={repo} />
@@ -333,6 +367,27 @@ export function RepoSection({
         </>
       ) : null}
     </article>
+  );
+}
+
+function PublishPrompt({ repo, onPublish }: { repo: Repository; onPublish: () => void }) {
+  return (
+    <div className="scm-sync-prompt">
+      <input
+        className="scm-sync-prompt__input"
+        disabled
+        placeholder={`Branch '${repo.branch}' has no upstream tracking branch`}
+      />
+      <button
+        className="vscode-button vscode-button--primary scm-sync-prompt__button"
+        onClick={onPublish}
+        title={`Publish ${repo.branch} and set upstream tracking`}
+        type="button"
+      >
+        <Codicon name="repo-push" size={14} />
+        <span>Publish Branch</span>
+      </button>
+    </div>
   );
 }
 

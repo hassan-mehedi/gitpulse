@@ -41,6 +41,7 @@ interface PersistedSettings {
   commitIdentities: CommitIdentityProfile[];
   repoIdentityAssignments: Record<string, string>;
   recentRepositoryPaths: string[];
+  recentWorkspacePaths: string[];
   aiCommitEnabled: boolean;
   aiCommitProvider: AiCommitProvider;
   aiCommitProviderConfigs: AiCommitProviderConfigs;
@@ -71,6 +72,7 @@ interface SettingsStore {
   commitIdentities: CommitIdentityProfile[];
   repoIdentityAssignments: Record<string, string>;
   recentRepositoryPaths: string[];
+  recentWorkspacePaths: string[];
   aiCommitEnabled: boolean;
   aiCommitProvider: AiCommitProvider;
   aiCommitProviderConfigs: AiCommitProviderConfigs;
@@ -96,6 +98,7 @@ interface SettingsStore {
   removeCommitIdentity: (id: string) => void;
   assignRepoIdentity: (repoPath: string, identityId: string | null) => void;
   rememberRepository: (repoPath: string) => void;
+  rememberWorkspace: (workspacePath: string) => void;
   setAiCommitEnabled: (value: boolean) => void;
   setAiCommitProvider: (value: AiCommitProvider) => void;
   setAiCommitApiKey: (value: string) => void;
@@ -118,6 +121,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   commitIdentities: [],
   repoIdentityAssignments: {},
   recentRepositoryPaths: [],
+  recentWorkspacePaths: [],
   aiCommitEnabled: false,
   aiCommitProvider: "ollama",
   aiCommitProviderConfigs: createDefaultAiProviderConfigs(),
@@ -159,6 +163,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         commitIdentities,
         repoIdentityAssignments,
         recentRepositoryPaths,
+        recentWorkspacePaths,
         aiCommitEnabled,
         aiCommitProvider,
         aiCommitProviderConfigs,
@@ -181,6 +186,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           settingsStore.get<CommitIdentityProfile[]>("commitIdentities"),
           settingsStore.get<Record<string, string>>("repoIdentityAssignments"),
           settingsStore.get<string[]>("recentRepositoryPaths"),
+          settingsStore.get<string[]>("recentWorkspacePaths"),
           settingsStore.get<boolean>("aiCommitEnabled"),
           settingsStore.get<AiCommitProvider>("aiCommitProvider"),
           settingsStore.get<AiCommitProviderConfigs>("aiCommitProviderConfigs"),
@@ -220,6 +226,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           repoIdentityAssignments ?? DEFAULT_SETTINGS.repoIdentityAssignments,
         recentRepositoryPaths:
           recentRepositoryPaths ?? DEFAULT_SETTINGS.recentRepositoryPaths,
+        recentWorkspacePaths:
+          recentWorkspacePaths ?? DEFAULT_SETTINGS.recentWorkspacePaths,
         aiCommitEnabled: aiCommitEnabled ?? DEFAULT_SETTINGS.aiCommitEnabled,
         aiCommitProvider: activeProvider,
         aiCommitProviderConfigs: providerConfigs,
@@ -239,7 +247,13 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       return;
     }
 
-    const serialized = window.localStorage.getItem("gitpulse-settings");
+    const localStorage = getLocalStorage();
+    if (!localStorage) {
+      set({ hydrated: true });
+      return;
+    }
+
+    const serialized = localStorage.getItem("gitpulse-settings");
     if (serialized) {
       const nextSettings = JSON.parse(serialized) as Partial<PersistedSettings> & {
         aiCommitApiKey?: string;
@@ -272,6 +286,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
           nextSettings.repoIdentityAssignments ?? DEFAULT_SETTINGS.repoIdentityAssignments,
         recentRepositoryPaths:
           nextSettings.recentRepositoryPaths ?? DEFAULT_SETTINGS.recentRepositoryPaths,
+        recentWorkspacePaths:
+          nextSettings.recentWorkspacePaths ?? DEFAULT_SETTINGS.recentWorkspacePaths,
         aiCommitEnabled: nextSettings.aiCommitEnabled ?? DEFAULT_SETTINGS.aiCommitEnabled,
         aiCommitProvider: activeProvider,
         aiCommitProviderConfigs: providerConfigs,
@@ -378,6 +394,16 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       return { recentRepositoryPaths };
     });
   },
+  rememberWorkspace(workspacePath) {
+    set((state) => {
+      const recentWorkspacePaths = [
+        workspacePath,
+        ...state.recentWorkspacePaths.filter((path) => path !== workspacePath)
+      ].slice(0, 10);
+      persistSettingsSafely({ recentWorkspacePaths });
+      return { recentWorkspacePaths };
+    });
+  },
   setAiCommitEnabled(value) {
     set({ aiCommitEnabled: value });
     persistSettingsSafely({ aiCommitEnabled: value });
@@ -457,9 +483,14 @@ async function persistSettings(update: Partial<PersistedSettings>) {
     return;
   }
 
-  const existing = window.localStorage.getItem("gitpulse-settings");
+  const localStorage = getLocalStorage();
+  if (!localStorage) {
+    return;
+  }
+
+  const existing = localStorage.getItem("gitpulse-settings");
   const parsed = existing ? (JSON.parse(existing) as Partial<PersistedSettings>) : {};
-  window.localStorage.setItem("gitpulse-settings", JSON.stringify({ ...parsed, ...update }));
+  localStorage.setItem("gitpulse-settings", JSON.stringify({ ...parsed, ...update }));
 }
 
 function persistSettingsSafely(update: Partial<PersistedSettings>) {
@@ -614,6 +645,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function getLocalStorage() {
+  if (typeof window === "undefined" || !("localStorage" in window)) {
+    return null;
+  }
+  return window.localStorage ?? null;
+}
+
 async function loadAiApiKey(provider: AiCommitProvider) {
   if (!isTauriRuntime()) return "";
   return (await getAiApiKey(provider).catch(() => null)) ?? "";
@@ -643,11 +681,12 @@ async function migrateLegacyAiApiKey(
       });
     }
   } else {
-    const existing = window.localStorage.getItem("gitpulse-settings");
-    if (existing) {
+    const localStorage = getLocalStorage();
+    const existing = localStorage?.getItem("gitpulse-settings");
+    if (localStorage && existing) {
       const parsed = JSON.parse(existing) as Record<string, unknown>;
       delete parsed.aiCommitApiKey;
-      window.localStorage.setItem("gitpulse-settings", JSON.stringify(parsed));
+      localStorage.setItem("gitpulse-settings", JSON.stringify(parsed));
     }
   }
   return legacyValue;
