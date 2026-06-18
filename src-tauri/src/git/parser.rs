@@ -773,7 +773,6 @@ pub fn parse_worktrees(output: &str, main_repo_path: &str) -> Vec<WorktreeInfo> 
 fn parse_hunk_header(header: &str) -> Result<(usize, usize, usize, usize), GitError> {
     let cleaned = header
         .trim_matches('@')
-        .trim()
         .split_whitespace()
         .take(2)
         .collect::<Vec<_>>();
@@ -869,9 +868,7 @@ filename src/main.rs\n\
 
     #[test]
     fn parse_log_splits_fields_and_parents() {
-        let line = format!(
-            "abc123def\u{1f}p1 p2\u{1f}HEAD -> main, origin/main\u{1f}A merge\u{1f}Alice\u{1f}alice@example.com\u{1f}2026-01-02 03:04:05 +0000\u{1f}G"
-        );
+        let line = "abc123def\u{1f}p1 p2\u{1f}HEAD -> main, origin/main\u{1f}A merge\u{1f}Alice\u{1f}alice@example.com\u{1f}2026-01-02 03:04:05 +0000\u{1f}G".to_string();
         let commits = parse_log(&line);
         assert_eq!(commits.len(), 1);
         let commit = &commits[0];
@@ -888,11 +885,9 @@ filename src/main.rs\n\
 
     #[test]
     fn parse_branches_skips_remote_head_pointer() {
-        let output = format!(
-            "refs/heads/main\u{1f}*\u{1f}origin/main\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n\
+        let output = "refs/heads/main\u{1f}*\u{1f}origin/main\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n\
              refs/remotes/origin/HEAD\u{1f} \u{1f}\u{1f}\u{1f}\u{1f}\n\
-             refs/remotes/origin/main\u{1f} \u{1f}\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n"
-        );
+             refs/remotes/origin/main\u{1f} \u{1f}\u{1f}abc\u{1f}2026-01-01\u{1f}me@example.com\n".to_string();
         let branches = parse_branches(&output);
         assert_eq!(branches.len(), 2);
         assert!(branches.iter().any(|b| b.name == "main" && b.is_current));
@@ -1022,7 +1017,7 @@ detached\n\
 
     #[test]
     fn parse_stashes_requires_all_fields() {
-        let line = format!("stash@{{0}}\u{1f}abc\u{1f}WIP\u{1f}2026-01-01\u{1f}Alice");
+        let line = "stash@{0}\u{1f}abc\u{1f}WIP\u{1f}2026-01-01\u{1f}Alice".to_string();
         let entries = parse_stashes(&line);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].stash_ref, "stash@{0}");
@@ -1035,10 +1030,9 @@ detached\n\
 
     #[test]
     fn parse_tags_marks_annotated_vs_lightweight() {
-        let output = format!(
-            "v1.0\u{1f}sha1\u{1f}initial release\u{1f}tag\u{1f}Alice\u{1f}2026-01-01\n\
+        let output = "v1.0\u{1f}sha1\u{1f}initial release\u{1f}tag\u{1f}Alice\u{1f}2026-01-01\n\
              v0.9\u{1f}sha2\u{1f}\u{1f}commit\u{1f}\u{1f}\n"
-        );
+            .to_string();
         let tags = parse_tags(&output);
         assert_eq!(tags.len(), 2);
         let v1 = tags.iter().find(|t| t.name == "v1.0").unwrap();

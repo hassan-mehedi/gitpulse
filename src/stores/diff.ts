@@ -77,6 +77,19 @@ function commitTabKey(
   return `c:${repo.id}:${commit.sha}:${diff.file}`;
 }
 
+function isConflictChange(change: Pick<FileChange, "status">) {
+  return change.status === "U";
+}
+
+function conflictPlaceholder(change: Pick<FileChange, "path" | "status">): FileDiff {
+  return {
+    file: change.path,
+    status: change.status,
+    hunks: [],
+    isBinary: false
+  };
+}
+
 function clearActiveState() {
   return {
     activeTabKey: null,
@@ -226,6 +239,16 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
     const tab = state.tabs.find((entry) => entry.key === key);
     if (!tab) return;
     if (state.activeTabKey === key && state.activeDiff) {
+      if (
+        tab.kind === "working-tree" &&
+        isConflictChange(tab.change) &&
+        state.activeDiff.status !== "U"
+      ) {
+        set({
+          activeDiff: conflictPlaceholder(tab.change),
+          activeHunkIndex: 0
+        });
+      }
       return;
     }
 
@@ -240,6 +263,22 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
         activeDiff: tab.diff,
         activeCommit: tab.commit,
         staged: false,
+        activeHunkIndex: 0
+      });
+      return;
+    }
+
+    if (isConflictChange(tab.change)) {
+      set({
+        activeTabKey: key,
+        activeScope: "source-control",
+        activeSourceKind: "working-tree",
+        activeRepo: tab.repo,
+        activeFilePath: tab.filePath,
+        activeChange: tab.change,
+        activeDiff: conflictPlaceholder(tab.change),
+        activeCommit: null,
+        staged: tab.staged,
         activeHunkIndex: 0
       });
       return;
@@ -318,6 +357,14 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
       !state.activeChange ||
       state.activeSourceKind !== "working-tree"
     ) {
+      return;
+    }
+
+    if (isConflictChange(state.activeChange)) {
+      set({
+        activeDiff: conflictPlaceholder(state.activeChange),
+        activeHunkIndex: 0
+      });
       return;
     }
 
@@ -415,6 +462,11 @@ export const useDiffStore = create<DiffStore>((set, get) => ({
         activeRepo,
         activeFilePath: activeTab.filePath,
         activeChange: activeTab.change,
+        activeDiff: isConflictChange(activeTab.change)
+          ? conflictPlaceholder(activeTab.change)
+          : state.activeDiff?.status === "U"
+            ? null
+            : state.activeDiff,
         activeCommit: null,
         activeScope: "source-control",
         activeSourceKind: "working-tree",

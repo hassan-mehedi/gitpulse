@@ -708,21 +708,81 @@ function ToolRow({
 }
 
 function OutputPanel({ output }: { output: ProgressPayload[] }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"all" | ProgressPayload["status"]>("all");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = output.filter((item) => {
+    if (status !== "all" && item.status !== status) return false;
+    if (!normalizedQuery) return true;
+    return formatOutputItem(item).toLowerCase().includes(normalizedQuery);
+  });
+
   return (
     <div className="misc-card">
       <h3>Operation Output</h3>
-      <pre className="misc-panel__result">
-        {output.length === 0
-          ? "No Git or AI operation output yet."
-          : output
-              .map((item) => {
-                const command = item.command?.length ? `git ${item.command.join(" ")}` : item.operation;
-                return `[${item.status}] ${command}\n${item.message}`;
-              })
-              .join("\n\n")}
-      </pre>
+      <div className="output-panel__filters">
+        <input
+          className="settings-control"
+          placeholder="Search output"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          className="settings-control"
+          value={status}
+          onChange={(event) => setStatus(event.target.value as typeof status)}
+        >
+          <option value="all">All statuses</option>
+          <option value="failed">Failed</option>
+          <option value="completed">Completed</option>
+          <option value="running">Running</option>
+          <option value="started">Started</option>
+        </select>
+        <button
+          className="vscode-button"
+          disabled={filtered.length === 0}
+          onClick={() =>
+            void navigator.clipboard?.writeText(filtered.map(formatOutputItem).join("\n\n"))
+          }
+          type="button"
+        >
+          Copy Visible
+        </button>
+      </div>
+      {filtered.length === 0 ? (
+        <EmptyToolState>
+          {output.length === 0 ? "No Git or AI operation output yet." : "No output matches the current filters."}
+        </EmptyToolState>
+      ) : (
+        <div className="output-panel__list">
+          {filtered.map((item, index) => (
+            <section className="output-panel__item" key={`${item.operation}:${index}`}>
+              <div className="output-panel__item-header">
+                <StatusPill tone={item.status === "failed" ? "danger" : item.status === "completed" ? "success" : "warning"}>
+                  {item.status}
+                </StatusPill>
+                <span title={item.repoPath}>{item.operation}</span>
+                <button
+                  className="vscode-button"
+                  onClick={() => void navigator.clipboard?.writeText(formatOutputItem(item))}
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre className="misc-panel__compact-result">{formatOutputItem(item)}</pre>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function formatOutputItem(item: ProgressPayload) {
+  const command = item.command?.length ? item.command.join(" ") : item.operation;
+  const repo = item.repoPath ? `\nrepo: ${item.repoPath}` : "";
+  return `[${item.status}] ${command}${repo}\n${item.message}`;
 }
 
 function reportSectionLoadError(error: unknown, operation: string, repoPath: string) {

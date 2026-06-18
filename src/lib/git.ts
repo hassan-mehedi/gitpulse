@@ -46,6 +46,8 @@ const quietCommands = new Set([
   "git_sync"
 ]);
 
+const SLOW_OPERATION_THRESHOLD_MS = 750;
+
 async function gitInvoke<T>(command: string, args: Record<string, unknown>): Promise<T> {
   if (!isTauriRuntime()) {
     throw {
@@ -55,6 +57,7 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
   }
 
   const shouldLogRoutineOutput = !quietCommands.has(command);
+  const startedAt = nowMs();
   const payloadBase = {
     repoPath: typeof args.repoPath === "string" ? args.repoPath : "",
     operation: command.replace(/^git_/, "").replaceAll("_", " "),
@@ -74,6 +77,7 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
 
   try {
     const result = await invoke<T>(command, args);
+    emitSlowOperation(payloadBase, startedAt, "completed");
     if (shouldLogRoutineOutput) {
       window.dispatchEvent(
         new CustomEvent<ProgressPayload>("gitpulse:output", {
@@ -89,6 +93,7 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
     return result;
   } catch (error) {
     const gitError = error as GitError;
+    emitSlowOperation(payloadBase, startedAt, "failed");
     window.dispatchEvent(
       new CustomEvent<ProgressPayload>("gitpulse:output", {
         detail: {
@@ -100,6 +105,36 @@ async function gitInvoke<T>(command: string, args: Record<string, unknown>): Pro
     );
     throw error as GitError;
   }
+}
+
+function emitSlowOperation(
+  payloadBase: Pick<ProgressPayload, "repoPath" | "operation" | "command">,
+  startedAt: number,
+  status: "completed" | "failed"
+) {
+  const elapsed = nowMs() - startedAt;
+  if (elapsed < SLOW_OPERATION_THRESHOLD_MS) {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent<ProgressPayload>("gitpulse:output", {
+      detail: {
+        ...payloadBase,
+        operation: "Performance",
+        message: `${payloadBase.operation} ${status} in ${formatDuration(elapsed)}`,
+        percent: status === "completed" ? 100 : undefined,
+        status
+      }
+    })
+  );
+}
+
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function formatDuration(ms: number) {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
 }
 
 function outputMessage(result: unknown) {

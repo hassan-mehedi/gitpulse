@@ -14,13 +14,6 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes("node_modules/shiki")) return "shiki";
           if (
-            id.includes("node_modules/@iconify") ||
-            id.includes("node_modules/@vscode/codicons") ||
-            id.includes("node_modules/vscode-icons-js")
-          ) {
-            return "icons";
-          }
-          if (
             id.includes("node_modules/react/") ||
             id.includes("node_modules/react-dom/") ||
             id.includes("node_modules/scheduler/")

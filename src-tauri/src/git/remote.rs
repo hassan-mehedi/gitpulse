@@ -8,6 +8,12 @@ use crate::git::parser::parse_remotes;
 use crate::git::runner::GitRunner;
 use crate::git::types::{OperationResult, RemoteInfo};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TrackingBranch {
+    remote: String,
+    branch: String,
+}
+
 pub async fn list_remotes(repo_path: &Path) -> Result<Vec<RemoteInfo>, GitError> {
     let output = GitRunner::run(repo_path, &["remote", "-v"]).await?;
     Ok(parse_remotes(&output))
@@ -134,22 +140,25 @@ pub async fn push<R: Runtime>(
     branch: Option<&str>,
     force: bool,
 ) -> Result<OperationResult, GitError> {
-    if remote.is_none()
-        && branch.is_none()
-        && !force
-        && current_upstream(repo_path).await?.is_none()
-    {
+    if remote.is_none() && branch.is_none() && !force {
         let branch = current_branch(repo_path).await?.ok_or_else(|| {
             GitError::Io(
                 "Cannot publish a detached HEAD without specifying a remote and branch."
                     .to_string(),
             )
         })?;
-        let remote = default_push_remote(repo_path).await?;
-        push_set_upstream(app_handle, repo_path, &remote, &branch).await?;
-        return Ok(OperationResult {
-            summary: format!("Published {branch} to {remote}"),
-        });
+        let tracking = current_tracking(repo_path).await?;
+        if tracking.as_ref().is_none_or(|tracking| tracking.branch != branch) {
+            let remote = if let Some(tracking) = tracking {
+                tracking.remote
+            } else {
+                default_push_remote(repo_path).await?
+            };
+            push_set_upstream(app_handle, repo_path, &remote, &branch).await?;
+            return Ok(OperationResult {
+                summary: format!("Published {branch} to {remote}"),
+            });
+        }
     }
 
     let mut args = vec!["push", "--progress"];
@@ -190,18 +199,25 @@ pub async fn sync<R: Runtime>(
     remote: Option<&str>,
     branch: Option<&str>,
 ) -> Result<OperationResult, GitError> {
-    if remote.is_none() && branch.is_none() && current_upstream(repo_path).await?.is_none() {
+    if remote.is_none() && branch.is_none() {
         let branch = current_branch(repo_path).await?.ok_or_else(|| {
             GitError::Io(
                 "Cannot sync a detached HEAD without specifying a remote and branch.".to_string(),
             )
         })?;
-        let remote = default_push_remote(repo_path).await?;
-        fetch_all(app_handle, repo_path).await?;
-        push_set_upstream(app_handle, repo_path, &remote, &branch).await?;
-        return Ok(OperationResult {
-            summary: format!("Published {branch} to {remote}"),
-        });
+        let tracking = current_tracking(repo_path).await?;
+        if tracking.as_ref().is_none_or(|tracking| tracking.branch != branch) {
+            let remote = if let Some(tracking) = tracking {
+                tracking.remote
+            } else {
+                default_push_remote(repo_path).await?
+            };
+            fetch_all(app_handle, repo_path).await?;
+            push_set_upstream(app_handle, repo_path, &remote, &branch).await?;
+            return Ok(OperationResult {
+                summary: format!("Published {branch} to {remote}"),
+            });
+        }
     }
 
     fetch_all(app_handle, repo_path).await?;
@@ -230,6 +246,14 @@ async fn current_upstream(repo_path: &Path) -> Result<Option<String>, GitError> 
         .filter(|value| !value.is_empty()))
 }
 
+async fn current_tracking(repo_path: &Path) -> Result<Option<TrackingBranch>, GitError> {
+    let Some(upstream) = current_upstream(repo_path).await? else {
+        return Ok(None);
+    };
+    let remotes = list_remotes(repo_path).await?;
+    Ok(parse_tracking_branch(&upstream, &remotes))
+}
+
 async fn default_push_remote(repo_path: &Path) -> Result<String, GitError> {
     let remotes = list_remotes(repo_path).await?;
     if let Some(remote) = select_default_push_remote(&remotes) {
@@ -252,6 +276,34 @@ fn select_default_push_remote(remotes: &[RemoteInfo]) -> Option<String> {
         .map(|remote| remote.name.clone())
 }
 
+fn parse_tracking_branch(upstream: &str, remotes: &[RemoteInfo]) -> Option<TrackingBranch> {
+    let remote = remotes
+        .iter()
+        .filter(|remote| upstream.starts_with(&format!("{}/", remote.name)))
+        .max_by_key(|remote| remote.name.len())
+        .map(|remote| remote.name.clone());
+
+    if let Some(remote) = remote {
+        let branch = upstream
+            .strip_prefix(&format!("{remote}/"))
+            .unwrap_or_default()
+            .to_string();
+        if branch.is_empty() {
+            return None;
+        }
+        return Some(TrackingBranch { remote, branch });
+    }
+
+    let (remote, branch) = upstream.split_once('/')?;
+    if remote.is_empty() || branch.is_empty() {
+        return None;
+    }
+    Some(TrackingBranch {
+        remote: remote.to_string(),
+        branch: branch.to_string(),
+    })
+}
+
 async fn git_output(repo_path: &Path, args: &[&str]) -> Result<Option<String>, GitError> {
     let output = Command::new("git")
         .args(args)
@@ -271,7 +323,7 @@ async fn git_output(repo_path: &Path, args: &[&str]) -> Result<Option<String>, G
 
 #[cfg(test)]
 mod tests {
-    use super::select_default_push_remote;
+    use super::{parse_tracking_branch, select_default_push_remote, TrackingBranch};
     use crate::git::types::RemoteInfo;
 
     fn remote(name: &str, fetch_url: &str, push_url: &str) -> RemoteInfo {
@@ -313,5 +365,34 @@ mod tests {
         let remotes = [remote("empty", "", "")];
 
         assert_eq!(select_default_push_remote(&remotes), None);
+    }
+
+    #[test]
+    fn tracking_parser_preserves_branch_path_segments() {
+        let remotes = [remote("origin", "git@example.com:me/repo.git", "")];
+
+        assert_eq!(
+            parse_tracking_branch("origin/feature/bulk-staff-invite", &remotes),
+            Some(TrackingBranch {
+                remote: "origin".to_string(),
+                branch: "feature/bulk-staff-invite".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn tracking_parser_prefers_longest_remote_name() {
+        let remotes = [
+            remote("origin", "git@example.com:me/repo.git", ""),
+            remote("origin/team", "git@example.com:team/repo.git", ""),
+        ];
+
+        assert_eq!(
+            parse_tracking_branch("origin/team/develop", &remotes),
+            Some(TrackingBranch {
+                remote: "origin/team".to_string(),
+                branch: "develop".to_string()
+            })
+        );
     }
 }

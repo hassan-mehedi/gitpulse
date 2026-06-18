@@ -60,6 +60,8 @@ export function SourceControlPanel({
   const activeRepoId = useWorkspaceStore((state) => state.activeRepoId);
   const recentRepositoryPaths = useSettingsStore((state) => state.recentRepositoryPaths);
   const recentWorkspacePaths = useSettingsStore((state) => state.recentWorkspacePaths);
+  const forgetRepository = useSettingsStore((state) => state.forgetRepository);
+  const forgetWorkspace = useSettingsStore((state) => state.forgetWorkspace);
   const openDiff = useWorkspaceStore((state) => state.openDiff);
   const activeChange = useDiffStore((state) => state.activeChange);
   const activeStaged = useDiffStore((state) => state.staged);
@@ -75,6 +77,7 @@ export function SourceControlPanel({
   const [cloneDest, setCloneDest] = useState<string | null>(null);
   const [showCloneInput, setShowCloneInput] = useState(false);
   const [discardTarget, setDiscardTarget] = useState<MenuTarget | null>(null);
+  const [stashClearTarget, setStashClearTarget] = useState<Repository | null>(null);
   const overflowRef = useRef<HTMLDivElement | null>(null);
 
   const selectedKey = activeChange
@@ -381,19 +384,16 @@ export function SourceControlPanel({
                   <>
                     <div className="dropdown-menu__label">Recent Workspaces</div>
                     {recentWorkspacePaths.map((path) => (
-                      <button
-                        className="dropdown-menu__item"
+                      <RecentTargetRow
                         key={path}
-                        onClick={() => {
+                        path={path}
+                        onForget={() => forgetWorkspace(path)}
+                        onOpen={() => {
                           setOverflowOpen(false);
                           void loadTarget(path);
                         }}
-                        role="menuitem"
-                        title={path}
-                        type="button"
-                      >
-                        {path}
-                      </button>
+                        variant="menu"
+                      />
                     ))}
                     <div className="dropdown-menu__separator" role="separator" />
                   </>
@@ -402,19 +402,16 @@ export function SourceControlPanel({
                   <>
                     <div className="dropdown-menu__label">Recent Repositories</div>
                     {recentRepositoryPaths.map((path) => (
-                      <button
-                        className="dropdown-menu__item"
+                      <RecentTargetRow
                         key={path}
-                        onClick={() => {
+                        path={path}
+                        onForget={() => forgetRepository(path)}
+                        onOpen={() => {
                           setOverflowOpen(false);
                           void loadTarget(path);
                         }}
-                        role="menuitem"
-                        title={path}
-                        type="button"
-                      >
-                        {path}
-                      </button>
+                        variant="menu"
+                      />
                     ))}
                     <div className="dropdown-menu__separator" role="separator" />
                   </>
@@ -474,7 +471,10 @@ export function SourceControlPanel({
                 <button
                   className="dropdown-menu__item"
                   disabled={!activeRepo || activeRepo.stashCount === 0}
-                  onClick={() => withActiveRepo((repo) => gitStashClear(repo.path))}
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    setStashClearTarget(activeRepo);
+                  }}
                   role="menuitem"
                   type="button"
                 >
@@ -518,15 +518,13 @@ export function SourceControlPanel({
               <div className="scm-welcome__recent">
                 <div className="scm-welcome__recent-title">Recent Workspaces</div>
                 {recentWorkspacePaths.map((workspacePath) => (
-                  <button
-                    className="scm-welcome__recent-item"
+                  <RecentTargetRow
                     key={workspacePath}
-                    onClick={() => void loadTarget(workspacePath)}
-                    title={workspacePath}
-                    type="button"
-                  >
-                    {workspacePath}
-                  </button>
+                    path={workspacePath}
+                    onForget={() => forgetWorkspace(workspacePath)}
+                    onOpen={() => void loadTarget(workspacePath)}
+                    variant="welcome"
+                  />
                 ))}
               </div>
             ) : null}
@@ -534,15 +532,13 @@ export function SourceControlPanel({
               <div className="scm-welcome__recent">
                 <div className="scm-welcome__recent-title">Recent Repositories</div>
                 {recentRepositoryPaths.map((repoPath) => (
-                  <button
-                    className="scm-welcome__recent-item"
+                  <RecentTargetRow
                     key={repoPath}
-                    onClick={() => void loadTarget(repoPath)}
-                    title={repoPath}
-                    type="button"
-                  >
-                    {repoPath}
-                  </button>
+                    path={repoPath}
+                    onForget={() => forgetRepository(repoPath)}
+                    onOpen={() => void loadTarget(repoPath)}
+                    variant="welcome"
+                  />
                 ))}
               </div>
             ) : null}
@@ -656,6 +652,67 @@ export function SourceControlPanel({
         }}
         onClose={() => setDiscardTarget(null)}
       />
+      <ConfirmModal
+        isOpen={stashClearTarget !== null}
+        title="Drop All Stashes"
+        body={
+          <>
+            Drop all stashes in <strong>{stashClearTarget?.name}</strong>? Stashed changes
+            cannot be recovered from GitPulse after this operation.
+          </>
+        }
+        confirmLabel="Drop All Stashes"
+        danger
+        onConfirm={() => {
+          const target = stashClearTarget;
+          if (!target) return;
+          setActiveRepo(target.id);
+          runGit(async () => {
+            await gitStashClear(target.path);
+            await refreshRepo(target.path);
+          }).catch(ignoreReportedError);
+        }}
+        onClose={() => setStashClearTarget(null)}
+      />
     </>
+  );
+}
+
+function RecentTargetRow({
+  path,
+  onForget,
+  onOpen,
+  variant
+}: {
+  path: string;
+  onForget: () => void;
+  onOpen: () => void;
+  variant: "menu" | "welcome";
+}) {
+  const rowClass =
+    variant === "menu" ? "dropdown-menu__recent-row" : "scm-welcome__recent-row";
+  const openClass =
+    variant === "menu" ? "dropdown-menu__item dropdown-menu__item--recent" : "scm-welcome__recent-item";
+  const forgetClass =
+    variant === "menu" ? "dropdown-menu__forget" : "scm-welcome__recent-forget";
+
+  return (
+    <div className={rowClass}>
+      <button className={openClass} onClick={onOpen} title={path} type="button">
+        {path}
+      </button>
+      <button
+        className={forgetClass}
+        onClick={(event) => {
+          event.stopPropagation();
+          onForget();
+        }}
+        title="Remove from recents"
+        aria-label={`Remove ${path} from recents`}
+        type="button"
+      >
+        <Codicon name="close" size={12} />
+      </button>
+    </div>
   );
 }

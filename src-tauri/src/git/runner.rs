@@ -20,12 +20,10 @@ fn emit_output(repo_path: &Path, args: &[&str], message: String, status: &str) {
         },
         status: status.to_string(),
     };
-    let _ = tauri::async_runtime::spawn_blocking(move || {
-        println!(
-            "gitpulse-output:{}",
-            serde_json::to_string(&payload).unwrap_or_default()
-        );
-    });
+    println!(
+        "gitpulse-output:{}",
+        serde_json::to_string(&payload).unwrap_or_default()
+    );
 }
 
 pub struct GitRunner;

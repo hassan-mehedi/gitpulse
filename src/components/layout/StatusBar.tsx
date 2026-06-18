@@ -8,6 +8,7 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import { useInlineBlameStore } from "../../stores/inlineBlame";
 import { useSettingsStore } from "../../stores/settings";
 import { resolveCommitIdentity } from "../../lib/commitIdentity";
+import { branchNeedsPublish } from "../../lib/branches";
 import { gitFetchAll, gitGetUserInfo, gitSync } from "../../lib/git";
 import type { UserInfo } from "../../types/git";
 
@@ -90,6 +91,7 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
   const hasRepo = Boolean(activeRepo);
   const ahead = activeRepo?.ahead ?? 0;
   const behind = activeRepo?.behind ?? 0;
+  const needsPublish = activeRepo ? branchNeedsPublish(activeRepo.branch, activeRepo.upstream) : false;
   const isOperationActive =
     activeProgress?.status === "started" || activeProgress?.status === "running";
   const effectiveIdentity = resolveCommitIdentity(
@@ -118,11 +120,15 @@ export function StatusBar({ onOpenBranchPicker }: StatusBarProps) {
               onClick={() => void handleSync()}
               type="button"
               title={
-                activeRepo!.upstream
-                  ? `Sync with ${activeRepo!.upstream}`
+                needsPublish
+                  ? activeRepo!.upstream
+                    ? `Publish ${activeRepo!.branch}; current upstream is ${activeRepo!.upstream}`
+                    : `Publish ${activeRepo!.branch}`
+                  : activeRepo!.upstream
+                    ? `Sync with ${activeRepo!.upstream}`
                   : "No upstream tracking"
               }
-              disabled={!activeRepo!.upstream}
+              disabled={!activeRepo!.upstream && !needsPublish}
             >
               <Codicon name="sync" size={13} spin={isOperationActive} />
               <span>

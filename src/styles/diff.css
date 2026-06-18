@@ -340,6 +340,27 @@
   gap: 6px;
 }
 
+.large-diff-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--vscode-editorGroup-border);
+  color: var(--vscode-descriptionForeground);
+}
+
+.large-diff-progress span {
+  margin-right: auto;
+}
+
+.diff-hunk__truncated {
+  padding: 8px 12px;
+  border-top: 1px solid var(--vscode-editorGroup-border);
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  background: var(--vscode-editor-background);
+}
+
 .conflict-quickfix {
   display: flex;
   align-items: center;

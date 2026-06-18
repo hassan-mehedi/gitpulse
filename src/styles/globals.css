@@ -967,6 +967,34 @@ button:disabled {
   color: var(--vscode-menu-selectionForeground);
 }
 
+.dropdown-menu__recent-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.dropdown-menu__item--recent {
+  flex: 1;
+  min-width: 0;
+}
+
+.dropdown-menu__forget {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.dropdown-menu__forget:hover {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
 .dropdown-menu__separator {
   height: 1px;
   margin: 4px 0;
@@ -1636,6 +1664,49 @@ body.is-resizing-sidebar * {
   margin-top: 2px;
 }
 
+.repo-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 6px 28px;
+}
+
+.repo-health__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font: inherit;
+  font-size: 11px;
+}
+
+button.repo-health__pill {
+  cursor: pointer;
+}
+
+.repo-health__pill--info {
+  background: var(--vscode-input-background);
+  color: var(--vscode-descriptionForeground);
+}
+
+.repo-health__pill--warning {
+  border-color: color-mix(in srgb, var(--vscode-gitDecoration-modifiedResourceForeground) 45%, transparent);
+  background: color-mix(in srgb, var(--vscode-gitDecoration-modifiedResourceForeground) 14%, transparent);
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.repo-health__pill--danger {
+  border-color: color-mix(in srgb, var(--vscode-gitDecoration-conflictingResourceForeground) 45%, transparent);
+  background: color-mix(in srgb, var(--vscode-gitDecoration-conflictingResourceForeground) 14%, transparent);
+  color: var(--vscode-gitDecoration-conflictingResourceForeground);
+}
+
 /* SCM section (UX-SPEC §3.1 section header) */
 .scm-section {
   display: flex;
@@ -1903,13 +1974,41 @@ body.is-resizing-sidebar * {
 }
 
 .scm-welcome__recent-item {
+  min-width: 0;
   overflow: hidden;
   padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: var(--vscode-textLink-foreground);
   font: inherit;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.scm-welcome__recent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scm-welcome__recent-forget {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.scm-welcome__recent-forget:hover {
+  background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-foreground);
 }
 
 .branch-compare-modal {
@@ -2023,6 +2122,27 @@ body.is-resizing-sidebar * {
 .scm-row__icon {
   flex: 0 0 auto;
   color: var(--vscode-icon-foreground);
+}
+
+.file-icon--archive {
+  color: var(--vscode-gitDecoration-renamedResourceForeground);
+}
+
+.file-icon--code {
+  color: var(--vscode-textLink-foreground);
+}
+
+.file-icon--config,
+.file-icon--package {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.file-icon--container {
+  color: var(--vscode-statusBarItem-remoteBackground);
+}
+
+.file-icon--doc {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
 }
 
 .scm-row.is-selected .scm-row__icon {
@@ -2932,6 +3052,46 @@ body.is-resizing-sidebar * {
   white-space: pre-wrap;
   font-family: var(--vscode-editor-font-family, "Menlo", monospace);
   font-size: 12px;
+}
+
+.output-panel__filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.output-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 62vh;
+  overflow: auto;
+}
+
+.output-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  background: var(--vscode-editor-background);
+}
+
+.output-panel__item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.output-panel__item-header > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .misc-panel__list {

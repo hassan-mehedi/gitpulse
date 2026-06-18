@@ -99,6 +99,8 @@ interface SettingsStore {
   assignRepoIdentity: (repoPath: string, identityId: string | null) => void;
   rememberRepository: (repoPath: string) => void;
   rememberWorkspace: (workspacePath: string) => void;
+  forgetRepository: (repoPath: string) => void;
+  forgetWorkspace: (workspacePath: string) => void;
   setAiCommitEnabled: (value: boolean) => void;
   setAiCommitProvider: (value: AiCommitProvider) => void;
   setAiCommitApiKey: (value: string) => void;
@@ -400,6 +402,24 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         workspacePath,
         ...state.recentWorkspacePaths.filter((path) => path !== workspacePath)
       ].slice(0, 10);
+      persistSettingsSafely({ recentWorkspacePaths });
+      return { recentWorkspacePaths };
+    });
+  },
+  forgetRepository(repoPath) {
+    set((state) => {
+      const recentRepositoryPaths = state.recentRepositoryPaths.filter(
+        (path) => path !== repoPath
+      );
+      persistSettingsSafely({ recentRepositoryPaths });
+      return { recentRepositoryPaths };
+    });
+  },
+  forgetWorkspace(workspacePath) {
+    set((state) => {
+      const recentWorkspacePaths = state.recentWorkspacePaths.filter(
+        (path) => path !== workspacePath
+      );
       persistSettingsSafely({ recentWorkspacePaths });
       return { recentWorkspacePaths };
     });
