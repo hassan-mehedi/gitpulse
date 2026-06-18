@@ -27,3 +27,16 @@ export function selectPublishRemote(remotes: RemoteInfo[]) {
     null
   );
 }
+
+export function upstreamBranchName(upstream: string | undefined) {
+  if (!upstream) return null;
+  const separator = upstream.indexOf("/");
+  if (separator < 0 || separator === upstream.length - 1) return upstream;
+  return upstream.slice(separator + 1);
+}
+
+export function branchNeedsPublish(branch: string, upstream: string | undefined) {
+  if (branch === "HEAD") return false;
+  const upstreamBranch = upstreamBranchName(upstream);
+  return !upstreamBranch || upstreamBranch !== branch;
+}

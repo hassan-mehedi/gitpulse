@@ -166,38 +166,6 @@ fn parse_lfs_count(output: &str, prefix: &str) -> Option<usize> {
     })
 }
 
-#[cfg(test)]
-mod lfs_tests {
-    use super::{parse_lfs_status, patch_stats};
-
-    #[test]
-    fn parses_structured_lfs_counts() {
-        let status = parse_lfs_status(
-            "Objects to be pushed to origin/main: 3\nObjects to be pulled from origin/main: 1",
-            true,
-        );
-
-        assert!(status.available);
-        assert_eq!(status.pending_push_count, Some(3));
-        assert_eq!(status.pending_pull_count, Some(1));
-    }
-
-    #[test]
-    fn marks_missing_lfs_as_unavailable() {
-        let status = parse_lfs_status("git: 'lfs' is not a git command", false);
-
-        assert!(!status.available);
-        assert_eq!(status.pending_push_count, None);
-        assert_eq!(status.pending_pull_count, None);
-    }
-
-    #[test]
-    fn counts_patch_files_and_hunks() {
-        let patch = "diff --git a/a b/a\n@@\n+one\ndiff --git a/b b/b\n@@\n+two\n@@\n+three";
-        assert_eq!(patch_stats(patch), (2, 3));
-    }
-}
-
 pub async fn hooks(repo_path: &Path) -> Result<Vec<GitHookInfo>, GitError> {
     let git_dir = GitRunner::run(repo_path, &["rev-parse", "--git-path", "hooks"]).await?;
     let mut hooks_path = repo_path.to_path_buf();
@@ -308,4 +276,36 @@ pub async fn pr_remotes(repo_path: &Path) -> Result<Vec<PrRemoteInfo>, GitError>
         });
     }
     Ok(remotes)
+}
+
+#[cfg(test)]
+mod lfs_tests {
+    use super::{parse_lfs_status, patch_stats};
+
+    #[test]
+    fn parses_structured_lfs_counts() {
+        let status = parse_lfs_status(
+            "Objects to be pushed to origin/main: 3\nObjects to be pulled from origin/main: 1",
+            true,
+        );
+
+        assert!(status.available);
+        assert_eq!(status.pending_push_count, Some(3));
+        assert_eq!(status.pending_pull_count, Some(1));
+    }
+
+    #[test]
+    fn marks_missing_lfs_as_unavailable() {
+        let status = parse_lfs_status("git: 'lfs' is not a git command", false);
+
+        assert!(!status.available);
+        assert_eq!(status.pending_push_count, None);
+        assert_eq!(status.pending_pull_count, None);
+    }
+
+    #[test]
+    fn counts_patch_files_and_hunks() {
+        let patch = "diff --git a/a b/a\n@@\n+one\ndiff --git a/b b/b\n@@\n+two\n@@\n+three";
+        assert_eq!(patch_stats(patch), (2, 3));
+    }
 }

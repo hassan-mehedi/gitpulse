@@ -12,6 +12,7 @@ interface DiffHunkProps {
   hunk: DiffHunkType;
   hunkIndex: number;
   isActive: boolean;
+  lineLimit?: number;
   mode: "split" | "inline";
   theme: ThemeMode;
   enableHighlight?: boolean;
@@ -29,6 +30,7 @@ export function DiffHunk({
   hunk,
   hunkIndex,
   isActive,
+  lineLimit,
   mode,
   theme,
   enableHighlight = true,
@@ -38,16 +40,21 @@ export function DiffHunk({
   onToggleLine,
   onOpenLine
 }: DiffHunkProps) {
-  const oldLines = hunk.lines
+  const renderedLines = useMemo(
+    () => (typeof lineLimit === "number" ? hunk.lines.slice(0, lineLimit) : hunk.lines),
+    [hunk.lines, lineLimit]
+  );
+  const hiddenLineCount = Math.max(0, hunk.lines.length - renderedLines.length);
+  const oldLines = renderedLines
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => line.lineType !== "add");
-  const newLines = hunk.lines
+  const newLines = renderedLines
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => line.lineType !== "remove");
   const selected = new Set(selectedLineIndices);
   const comparisons = useMemo(
-    () => (enableHighlight ? buildLineComparisons(hunk.lines) : new Map<number, string>()),
-    [enableHighlight, hunk.lines]
+    () => (enableHighlight ? buildLineComparisons(renderedLines) : new Map<number, string>()),
+    [enableHighlight, renderedLines]
   );
   const [highlightedHtml, setHighlightedHtml] = useState<string[]>([]);
 
@@ -59,14 +66,14 @@ export function DiffHunk({
         cancelled = true;
       };
     }
-    const codes = hunk.lines.map((line) => line.content.slice(1));
+    const codes = renderedLines.map((line) => line.content.slice(1));
     void highlightLines(filePath, codes, theme).then((next) => {
       if (!cancelled) setHighlightedHtml(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [enableHighlight, filePath, hunk.lines, theme]);
+  }, [enableHighlight, filePath, renderedLines, theme]);
 
   return (
     <section className={`diff-hunk ${isActive ? "is-active" : ""}`} onMouseEnter={onFocus}>
@@ -124,7 +131,7 @@ export function DiffHunk({
         </div>
       ) : (
         <pre className="diff-code">
-          {hunk.lines.map((line, index) => (
+          {renderedLines.map((line, index) => (
             <DiffLine
               filePath={filePath}
               repoPath={repoPath}
@@ -144,6 +151,11 @@ export function DiffHunk({
           ))}
         </pre>
       )}
+      {hiddenLineCount > 0 ? (
+        <div className="diff-hunk__truncated">
+          {hiddenLineCount.toLocaleString()} more lines hidden in this hunk.
+        </div>
+      ) : null}
     </section>
   );
 }

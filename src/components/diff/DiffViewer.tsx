@@ -35,6 +35,8 @@ interface DiffViewerProps {
 
 const LARGE_DIFF_RENDER_LINE_LIMIT = 5000;
 const LARGE_DIFF_HIGHLIGHT_LINE_LIMIT = 1200;
+const LARGE_DIFF_INITIAL_RENDER_LINES = 1000;
+const LARGE_DIFF_RENDER_STEP_LINES = 2000;
 
 export function DiffViewer({ activeView }: DiffViewerProps) {
   const activeChange = useDiffStore((state) => state.activeChange);
@@ -59,6 +61,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const [showOutline, setShowOutline] = useState(false);
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   const [forceRenderLargeDiff, setForceRenderLargeDiff] = useState(false);
+  const [largeDiffLineLimit, setLargeDiffLineLimit] = useState(LARGE_DIFF_INITIAL_RENDER_LINES);
   const [whitespaceDiff, setWhitespaceDiff] = useState<FileDiff | null>(null);
   const [binaryPreview, setBinaryPreview] = useState<{ url: string; kind: "image" | "binary"; size: number } | null>(null);
   const diffState = ignoreWhitespace ? whitespaceDiff ?? activeDiff : activeDiff;
@@ -82,6 +85,7 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   useEffect(() => {
     setIgnoreWhitespace(false);
     setForceRenderLargeDiff(false);
+    setLargeDiffLineLimit(LARGE_DIFF_INITIAL_RENDER_LINES);
     setWhitespaceDiff(null);
     setBinaryPreview(null);
   }, [activeFilePath, activeRepo?.path, staged]);
@@ -169,6 +173,16 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
   const isLargeDiff = renderedLineCount > LARGE_DIFF_RENDER_LINE_LIMIT;
   const enableRichLineFeatures =
     !isLargeDiff && renderedLineCount <= LARGE_DIFF_HIGHLIGHT_LINE_LIMIT;
+  const hunkRenderPlan =
+    isLargeDiff && forceRenderLargeDiff
+      ? createHunkRenderPlan(diff, largeDiffLineLimit)
+      : diff.hunks.map((hunk, index) => ({ hunk, index, lineLimit: undefined }));
+  const renderedProgressiveLines = hunkRenderPlan.reduce(
+    (total, item) => total + Math.min(item.lineLimit ?? item.hunk.lines.length, item.hunk.lines.length),
+    0
+  );
+  const hasMoreLargeDiffLines =
+    isLargeDiff && forceRenderLargeDiff && renderedProgressiveLines < renderedLineCount;
 
   async function applyHunkAction(action: "stage" | "unstage" | "discard") {
     if (!activeHunk || !activeChange || isReadOnly) {
@@ -277,6 +291,10 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
 
   function revealActiveFile() {
     void revealFileInManager(repo.path, filePath);
+  }
+
+  function copyActiveFilePath() {
+    void navigator.clipboard?.writeText(filePath).catch(() => {});
   }
 
   const segments = filePath.split("/");
@@ -525,30 +543,61 @@ export function DiffViewer({ activeView }: DiffViewerProps) {
               <LargeDiffNotice
                 lineCount={renderedLineCount}
                 hunkCount={diff.hunks.length}
+                onCopyPath={copyActiveFilePath}
                 onOpenFile={() => openActiveFile()}
                 onRevealFile={revealActiveFile}
-                onRenderAnyway={() => setForceRenderLargeDiff(true)}
+                onRenderAnyway={() => {
+                  setLargeDiffLineLimit(LARGE_DIFF_INITIAL_RENDER_LINES);
+                  setForceRenderLargeDiff(true);
+                }}
               />
             ) : (
-              diff.hunks.map((hunk, index) => (
-                <DiffHunk
-                  filePath={filePath}
-                  repoPath={repo.path}
-                  enableBlame={!isReadOnly && enableRichLineFeatures}
-                  key={`${hunk.header}-${index}`}
-                  hunk={hunk}
-                  hunkIndex={index}
-                  isActive={index === activeHunkIndex}
-                  mode={mode}
-                  theme={theme}
-                  enableHighlight={enableRichLineFeatures}
-                  onFocus={() => setActiveHunkIndex(index)}
-                  onToggleLine={toggleLineSelection}
-                  onOpenLine={openActiveFile}
-                  allowLineSelection={!isReadOnly}
-                  selectedLineIndices={isReadOnly ? [] : selectedLinesByHunk[index] ?? []}
-                />
-              ))
+              <>
+                {hunkRenderPlan.map(({ hunk, index, lineLimit }) => (
+                  <DiffHunk
+                    filePath={filePath}
+                    repoPath={repo.path}
+                    enableBlame={!isReadOnly && enableRichLineFeatures}
+                    key={`${hunk.header}-${index}`}
+                    hunk={hunk}
+                    hunkIndex={index}
+                    isActive={index === activeHunkIndex}
+                    lineLimit={lineLimit}
+                    mode={mode}
+                    theme={theme}
+                    enableHighlight={enableRichLineFeatures}
+                    onFocus={() => setActiveHunkIndex(index)}
+                    onToggleLine={toggleLineSelection}
+                    onOpenLine={openActiveFile}
+                    allowLineSelection={!isReadOnly}
+                    selectedLineIndices={isReadOnly ? [] : selectedLinesByHunk[index] ?? []}
+                  />
+                ))}
+                {hasMoreLargeDiffLines ? (
+                  <div className="large-diff-progress">
+                    <span>
+                      Showing {renderedProgressiveLines.toLocaleString()} of{" "}
+                      {renderedLineCount.toLocaleString()} lines.
+                    </span>
+                    <button
+                      className="vscode-button"
+                      onClick={() =>
+                        setLargeDiffLineLimit((value) => value + LARGE_DIFF_RENDER_STEP_LINES)
+                      }
+                      type="button"
+                    >
+                      Render More
+                    </button>
+                    <button
+                      className="vscode-button"
+                      onClick={() => setLargeDiffLineLimit(renderedLineCount)}
+                      type="button"
+                    >
+                      Render All
+                    </button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </div>
@@ -607,12 +656,14 @@ function GraphDiffPlaceholder() {
 function LargeDiffNotice({
   lineCount,
   hunkCount,
+  onCopyPath,
   onOpenFile,
   onRevealFile,
   onRenderAnyway
 }: {
   lineCount: number;
   hunkCount: number;
+  onCopyPath: () => void;
   onOpenFile: () => void;
   onRevealFile: () => void;
   onRenderAnyway: () => void;
@@ -635,12 +686,40 @@ function LargeDiffNotice({
           <Codicon name="folder-opened" size={14} />
           Reveal
         </button>
+        <button className="vscode-button" onClick={onCopyPath} type="button">
+          <Codicon name="copy" size={14} />
+          Copy Path
+        </button>
         <button className="vscode-button vscode-button--primary" onClick={onRenderAnyway} type="button">
           Render Anyway
         </button>
       </div>
     </div>
   );
+}
+
+function createHunkRenderPlan(diff: FileDiff, lineLimit: number) {
+  const plan: Array<{
+    hunk: FileDiff["hunks"][number];
+    index: number;
+    lineLimit: number | undefined;
+  }> = [];
+  let remaining = Math.max(0, lineLimit);
+
+  for (let index = 0; index < diff.hunks.length; index++) {
+    const hunk = diff.hunks[index]!;
+    if (remaining <= 0) break;
+
+    const nextLimit = Math.min(remaining, hunk.lines.length);
+    plan.push({
+      hunk,
+      index,
+      lineLimit: nextLimit < hunk.lines.length ? nextLimit : undefined
+    });
+    remaining -= nextLimit;
+  }
+
+  return plan;
 }
 
 function BinaryPreview({

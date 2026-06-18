@@ -33,4 +33,21 @@ describe("settings store recents", () => {
       "/workspaces/second.code-workspace"
     ]);
   });
+
+  it("removes individual recent entries", () => {
+    const store = useSettingsStore.getState();
+
+    store.rememberRepository("/repos/one");
+    store.rememberRepository("/repos/two");
+    store.rememberWorkspace("/workspaces/one.code-workspace");
+    store.rememberWorkspace("/workspaces/two.code-workspace");
+
+    store.forgetRepository("/repos/one");
+    store.forgetWorkspace("/workspaces/two.code-workspace");
+
+    expect(useSettingsStore.getState().recentRepositoryPaths).toEqual(["/repos/two"]);
+    expect(useSettingsStore.getState().recentWorkspacePaths).toEqual([
+      "/workspaces/one.code-workspace"
+    ]);
+  });
 });

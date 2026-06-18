@@ -9,7 +9,7 @@ import { useNotificationStore } from "../../stores/notifications";
 import { progressId, useProgressStore } from "../../stores/progress";
 import { createId } from "../../lib/ids";
 import { ignoreReportedError } from "../../lib/errors";
-import { selectPublishRemote } from "../../lib/branches";
+import { branchNeedsPublish, selectPublishRemote, upstreamBranchName } from "../../lib/branches";
 import {
   gitDiscardAll,
   gitFetchAll,
@@ -81,7 +81,11 @@ export function RepoSection({
   const hasChanges = regular.length > 0;
   const hasStashes = repo.stashCount > 0;
   const isWorkingTreeClean = !hasConflicts && !hasStaged && !hasChanges;
-  const canPublishBranch = !repo.upstream && repo.branch !== "HEAD";
+  const currentUpstreamBranch = upstreamBranchName(repo.upstream);
+  const hasMismatchedUpstream = Boolean(
+    repo.upstream && currentUpstreamBranch && currentUpstreamBranch !== repo.branch
+  );
+  const canPublishBranch = branchNeedsPublish(repo.branch, repo.upstream);
   const showPublishPrompt = isWorkingTreeClean && canPublishBranch;
   const showSyncPrompt = isWorkingTreeClean && (repo.ahead > 0 || repo.behind > 0);
 
@@ -289,12 +293,31 @@ export function RepoSection({
       {!collapsed ? (
         <>
           {showPublishPrompt ? (
-            <PublishPrompt repo={repo} onPublish={publishBranch} />
+            <PublishPrompt
+              repo={repo}
+              mismatchedUpstream={hasMismatchedUpstream}
+              onPublish={publishBranch}
+            />
           ) : showSyncPrompt ? (
             <SyncPrompt repo={repo} onSync={requestSync} />
           ) : (
             <CommitInput repo={repo} />
           )}
+
+          <RepoHealthStrip
+            repo={repo}
+            hasChanges={hasChanges}
+            hasConflicts={hasConflicts}
+            hasMismatchedUpstream={hasMismatchedUpstream}
+            needsPublish={canPublishBranch}
+            onPublish={publishBranch}
+            onOpenConflicts={() => {
+              const firstConflict = conflicted[0];
+              if (firstConflict) {
+                onSelect(repo, firstConflict, false);
+              }
+            }}
+          />
 
           {hasConflicts ? (
             <FileChangeList
@@ -370,13 +393,25 @@ export function RepoSection({
   );
 }
 
-function PublishPrompt({ repo, onPublish }: { repo: Repository; onPublish: () => void }) {
+function PublishPrompt({
+  repo,
+  mismatchedUpstream,
+  onPublish
+}: {
+  repo: Repository;
+  mismatchedUpstream: boolean;
+  onPublish: () => void;
+}) {
+  const placeholder = mismatchedUpstream
+    ? `Branch '${repo.branch}' tracks '${repo.upstream}'. Publish to a same-name branch instead.`
+    : `Branch '${repo.branch}' has no upstream tracking branch`;
+
   return (
     <div className="scm-sync-prompt">
       <input
         className="scm-sync-prompt__input"
         disabled
-        placeholder={`Branch '${repo.branch}' has no upstream tracking branch`}
+        placeholder={placeholder}
       />
       <button
         className="vscode-button vscode-button--primary scm-sync-prompt__button"
@@ -385,13 +420,16 @@ function PublishPrompt({ repo, onPublish }: { repo: Repository; onPublish: () =>
         type="button"
       >
         <Codicon name="repo-push" size={14} />
-        <span>Publish Branch</span>
+        <span>{mismatchedUpstream ? "Repair Upstream" : "Publish Branch"}</span>
       </button>
     </div>
   );
 }
 
 function syncOperation(repo: Repository) {
+  if (branchNeedsPublish(repo.branch, repo.upstream)) {
+    return gitSync(repo.path);
+  }
   if (repo.ahead > 0 && repo.behind === 0) {
     return gitPush(repo.path);
   }
@@ -399,6 +437,101 @@ function syncOperation(repo: Repository) {
     return gitPull(repo.path);
   }
   return gitSync(repo.path);
+}
+
+function RepoHealthStrip({
+  repo,
+  hasChanges,
+  hasConflicts,
+  hasMismatchedUpstream,
+  needsPublish,
+  onPublish,
+  onOpenConflicts
+}: {
+  repo: Repository;
+  hasChanges: boolean;
+  hasConflicts: boolean;
+  hasMismatchedUpstream: boolean;
+  needsPublish: boolean;
+  onPublish: () => void;
+  onOpenConflicts: () => void;
+}) {
+  const items = [];
+
+  if (hasConflicts) {
+    items.push({
+      key: "conflicts",
+      tone: "danger" as const,
+      icon: "git-merge" as const,
+      label: `${repo.changes.filter((change) => change.status === "U").length || 1} conflict`,
+      action: onOpenConflicts
+    });
+  }
+
+  if (hasMismatchedUpstream) {
+    items.push({
+      key: "mismatch",
+      tone: "warning" as const,
+      icon: "warning" as const,
+      label: `tracks ${repo.upstream}`,
+      action: onPublish
+    });
+  } else if (needsPublish) {
+    items.push({
+      key: "publish",
+      tone: "warning" as const,
+      icon: "repo-push" as const,
+      label: "no upstream",
+      action: onPublish
+    });
+  }
+
+  if (repo.ahead > 0 || repo.behind > 0) {
+    items.push({
+      key: "sync",
+      tone: repo.behind > 0 ? ("warning" as const) : ("info" as const),
+      icon: "sync" as const,
+      label: `${repo.behind}↓ ${repo.ahead}↑`
+    });
+  }
+
+  if (hasChanges || repo.staged.length > 0) {
+    items.push({
+      key: "dirty",
+      tone: "info" as const,
+      icon: "diff" as const,
+      label: `${repo.staged.length} staged / ${repo.changes.length} unstaged`
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="repo-health" aria-label={`${repo.name} repository health`}>
+      {items.map((item) => {
+        const content = (
+          <>
+            <Codicon name={item.icon} size={12} />
+            <span>{item.label}</span>
+          </>
+        );
+        return item.action ? (
+          <button
+            className={`repo-health__pill repo-health__pill--${item.tone}`}
+            key={item.key}
+            onClick={item.action}
+            type="button"
+          >
+            {content}
+          </button>
+        ) : (
+          <span className={`repo-health__pill repo-health__pill--${item.tone}`} key={item.key}>
+            {content}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function SyncPrompt({ repo, onSync }: { repo: Repository; onSync: () => void }) {

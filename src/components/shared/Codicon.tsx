@@ -52,6 +52,7 @@ export type CodiconName =
   | "chevron-up"
   | "collapse-all"
   | "expand-all"
+  | "copy"
   | "split-horizontal"
   | "close"
   | "warning"
